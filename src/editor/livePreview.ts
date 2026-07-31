@@ -3,54 +3,58 @@ import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder, EditorState } from "@codemirror/state";
 import { CodeBlockWidget, TableWidget, TaskCheckboxWidget } from "./widgets";
 
-/** Pure function: build decorations for the given CM6 state's syntax tree. */
+interface DecoEntry {
+  from: number;
+  to: number;
+  decoration: Decoration;
+}
+
+/** Pure function: collect then sort decorations to avoid RangeSet ordering errors. */
 export function buildDecorations(state: EditorState): DecorationSet {
-  const builder = new RangeSetBuilder<Decoration>();
+  const entries: DecoEntry[] = [];
   const tree = syntaxTree(state);
 
   tree.iterate({
     enter(node) {
       const { name: type } = node.type;
 
-      // --- Inline: StrongEmphasis (**) / Emphasis (*) ---
-      if (type === "StrongEmphasis" || type === "Emphasis") {
+      // --- Inline: Emphasis + StrongEmphasis ---
+      if (type === "Emphasis" || type === "StrongEmphasis") {
         const cur = node.node.cursor();
         if (cur.firstChild()) {
           do {
             if (cur.type.name === "EmphasisMark") {
-              builder.add(
-                cur.from, cur.to,
-                Decoration.mark({
-                  attributes: { class: "cm-hidden", style: "opacity:0.25" },
+              entries.push({
+                from: cur.from, to: cur.to,
+                decoration: Decoration.mark({
+                  attributes: { class: "cm-hidden cm-mark", style: "opacity:0.25" },
                 }),
-              );
+              });
             }
           } while (cur.nextSibling());
         }
         return false;
       }
 
-      // --- Inline: CodeMark (backticks) ---
+      // --- Inline: InlineCode ---
       if (type === "InlineCode") {
+        entries.push({
+          from: node.from, to: node.to,
+          decoration: Decoration.mark({ attributes: { class: "cm-inline-code" } }),
+        });
         const cur = node.node.cursor();
         if (cur.firstChild()) {
           do {
             if (cur.type.name === "CodeMark") {
-              builder.add(
-                cur.from, cur.to,
-                Decoration.mark({
+              entries.push({
+                from: cur.from, to: cur.to,
+                decoration: Decoration.mark({
                   attributes: { class: "cm-hidden cm-code-marker", style: "opacity:0.25" },
                 }),
-              );
+              });
             }
           } while (cur.nextSibling());
         }
-        builder.add(
-          node.from, node.to,
-          Decoration.mark({
-            attributes: { class: "cm-inline-code" },
-          }),
-        );
         return false;
       }
 
@@ -62,12 +66,12 @@ export function buildDecorations(state: EditorState): DecorationSet {
         if (cur.firstChild()) {
           do {
             if (cur.type.name === "LinkMark") {
-              builder.add(
-                cur.from, cur.to,
-                Decoration.mark({
+              entries.push({
+                from: cur.from, to: cur.to,
+                decoration: Decoration.mark({
                   attributes: { class: "cm-hidden cm-link-marker", style: "opacity:0.2" },
                 }),
-              );
+              });
             }
             if (cur.type.name === "LinkText") {
               linkTextFrom = cur.from;
@@ -76,12 +80,12 @@ export function buildDecorations(state: EditorState): DecorationSet {
           } while (cur.nextSibling());
         }
         if (linkTextFrom >= 0) {
-          builder.add(
-            linkTextFrom, linkTextTo,
-            Decoration.mark({
+          entries.push({
+            from: linkTextFrom, to: linkTextTo,
+            decoration: Decoration.mark({
               attributes: { class: "cm-link", style: "text-decoration:underline;cursor:pointer" },
             }),
-          );
+          });
         }
         return false;
       }
@@ -92,43 +96,67 @@ export function buildDecorations(state: EditorState): DecorationSet {
         const lines = text.split("\n");
         const infoLine = lines[0]?.replace(/^```/, "").trim() ?? "";
         const codeLines = lines.slice(1, -1).join("\n");
-        // strip trailing ```
-        const cleanCode = codeLines.replace(/\n```\s*$/, "");
-        builder.add(
-          node.from, node.to,
-          Decoration.replace({ widget: new CodeBlockWidget(cleanCode, infoLine) }),
-        );
+        entries.push({
+          from: node.from, to: node.to,
+          decoration: Decoration.replace({ widget: new CodeBlockWidget(codeLines, infoLine) }),
+        });
         return false;
       }
 
-      // --- Block: Table ---
+      // --- Block: Table (GFM) ---
       if (type === "Table") {
         const raw = state.doc.sliceString(node.from, node.to);
-        builder.add(
-          node.from, node.to,
-          Decoration.replace({ widget: new TableWidget(raw) }),
-        );
+        entries.push({
+          from: node.from, to: node.to,
+          decoration: Decoration.replace({ widget: new TableWidget(raw) }),
+        });
         return false;
       }
 
-      // --- Block: TaskMarker ([ ] / [x]) ---
-      if (type === "TaskMarker") {
+      // --- Block: Task (list items with [ ] or [x]) ---
+      if (type === "Task" || type === "TaskMarker") {
         const text = state.doc.sliceString(node.from, node.to);
-        const checked = /^\[[xX]\]$/.test(text);
-        builder.add(
-          node.from, node.to,
-          Decoration.replace({ widget: new TaskCheckboxWidget(checked) }),
-        );
+        // For TaskMarker, the text is "[ ]" or "[x]"
+        // For Task, we need to find the marker child
+        if (type === "TaskMarker") {
+          const checked = /^\[[xX]\]$/.test(text);
+          entries.push({
+            from: node.from, to: node.to,
+            decoration: Decoration.replace({ widget: new TaskCheckboxWidget(checked) }),
+          });
+        } else {
+          // Task: find the TaskMarker child
+          const cur = node.node.cursor();
+          if (cur.firstChild()) {
+            do {
+              if (cur.type.name === "TaskMarker") {
+                const mt = state.doc.sliceString(cur.from, cur.to);
+                const checked = /^\[[xX]\]$/.test(mt);
+                entries.push({
+                  from: cur.from, to: cur.to,
+                  decoration: Decoration.replace({ widget: new TaskCheckboxWidget(checked) }),
+                });
+              }
+            } while (cur.nextSibling());
+          }
+        }
         return false;
       }
 
-      // --- Block: HTMLBlock --- hide meta
-      if (type === "HTMLBlock") {
-        return false;
+      // --- Block: irrelevant types ---
+      if (type === "HTMLBlock" || type === "Document" || type === "Paragraph") {
+        // Skip — not decoration-worthy
       }
     },
   });
 
+  // Sort by `from` to satisfy RangeSet ordering requirement
+  entries.sort((a, b) => a.from - b.from || a.to - b.to);
+
+  const builder = new RangeSetBuilder<Decoration>();
+  for (const e of entries) {
+    builder.add(e.from, e.to, e.decoration);
+  }
   return builder.finish();
 }
 
@@ -159,11 +187,24 @@ export const livePreviewExtension = ViewPlugin.fromClass(LivePlugin, {
       const pos = view.posAtDOM(target);
       const tree = syntaxTree(view.state);
       const node = tree.resolve(pos, -1);
-      if (!node || node.type.name !== "TaskMarker") return false;
-      const text = view.state.doc.sliceString(node.from, node.to);
+      if (!node || (node.type.name !== "Task" && node.type.name !== "TaskMarker")) return false;
+      // find the TaskMarker within Task
+      let markerNode = node;
+      if (node.type.name === "Task") {
+        const cur = node.node.cursor();
+        if (cur.firstChild()) {
+          do {
+            if (cur.type.name === "TaskMarker") {
+              markerNode = cur.node;
+              break;
+            }
+          } while (cur.nextSibling());
+        }
+      }
+      const text = view.state.doc.sliceString(markerNode.from, markerNode.to);
       const newText = /^\[[xX]\]$/.test(text) ? "[ ]" : "[x]";
       view.dispatch({
-        changes: { from: node.from, to: node.to, insert: newText },
+        changes: { from: markerNode.from, to: markerNode.to, insert: newText },
       });
       return true;
     },
