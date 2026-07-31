@@ -29,7 +29,6 @@ function NodeView({ node, style, dragHandle }: NodeRendererProps<RowData>) {
         ...style,
         display: "flex",
         alignItems: "center",
-        paddingLeft: 4,
         cursor: isFolder ? "default" : "pointer",
       }}
       ref={dragHandle}
