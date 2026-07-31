@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useImperativeHandle, forwardRef } from "react";
 import { EditorView } from "@codemirror/view";
-import { createEditorState } from "./codemirror";
+import { createEditorState, setLivePreview } from "./codemirror";
+import { useSettingsStore } from "../stores/settingsStore";
 
 export interface EditorHandle {
   getDoc(): string;
@@ -19,16 +20,25 @@ export const MarkdownEditor = forwardRef<EditorHandle, EditorViewProps>(
     const viewRef = useRef<EditorView | null>(null);
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
+    const livePreview = useSettingsStore((s) => s.livePreview);
 
     useEffect(() => {
       if (!containerRef.current) return;
       const state = createEditorState(doc, (newDoc) => {
         onChangeRef.current?.(newDoc);
-      });
+      }, { livePreview });
       const view = new EditorView({ state, parent: containerRef.current });
       viewRef.current = view;
       return () => view.destroy();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Toggle live preview dynamically when the setting changes
+    useEffect(() => {
+      if (viewRef.current) {
+        setLivePreview(viewRef.current, livePreview);
+      }
+    }, [livePreview]);
 
     useImperativeHandle(ref, () => ({
       getDoc: () => viewRef.current?.state.doc.toString() ?? "",

@@ -1,10 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { EditorState } from "@codemirror/state";
-import { markdown } from "@codemirror/lang-markdown";
+import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import { Table, TaskList, Strikethrough } from "@lezer/markdown";
 import { buildDecorations } from "../livePreview";
 
 function stateOf(doc: string): EditorState {
-  return EditorState.create({ doc, extensions: [markdown()] });
+  return EditorState.create({
+    doc,
+    extensions: [markdown({ base: markdownLanguage, extensions: [Table, TaskList, Strikethrough] })],
+  });
 }
 
 function countByClass(decos: ReturnType<typeof buildDecorations>, className: string): number {
@@ -57,11 +61,19 @@ describe("buildDecorations", () => {
     expect(countByClass(decos, "cm-link")).toBeGreaterThan(0);
   });
 
-  // GFM tables and task lists are NOT decorated because the default markdown()
-  // parser is CommonMark-only. GFM parser extension is planned as a follow-up.
-  it("does not crash on table input (GFM not parsed yet)", () => {
+  it("replaces a GFM table with a widget", () => {
     const decos = buildDecorations(stateOf("| a | b |\n| - | - |\n| 1 | 2 |\n"));
-    expect(decos).toBeDefined();
-    // Table is parsed as Paragraph, not replaced with widget (GFM not enabled)
+    expect(hasWidget(decos)).toBe(true);
+  });
+
+  it("replaces a task marker with a checkbox widget", () => {
+    const decos = buildDecorations(stateOf("- [ ] buy milk\n"));
+    expect(hasWidget(decos)).toBe(true);
+  });
+
+  it("styles headings and hides the # mark", () => {
+    const decos = buildDecorations(stateOf("# Title\n"));
+    expect(countByClass(decos, "cm-heading")).toBeGreaterThan(0);
+    expect(countByClass(decos, "cm-mark")).toBeGreaterThan(0); // # hidden
   });
 });

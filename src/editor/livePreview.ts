@@ -9,14 +9,11 @@ interface DecoEntry {
   decoration: Decoration;
 }
 
-/** Effect carrying a freshly-built decoration set. */
 const setDecorations = StateEffect.define<DecorationSet>();
 
-/** StateField holding the live-preview decoration set.
- *  Provided via EditorView.decorations.from(field) so that block widgets
- *  spanning multiple lines are allowed (plugin-provided decorations cannot
- *  replace line breaks — that throws "Decorations that replace line breaks
- *  may not be specified via plugins").
+/** StateField holding live-preview decorations, provided via
+ *  EditorView.decorations.from(field) so line-spanning block widgets are allowed
+ *  (plugin-provided decorations cannot replace line breaks).
  */
 export const livePreviewField = StateField.define<DecorationSet>({
   create(state: EditorState) {
@@ -34,7 +31,13 @@ export const livePreviewField = StateField.define<DecorationSet>({
   provide: (f) => EditorView.decorations.from(f),
 });
 
-/** Pure function: build decorations for the given CM6 state's syntax tree. */
+function hiddenMark(): Decoration {
+  return Decoration.mark({
+    attributes: { class: "cm-hidden cm-mark", style: "opacity:0.25" },
+  });
+}
+
+/** Pure function: build decorations from the Lezer syntax tree. */
 export function buildDecorations(state: EditorState): DecorationSet {
   const entries: DecoEntry[] = [];
   const tree = syntaxTree(state);
@@ -43,30 +46,28 @@ export function buildDecorations(state: EditorState): DecorationSet {
     enter(node) {
       const { name: type } = node.type;
 
-      // --- Inline: Emphasis + StrongEmphasis ---
+      // --- Inline: Emphasis + StrongEmphasis (hide markers, style content) ---
       if (type === "Emphasis" || type === "StrongEmphasis") {
         const cur = node.node.cursor();
         if (cur.firstChild()) {
           do {
             if (cur.type.name === "EmphasisMark") {
-              entries.push({
-                from: cur.from, to: cur.to,
-                decoration: Decoration.mark({
-                  attributes: { class: "cm-hidden cm-mark", style: "opacity:0.25" },
-                }),
-              });
+              entries.push({ from: cur.from, to: cur.to, decoration: hiddenMark() });
             }
           } while (cur.nextSibling());
         }
+        const style = type === "StrongEmphasis" ? "font-weight:700" : "font-style:italic";
+        entries.push({
+          from: node.from, to: node.to,
+          decoration: Decoration.mark({ attributes: { class: "cm-emphasis", style } }),
+        });
         return false;
       }
 
-      // --- Inline: InlineCode ---
+      // --- Inline: code ---
       if (type === "InlineCode") {
-        entries.push({
-          from: node.from, to: node.to,
-          decoration: Decoration.mark({ attributes: { class: "cm-inline-code" } }),
-        });
+        // Push markers FIRST (shorter ranges) so the whole-span inline-code
+        // mark (same `from`) doesn't collide with them during RangeSet build.
         const cur = node.node.cursor();
         if (cur.firstChild()) {
           do {
@@ -80,10 +81,14 @@ export function buildDecorations(state: EditorState): DecorationSet {
             }
           } while (cur.nextSibling());
         }
+        entries.push({
+          from: node.from, to: node.to,
+          decoration: Decoration.mark({ attributes: { class: "cm-inline-code" } }),
+        });
         return false;
       }
 
-      // --- Inline: Link ---
+      // --- Inline: links ---
       if (type === "Link") {
         let linkTextFrom = -1;
         let linkTextTo = -1;
@@ -108,10 +113,62 @@ export function buildDecorations(state: EditorState): DecorationSet {
           entries.push({
             from: linkTextFrom, to: linkTextTo,
             decoration: Decoration.mark({
-              attributes: { class: "cm-link", style: "text-decoration:underline;cursor:pointer" },
+              attributes: { class: "cm-link", style: "color:#0366d6;text-decoration:underline;cursor:pointer" },
             }),
           });
         }
+        return false;
+      }
+
+      // --- Headings (ATXHeading1..6, SetextHeading1/2): hide #, enlarge content ---
+      if (type.startsWith("ATXHeading") || type.startsWith("SetextHeading")) {
+        const m = type.match(/(\d)$/);
+        const level = m ? Math.min(parseInt(m[1], 10), 6) : 1;
+        const sizes = ["1.8em", "1.5em", "1.3em", "1.15em", "1em", "0.9em"];
+        // Hide the # marks first (shorter ranges) to avoid same-from collision
+        const cur = node.node.cursor();
+        if (cur.firstChild()) {
+          do {
+            if (cur.type.name === "HeaderMark") {
+              entries.push({ from: cur.from, to: cur.to, decoration: hiddenMark() });
+            }
+          } while (cur.nextSibling());
+        }
+        entries.push({
+          from: node.from, to: node.to,
+          decoration: Decoration.mark({
+            attributes: {
+              class: "cm-heading",
+              style: `font-size:${sizes[level - 1]};font-weight:600;`,
+            },
+          }),
+        });
+        return false;
+      }
+
+      // --- Blockquote ---
+      if (type === "Blockquote") {
+        entries.push({
+          from: node.from, to: node.to,
+          decoration: Decoration.mark({
+            attributes: {
+              class: "cm-blockquote",
+              style: "border-left:3px solid #dfe2e5;padding-left:12px;color:#6a737d;",
+            },
+          }),
+        });
+        return false;
+      }
+
+      // --- Blockquote mark (>) ---
+      if (type === "QuoteMark") {
+        entries.push({ from: node.from, to: node.to, decoration: hiddenMark() });
+        return false;
+      }
+
+      // --- List bullet/number marker ---
+      if (type === "ListMark") {
+        entries.push({ from: node.from, to: node.to, decoration: hiddenMark() });
         return false;
       }
 
@@ -123,7 +180,7 @@ export function buildDecorations(state: EditorState): DecorationSet {
         const codeLines = lines.slice(1, -1).join("\n");
         entries.push({
           from: node.from, to: node.to,
-          decoration: Decoration.replace({ widget: new CodeBlockWidget(codeLines, infoLine) }),
+          decoration: Decoration.replace({ widget: new CodeBlockWidget(codeLines, infoLine), block: true }),
         });
         return false;
       }
@@ -133,19 +190,19 @@ export function buildDecorations(state: EditorState): DecorationSet {
         const raw = state.doc.sliceString(node.from, node.to);
         entries.push({
           from: node.from, to: node.to,
-          decoration: Decoration.replace({ widget: new TableWidget(raw) }),
+          decoration: Decoration.replace({ widget: new TableWidget(raw), block: true }),
         });
         return false;
       }
 
-      // --- Block: Task (list items with [ ] or [x]) ---
+      // --- Block: Task / TaskMarker (GFM) ---
       if (type === "Task" || type === "TaskMarker") {
         const text = state.doc.sliceString(node.from, node.to);
         if (type === "TaskMarker") {
           const checked = /^\[[xX]\]$/.test(text);
           entries.push({
             from: node.from, to: node.to,
-            decoration: Decoration.replace({ widget: new TaskCheckboxWidget(checked) }),
+            decoration: Decoration.replace({ widget: new TaskCheckboxWidget(checked), block: true }),
           });
         } else {
           const cur = node.node.cursor();
@@ -156,7 +213,7 @@ export function buildDecorations(state: EditorState): DecorationSet {
                 const checked = /^\[[xX]\]$/.test(mt);
                 entries.push({
                   from: cur.from, to: cur.to,
-                  decoration: Decoration.replace({ widget: new TaskCheckboxWidget(checked) }),
+                  decoration: Decoration.replace({ widget: new TaskCheckboxWidget(checked), block: true }),
                 });
               }
             } while (cur.nextSibling());
@@ -164,15 +221,9 @@ export function buildDecorations(state: EditorState): DecorationSet {
         }
         return false;
       }
-
-      // --- Block: irrelevant types ---
-      if (type === "HTMLBlock" || type === "Document" || type === "Paragraph") {
-        // Skip — not decoration-worthy
-      }
     },
   });
 
-  // Sort by `from` to satisfy RangeSet ordering requirement
   entries.sort((a, b) => a.from - b.from || a.to - b.to);
 
   const builder = new RangeSetBuilder<Decoration>();

@@ -16,6 +16,7 @@ export interface Settings {
   pathStyle: PathStyle;
   theme: "system" | "light" | "dark";
   showHiddenFiles: boolean;
+  livePreview: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -23,4 +24,5 @@ export const DEFAULT_SETTINGS: Settings = {
   pathStyle: "relative",
   theme: "system",
   showHiddenFiles: false,
+  livePreview: true,
 };

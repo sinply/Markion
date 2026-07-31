@@ -69,6 +69,17 @@ export function SettingsDialog() {
         <label>
           <input
             type="checkbox"
+            checked={settings.livePreview}
+            onChange={(e) => settings.setLivePreview(e.target.checked)}
+          />
+          {" "}Live preview (real-time markdown rendering)
+        </label>
+      </div>
+
+      <div style={{ margin: "8px 0" }}>
+        <label>
+          <input
+            type="checkbox"
             checked={settings.showHiddenFiles}
             onChange={(e) => settings.setShowHiddenFiles(e.target.checked)}
           />
