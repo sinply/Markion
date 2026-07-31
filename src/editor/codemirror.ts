@@ -3,7 +3,7 @@ import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
-import { livePreviewExtension } from "./livePreview";
+import { livePreviewExtension, livePreviewField } from "./livePreview";
 
 const themeCompartment = new Compartment();
 
@@ -25,6 +25,7 @@ export function createEditorState(doc: string, onChange: (doc: string) => void):
       syntaxHighlighting(defaultHighlightStyle),
       updateListener,
       themeCompartment.of(EditorView.theme({})),
+      livePreviewField,
       livePreviewExtension,
     ],
   });

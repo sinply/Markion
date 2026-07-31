@@ -1,6 +1,6 @@
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view";
 import { syntaxTree } from "@codemirror/language";
-import { RangeSetBuilder, EditorState } from "@codemirror/state";
+import { RangeSetBuilder, EditorState, StateEffect, StateField } from "@codemirror/state";
 import { CodeBlockWidget, TableWidget, TaskCheckboxWidget } from "./widgets";
 
 interface DecoEntry {
@@ -9,7 +9,32 @@ interface DecoEntry {
   decoration: Decoration;
 }
 
-/** Pure function: collect then sort decorations to avoid RangeSet ordering errors. */
+/** Effect carrying a freshly-built decoration set. */
+const setDecorations = StateEffect.define<DecorationSet>();
+
+/** StateField holding the live-preview decoration set.
+ *  Provided via EditorView.decorations.from(field) so that block widgets
+ *  spanning multiple lines are allowed (plugin-provided decorations cannot
+ *  replace line breaks — that throws "Decorations that replace line breaks
+ *  may not be specified via plugins").
+ */
+export const livePreviewField = StateField.define<DecorationSet>({
+  create(state: EditorState) {
+    return buildDecorations(state);
+  },
+  update(decos: DecorationSet, tr) {
+    decos = decos.map(tr.changes);
+    for (const e of tr.effects) {
+      if (e.is(setDecorations)) {
+        decos = e.value;
+      }
+    }
+    return decos;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
+/** Pure function: build decorations for the given CM6 state's syntax tree. */
 export function buildDecorations(state: EditorState): DecorationSet {
   const entries: DecoEntry[] = [];
   const tree = syntaxTree(state);
@@ -116,8 +141,6 @@ export function buildDecorations(state: EditorState): DecorationSet {
       // --- Block: Task (list items with [ ] or [x]) ---
       if (type === "Task" || type === "TaskMarker") {
         const text = state.doc.sliceString(node.from, node.to);
-        // For TaskMarker, the text is "[ ]" or "[x]"
-        // For Task, we need to find the marker child
         if (type === "TaskMarker") {
           const checked = /^\[[xX]\]$/.test(text);
           entries.push({
@@ -125,7 +148,6 @@ export function buildDecorations(state: EditorState): DecorationSet {
             decoration: Decoration.replace({ widget: new TaskCheckboxWidget(checked) }),
           });
         } else {
-          // Task: find the TaskMarker child
           const cur = node.node.cursor();
           if (cur.firstChild()) {
             do {
@@ -160,24 +182,23 @@ export function buildDecorations(state: EditorState): DecorationSet {
   return builder.finish();
 }
 
-// ---- ViewPlugin ----
+// ---- ViewPlugin: rebuilds decorations on document/viewport changes ----
 
-let LivePlugin = class {
-  decorations: DecorationSet;
-
-  constructor(view: EditorView) {
-    this.decorations = buildDecorations(view.state);
+class LivePlugin {
+  constructor(_view: EditorView) {
+    // Initial decorations are built by the StateField's `create`.
   }
 
   update(update: ViewUpdate) {
     if (update.docChanged || update.viewportChanged) {
-      this.decorations = buildDecorations(update.state);
+      update.view.dispatch({
+        effects: setDecorations.of(buildDecorations(update.state)),
+      });
     }
   }
-};
+}
 
 export const livePreviewExtension = ViewPlugin.fromClass(LivePlugin, {
-  decorations: (v) => v.decorations,
   eventHandlers: {
     click(event, view) {
       const target = event.target as HTMLElement;
@@ -188,7 +209,6 @@ export const livePreviewExtension = ViewPlugin.fromClass(LivePlugin, {
       const tree = syntaxTree(view.state);
       const node = tree.resolve(pos, -1);
       if (!node || (node.type.name !== "Task" && node.type.name !== "TaskMarker")) return false;
-      // find the TaskMarker within Task
       let markerNode = node;
       if (node.type.name === "Task") {
         const cur = node.node.cursor();
