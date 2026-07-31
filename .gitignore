@@ -1,5 +1,25 @@
+# Dependencies
 node_modules
+
+# Build outputs
 dist
 dist-ssr
 *.local
 src-tauri/target
+
+# Tauri debug/logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor
+.idea
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Test coverage
+coverage
