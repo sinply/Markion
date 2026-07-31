@@ -25,9 +25,8 @@ describe("mounted EditorView renders widgets into DOM", () => {
     const parent = document.createElement("div");
     document.body.appendChild(parent);
     const view = new EditorView({ state: createEditorState(sample, () => {}), parent });
-    // Let CM6 paint
-    view.measure();
-    view.contentDOM.offsetWidth; // force layout
+    // Let CM6 paint: force a read of the content DOM to flush widget rendering
+    void view.contentDOM.offsetWidth;
 
     const html = parent.innerHTML;
     const hasCode = html.includes("cm-codeblock") || parent.querySelector("pre") !== null;

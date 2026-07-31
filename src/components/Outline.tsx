@@ -13,17 +13,13 @@ export function extractHeadings(state: EditorState): Heading[] {
   const headings: Heading[] = [];
   tree.iterate({
     enter(node) {
-      if (node.type.name !== "Heading") return;
-      let level = 1;
-      const cursor = node.node.cursor();
-      if (cursor.firstChild()) {
-        do {
-          if (cursor.node.type.name === "Mark") level++;
-        } while (cursor.nextSibling());
-      }
+      const name = node.type.name;
+      const m = name.match(/^(?:ATX|Setext)Heading(\d)$/);
+      if (!m) return;
+      const level = Math.min(parseInt(m[1], 10), 6);
       const raw = state.doc.sliceString(node.from, node.to);
       const text = raw.replace(/^#+\s*/, "").trim();
-      headings.push({ level: Math.min(level, 6), text, from: node.from });
+      headings.push({ level, text, from: node.from });
       return false;
     },
   });

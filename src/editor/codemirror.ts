@@ -12,13 +12,14 @@ const livePreviewCompartment = new Compartment();
 export function createEditorState(
   doc: string,
   onChange: (doc: string) => void,
-  opts?: { livePreview?: boolean },
+  opts?: { livePreview?: boolean; onStateChange?: (state: EditorState) => void },
 ): EditorState {
   const livePreview = opts?.livePreview ?? true;
   const updateListener = EditorView.updateListener.of((update) => {
     if (update.docChanged) {
       onChange(update.state.doc.toString());
     }
+    opts?.onStateChange?.(update.state);
   });
 
   return EditorState.create({

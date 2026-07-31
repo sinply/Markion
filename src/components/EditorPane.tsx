@@ -1,9 +1,8 @@
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import { useDocStore } from "../stores/docStore";
 import { useVaultStore } from "../stores/vaultStore";
-import { readFile, writeFileAtomic } from "../lib/ipc";
+import { writeFileAtomic } from "../lib/ipc";
 import { MarkdownEditor, type EditorHandle } from "../editor/EditorView";
-import { extractHeadings } from "./Outline";
 import { Tabs } from "./Tabs";
 import type { EditorState } from "@codemirror/state";
 
@@ -26,6 +25,11 @@ export function EditorPane({
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeDoc = openDocs.find((d) => d.id === activeDocId);
+
+  // Clear the outline when no document is open
+  useEffect(() => {
+    if (!activeDoc) onHeadingsChange(null);
+  }, [activeDoc, onHeadingsChange]);
 
   const handleChange = useCallback(
     (doc: string) => {
@@ -65,6 +69,7 @@ export function EditorPane({
             ref={editorRef}
             doc={activeContent}
             onChange={handleChange}
+            onStateChange={(state) => onHeadingsChange(state)}
           />
         ) : (
           <div style={{ padding: 16, color: "#999" }}>
