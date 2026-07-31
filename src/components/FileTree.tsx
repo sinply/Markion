@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { Tree } from "react-arborist";
 import type { NodeRendererProps } from "react-arborist";
 import { useVaultStore } from "../stores/vaultStore";
@@ -22,15 +22,43 @@ function convertTree(node: { name: string; path: string; kind: "file" | "folder"
 }
 
 function NodeView({ node, style, dragHandle }: NodeRendererProps<RowData>) {
+  const isFolder = node.data.kind === "folder";
   return (
     <div
-      style={{ ...style, display: "flex", alignItems: "center", paddingLeft: 4, cursor: "pointer" }}
+      style={{
+        ...style,
+        display: "flex",
+        alignItems: "center",
+        paddingLeft: 4,
+        cursor: isFolder ? "default" : "pointer",
+      }}
       ref={dragHandle}
+      onClick={isFolder ? (e) => { e.stopPropagation(); node.toggle(); } : undefined}
+      title={isFolder ? (node.isOpen ? "Collapse" : "Expand") : node.data.name}
     >
-      <span style={{ marginRight: 4, fontSize: 14 }}>
-        {node.data.kind === "folder" ? "\u{1F4C1}" : "\u{1F4C4}"}
+      <span
+        style={{
+          marginRight: 2,
+          fontSize: 10,
+          width: 12,
+          display: "inline-block",
+          color: "#888",
+          cursor: isFolder ? "pointer" : "default",
+        }}
+      >
+        {isFolder ? (node.isOpen ? "▾" : "▸") : ""}
       </span>
-      <span style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      <span style={{ marginRight: 4, fontSize: 14 }}>
+        {isFolder ? "\u{1F4C1}" : "\u{1F4C4}"}
+      </span>
+      <span
+        style={{
+          fontSize: 13,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
         {node.data.name}
       </span>
     </div>
@@ -70,6 +98,23 @@ export function FileTree() {
     [applyReorder, applyMove],
   );
 
+  // Default: all folders collapsed, showing only the top level
+  const initialOpenState = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    if (tree) {
+      const visit = (children: { name: string; path: string; kind: string; children: any[] }[]) => {
+        for (const c of children) {
+          if (c.kind === "folder") {
+            map[c.path] = false; // collapsed by default
+            visit(c.children);
+          }
+        }
+      };
+      visit(tree.children);
+    }
+    return map;
+  }, [tree]);
+
   if (!tree) {
     return <div style={{ padding: 8, color: "#999", fontSize: 13 }}>No vault open</div>;
   }
@@ -86,6 +131,7 @@ export function FileTree() {
         width="100%"
         height={window.innerHeight - 40}
         rowHeight={28}
+        initialOpenState={initialOpenState}
         onMove={handleMove}
         onActivate={handleActivate}
       >

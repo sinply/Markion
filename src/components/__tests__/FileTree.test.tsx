@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-// jsdom lacks ResizeObserver (react-arborist uses it)
 class ResizeObserverMock {
   observe() {}
   unobserve() {}
@@ -57,20 +56,26 @@ vi.mock("../../lib/ipc", () => ({
 
 import { FileTree } from "../FileTree";
 
-describe("FileTree component", () => {
+describe("FileTree component hierarchy", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
   });
 
-  it("renders nested folder structure with deep children", async () => {
+  it("shows top-level files/folders and HIDES collapsed subfolders by default", () => {
     render(<FileTree />);
-    // Top-level file
+    // Top-level items visible
     expect(screen.getByText("intro.md")).toBeTruthy();
-    // Folder
     expect(screen.getByText("notes")).toBeTruthy();
-    // Child file inside folder
-    expect(screen.getByText("a.md")).toBeTruthy();
-    // Grandchild file inside nested folder
-    expect(screen.getByText("x.md")).toBeTruthy();
+    // Nested items hidden until folder is expanded
+    expect(screen.queryByText("a.md")).toBeNull();
+    expect(screen.queryByText("x.md")).toBeNull();
+  });
+
+  it("preserves nested folder data in the tree structure (expandable)", () => {
+    render(<FileTree />);
+    // The notes folder is rendered as a folder (📁 icon) not a flat item
+    const notesRow = screen.getByText("notes").closest('[role="treeitem"]')!;
+    expect(notesRow.textContent).toContain("\u{1F4C1}"); // folder icon
+    expect(notesRow.textContent).toContain("▸"); // collapsed arrow indicator
   });
 });
