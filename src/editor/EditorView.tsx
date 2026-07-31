@@ -58,7 +58,9 @@ export const MarkdownEditor = forwardRef<EditorHandle, EditorViewProps>(
           changes: { from: 0, to: view.state.doc.length, insert: newDoc },
         });
       },
-      view: viewRef.current,
+      get view() {
+        return viewRef.current;
+      },
     }));
 
     return <div ref={containerRef} className="markdown-editor" />;

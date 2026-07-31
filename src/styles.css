@@ -28,8 +28,10 @@ html, body, #root {
   line-height: 1.6;
 }
 
-/* Hidden markdown syntax markers (**, `, #, >) */
+/* Hidden markdown syntax markers (**, `, #, >) — fully hidden like Obsidian
+   live preview; clicking the line reveals them */
 .cm-hidden {
+  opacity: 0;
   user-select: none;
 }
 

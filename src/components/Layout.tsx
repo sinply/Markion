@@ -13,13 +13,25 @@ export function Layout() {
 
   const handleJump = useCallback((from: number) => {
     const activeEl = document.querySelector(".cm-editor .cm-content") as HTMLElement | null;
-    if (activeEl) {
-      const view = EditorView.findFromDOM(activeEl);
-      if (view) {
-        view.dispatch({ selection: { anchor: from } });
-        view.focus();
+    if (!activeEl) return;
+    const view = EditorView.findFromDOM(activeEl);
+    if (!view) return;
+    view.dispatch({ selection: { anchor: from } });
+    view.focus();
+    // Center the target line manually. Use setTimeout (not rAF) so it works
+    // even when the pane isn't actively compositing (rAF can be throttled).
+    setTimeout(() => {
+      try {
+        const coords = view.coordsAtPos(from);
+        if (!coords) return;
+        const scroller = view.scrollDOM;
+        const scrollerRect = scroller.getBoundingClientRect();
+        const target = scroller.scrollTop + (coords.top - scrollerRect.top) - scroller.clientHeight / 2;
+        scroller.scrollTop = Math.max(0, target);
+      } catch {
+        // ignore — best-effort scroll
       }
-    }
+    }, 20);
   }, []);
 
   return (

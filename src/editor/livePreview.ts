@@ -32,9 +32,7 @@ export const livePreviewField = StateField.define<DecorationSet>({
 });
 
 function hiddenMark(): Decoration {
-  return Decoration.mark({
-    attributes: { class: "cm-hidden cm-mark", style: "opacity:0.25" },
-  });
+  return Decoration.mark({ attributes: { class: "cm-hidden cm-mark" } });
 }
 
 /** Pure function: build decorations from the Lezer syntax tree. */
@@ -74,9 +72,7 @@ export function buildDecorations(state: EditorState): DecorationSet {
             if (cur.type.name === "CodeMark") {
               entries.push({
                 from: cur.from, to: cur.to,
-                decoration: Decoration.mark({
-                  attributes: { class: "cm-hidden cm-code-marker", style: "opacity:0.25" },
-                }),
+                decoration: Decoration.mark({ attributes: { class: "cm-hidden cm-code-marker" } }),
               });
             }
           } while (cur.nextSibling());
@@ -96,9 +92,7 @@ export function buildDecorations(state: EditorState): DecorationSet {
             if (cur.type.name === "LinkMark") {
               entries.push({
                 from: cur.from, to: cur.to,
-                decoration: Decoration.mark({
-                  attributes: { class: "cm-hidden cm-link-marker", style: "opacity:0.2" },
-                }),
+                decoration: Decoration.mark({ attributes: { class: "cm-hidden cm-link-marker" } }),
               });
             }
           } while (cur.nextSibling());
