@@ -90,8 +90,6 @@ export function buildDecorations(state: EditorState): DecorationSet {
 
       // --- Inline: links ---
       if (type === "Link") {
-        let linkTextFrom = -1;
-        let linkTextTo = -1;
         const cur = node.node.cursor();
         if (cur.firstChild()) {
           do {
@@ -103,15 +101,19 @@ export function buildDecorations(state: EditorState): DecorationSet {
                 }),
               });
             }
-            if (cur.type.name === "LinkText") {
-              linkTextFrom = cur.from;
-              linkTextTo = cur.to;
-            }
           } while (cur.nextSibling());
         }
-        if (linkTextFrom >= 0) {
+        // Link text = content after the opening [ bracket up to the URL.
+        // GFM parses links as: LinkMark[ [, LinkMark[ ], LinkMark[(, URL, LinkMark[)
+        // with the visible text as a raw range between from+1 and the URL.
+        const doc = state.doc.toString();
+        const rest = doc.slice(node.from + 1, node.to);
+        const urlIdx = rest.indexOf("](");
+        if (urlIdx >= 0) {
+          const textFrom = node.from + 1;
+          const textTo = node.from + 1 + urlIdx;
           entries.push({
-            from: linkTextFrom, to: linkTextTo,
+            from: textFrom, to: textTo,
             decoration: Decoration.mark({
               attributes: { class: "cm-link", style: "color:#0366d6;text-decoration:underline;cursor:pointer" },
             }),
