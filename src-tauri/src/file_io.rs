@@ -36,11 +36,12 @@ mod tests {
 
     #[test]
     fn write_does_not_leave_temp_file() {
-        let tmp = NamedTempFile::new().unwrap();
-        let path = tmp.path();
-        write_file_atomic(path, "data").unwrap();
-        let parent = path.parent().unwrap();
-        let temps: Vec<_> = fs::read_dir(parent)
+        // Use a dedicated temp dir so NamedTempFile's own scratch files
+        // don't get picked up by the leftover check.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("doc.md");
+        write_file_atomic(&path, "data").unwrap();
+        let temps: Vec<_> = fs::read_dir(dir.path())
             .unwrap()
             .filter_map(|e| e.ok())
             .filter(|e| {
@@ -49,6 +50,7 @@ mod tests {
             })
             .collect();
         assert!(temps.is_empty(), "leftover temp: {:?}", temps);
+        assert_eq!(read_file(&path).unwrap(), "data");
     }
 
     #[test]

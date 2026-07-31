@@ -63,7 +63,7 @@ pub fn start_watcher(
                     buffer.push(ev);
                     last = Instant::now();
                 }
-                Err(_timeout) => {
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                     if !buffer.is_empty() && last.elapsed() >= debounce {
                         let coalesced = coalesce_paths(&buffer);
                         if tx_debounced.send(coalesced).is_err() {
@@ -71,13 +71,12 @@ pub fn start_watcher(
                         }
                         buffer.clear();
                     }
-                    // If the raw channel is empty and closed, exit
-                    if rx_raw.is_empty() {
-                        if !buffer.is_empty() {
-                            let _ = tx_debounced.send(coalesce_paths(&buffer));
-                        }
-                        break;
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    if !buffer.is_empty() {
+                        let _ = tx_debounced.send(coalesce_paths(&buffer));
                     }
+                    break;
                 }
             }
         }

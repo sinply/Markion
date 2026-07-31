@@ -86,7 +86,8 @@ mod tests {
     fn save_vault_assets_relative_path() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
-        fs::write(root.join("notes").join("a.md"), "").unwrap();
+        fs::create_dir_all(root.join("notes")).unwrap();
+        fs::write(root.join("notes/a.md"), "").unwrap();
         let path = save_image(
             b"pngbytes", "png", root, Path::new("notes/a.md"),
             &AssetsStrategy::VaultAssets, PathStyle::Relative, "20260731",
