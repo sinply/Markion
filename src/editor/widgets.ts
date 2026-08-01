@@ -1,6 +1,7 @@
 import { WidgetType } from "@codemirror/view";
 import type { EditorView } from "@codemirror/view";
 import { renderMarkdown, highlightCode } from "./markdown";
+import { markdownContextFacet, imageToSrc } from "./media";
 
 export class CodeBlockWidget extends WidgetType {
   readonly language: string;
@@ -83,5 +84,48 @@ export class TaskCheckboxWidget extends WidgetType {
 
   ignoreEvent(e: Event): boolean {
     return e.type === "mousedown" || e.type === "mouseup" || e.type === "click";
+  }
+}
+
+export class ImageWidget extends WidgetType {
+  constructor(
+    readonly src: string,
+    readonly alt: string,
+  ) {
+    super();
+  }
+
+  eq(other: ImageWidget): boolean {
+    return other.src === this.src && other.alt === this.alt;
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    const wrap = document.createElement("span");
+    wrap.className = "cm-image-wrap";
+
+    const img = document.createElement("img");
+    img.className = "cm-image";
+    img.alt = this.alt;
+    // Some CDNs (e.g. Aliyun OSS / nlark) enable hotlink protection and reject
+    // requests carrying a Referer. Strip it so remote images load.
+    img.referrerPolicy = "no-referrer";
+    const ctx = view.state.facet(markdownContextFacet)[0];
+    img.src = imageToSrc(this.src, ctx);
+
+    img.addEventListener("error", () => {
+      wrap.classList.add("cm-image-broken");
+      const placeholder = document.createElement("span");
+      placeholder.className = "cm-image-placeholder";
+      placeholder.textContent = `[图片: ${this.src}]`;
+      placeholder.title = "图片加载失败：文件不存在或路径错误";
+      wrap.replaceChild(placeholder, img);
+    });
+
+    wrap.appendChild(img);
+    return wrap;
+  }
+
+  ignoreEvent(): boolean {
+    return false;
   }
 }

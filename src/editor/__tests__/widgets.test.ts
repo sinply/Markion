@@ -1,9 +1,18 @@
 import { describe, it, expect } from "vitest";
-import { TaskCheckboxWidget, CodeBlockWidget, TableWidget } from "../widgets";
+import { EditorState } from "@codemirror/state";
+import { TaskCheckboxWidget, CodeBlockWidget, TableWidget, ImageWidget } from "../widgets";
 import type { EditorView } from "@codemirror/view";
+import { markdownContextFacet, type MarkdownContext } from "../media";
 
 function mockView(): EditorView {
-  return { dispatch: () => {} } as unknown as EditorView;
+  return { state: EditorState.create({}), dispatch: () => {} } as unknown as EditorView;
+}
+
+function viewWithContext(ctx?: MarkdownContext): EditorView {
+  const state = EditorState.create({
+    extensions: ctx ? markdownContextFacet.of(ctx) : [],
+  });
+  return { state } as unknown as EditorView;
 }
 
 describe("TaskCheckboxWidget", () => {
@@ -57,5 +66,58 @@ describe("TableWidget", () => {
     const w = new TableWidget("| a | b |\n| - | - |\n| 1 | 2 |\n");
     const dom = w.toDOM(mockView());
     expect(dom.innerHTML).toContain("<table>");
+  });
+});
+
+describe("ImageWidget", () => {
+  function imgOf(w: ImageWidget, view: EditorView): HTMLImageElement {
+    return w.toDOM(view).querySelector("img") as HTMLImageElement;
+  }
+
+  it("renders an img with cm-image class and alt inside a wrap", () => {
+    const w = new ImageWidget("img.png", "my alt");
+    const wrap = w.toDOM(mockView());
+    expect(wrap.className).toBe("cm-image-wrap");
+    const img = wrap.querySelector("img") as HTMLImageElement;
+    expect(img.className).toBe("cm-image");
+    expect(img.alt).toBe("my alt");
+    // No context: raw src used, no crash (convertFileSrc throws without Tauri)
+    expect(img.getAttribute("src")).toBe("img.png");
+  });
+
+  it("resolves a relative src to an absolute path via the context facet", () => {
+    const w = new ImageWidget("../assets/x.png", "");
+    const img = imgOf(w, viewWithContext({ vaultRoot: "C:/vault", docRel: "notes/a.md" }));
+    // convertFileSrc throws in jsdom -> imageToSrc falls back to the absolute path
+    expect(img.getAttribute("src")).toBe("C:/vault/assets/x.png");
+  });
+
+  it("keeps remote src unchanged even with context", () => {
+    const w = new ImageWidget("https://example.com/x.png", "");
+    const img = imgOf(w, viewWithContext({ vaultRoot: "C:/vault", docRel: "a.md" }));
+    expect(img.getAttribute("src")).toBe("https://example.com/x.png");
+  });
+
+  it("strips the Referer header so hotlink-protected CDNs allow the image", () => {
+    const w = new ImageWidget("https://example.com/x.png", "");
+    const img = imgOf(w, mockView());
+    expect(img.referrerPolicy).toBe("no-referrer");
+  });
+
+  it("shows a placeholder with the filename when the image fails to load", () => {
+    const w = new ImageWidget("image-11.png", "");
+    const wrap = w.toDOM(mockView());
+    const img = wrap.querySelector("img")!;
+    img.dispatchEvent(new Event("error"));
+    const placeholder = wrap.querySelector(".cm-image-placeholder") as HTMLSpanElement;
+    expect(placeholder).toBeTruthy();
+    expect(placeholder.textContent).toContain("image-11.png");
+    expect(wrap.querySelector("img")).toBeNull();
+  });
+
+  it("eq compares src and alt", () => {
+    expect(new ImageWidget("a.png", "x").eq(new ImageWidget("a.png", "x"))).toBe(true);
+    expect(new ImageWidget("a.png", "x").eq(new ImageWidget("b.png", "x"))).toBe(false);
+    expect(new ImageWidget("a.png", "x").eq(new ImageWidget("a.png", "y"))).toBe(false);
   });
 });

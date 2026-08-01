@@ -5,6 +5,7 @@ import { Table, TaskList, Strikethrough } from "@lezer/markdown";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
 import { livePreviewExtension, livePreviewField } from "./livePreview";
+import { markdownContextFacet, imagePasteDropExtension, type MarkdownContext } from "./media";
 
 const themeCompartment = new Compartment();
 const livePreviewCompartment = new Compartment();
@@ -12,7 +13,11 @@ const livePreviewCompartment = new Compartment();
 export function createEditorState(
   doc: string,
   onChange: (doc: string) => void,
-  opts?: { livePreview?: boolean; onStateChange?: (state: EditorState) => void },
+  opts?: {
+    livePreview?: boolean;
+    onStateChange?: (state: EditorState) => void;
+    markdownContext?: MarkdownContext;
+  },
 ): EditorState {
   const livePreview = opts?.livePreview ?? true;
   const updateListener = EditorView.updateListener.of((update) => {
@@ -33,6 +38,8 @@ export function createEditorState(
       syntaxHighlighting(defaultHighlightStyle),
       updateListener,
       themeCompartment.of(EditorView.theme({})),
+      opts?.markdownContext ? markdownContextFacet.of(opts.markdownContext) : [],
+      imagePasteDropExtension,
       livePreviewCompartment.of(livePreview ? [livePreviewField, livePreviewExtension] : []),
     ],
   });

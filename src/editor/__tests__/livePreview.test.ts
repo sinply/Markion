@@ -2,7 +2,8 @@ import { describe, it, expect } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { Table, TaskList, Strikethrough } from "@lezer/markdown";
-import { buildDecorations } from "../livePreview";
+import { buildDecorations, resolveLinkUrl, isExternalUrl } from "../livePreview";
+import { ImageWidget } from "../widgets";
 
 function stateOf(doc: string): EditorState {
   return EditorState.create({
@@ -29,6 +30,16 @@ function hasWidget(decos: ReturnType<typeof buildDecorations>): boolean {
     iter.next();
   }
   return false;
+}
+
+function findImageWidget(decos: ReturnType<typeof buildDecorations>): ImageWidget | null {
+  const iter = decos.iter();
+  while (iter.value) {
+    const w = iter.value.spec?.widget;
+    if (w instanceof ImageWidget) return w;
+    iter.next();
+  }
+  return null;
 }
 
 describe("buildDecorations", () => {
@@ -75,5 +86,55 @@ describe("buildDecorations", () => {
     const decos = buildDecorations(stateOf("# Title\n"));
     expect(countByClass(decos, "cm-heading")).toBeGreaterThan(0);
     expect(countByClass(decos, "cm-mark")).toBeGreaterThan(0); // # hidden
+  });
+
+  it("replaces an image with an ImageWidget", () => {
+    const decos = buildDecorations(stateOf("![alt](img.png)"));
+    const widget = findImageWidget(decos);
+    expect(widget).not.toBeNull();
+    expect(widget!.src).toBe("img.png");
+    expect(widget!.alt).toBe("alt");
+  });
+
+  it("does not leak hidden marks for a bare image", () => {
+    const decos = buildDecorations(stateOf("![alt](img.png)"));
+    expect(countByClass(decos, "cm-mark")).toBe(0);
+    expect(countByClass(decos, "cm-link")).toBe(0);
+  });
+
+  it("renders an image nested inside a link and hides outer brackets", () => {
+    const decos = buildDecorations(stateOf("[![a](img.png)](https://link)"));
+    const widget = findImageWidget(decos);
+    expect(widget).not.toBeNull();
+    expect(widget!.src).toBe("img.png");
+    // No text-level .cm-link mark should leak from the outer link
+    expect(countByClass(decos, "cm-link")).toBe(0);
+  });
+});
+
+describe("resolveLinkUrl", () => {
+  it("extracts the URL from a plain link", () => {
+    const state = stateOf("[text](https://a.com)");
+    expect(resolveLinkUrl(state, 2)).toBe("https://a.com");
+  });
+
+  it("extracts the parent link URL when clicking inside an image", () => {
+    const state = stateOf("[![a](img.png)](https://link)");
+    const pos = state.doc.toString().indexOf("img.png");
+    expect(resolveLinkUrl(state, pos + 1)).toBe("https://link");
+  });
+
+  it("returns null for plain text", () => {
+    const state = stateOf("just some text");
+    expect(resolveLinkUrl(state, 2)).toBeNull();
+  });
+});
+
+describe("isExternalUrl", () => {
+  it("accepts http(s) and rejects relative paths", () => {
+    expect(isExternalUrl("https://a.com")).toBe(true);
+    expect(isExternalUrl("http://a.com")).toBe(true);
+    expect(isExternalUrl("../other.md")).toBe(false);
+    expect(isExternalUrl("other.md")).toBe(false);
   });
 });

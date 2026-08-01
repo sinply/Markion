@@ -111,6 +111,31 @@ html, body, #root {
 /* Link */
 .cm-link {
   color: #0366d6;
+  cursor: pointer;
+}
+.cm-link:hover {
+  text-decoration: underline;
+}
+
+/* Image */
+.cm-image-wrap {
+  display: inline-block;
+  vertical-align: middle;
+  max-width: 100%;
+}
+.cm-image {
+  max-width: 100%;
+  vertical-align: middle;
+  border-radius: 4px;
+}
+.cm-image-placeholder {
+  display: inline-block;
+  padding: 4px 10px;
+  border: 1px dashed #bbb;
+  border-radius: 4px;
+  color: #999;
+  font-size: 13px;
+  background: #f6f8fa;
 }
 
 /* ---------- highlight.js theme (GitHub-like) ---------- */

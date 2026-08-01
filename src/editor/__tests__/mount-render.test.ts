@@ -6,6 +6,8 @@ const sample = `# Heading 1
 
 Some **bold** and *italic* and \`code\` and [link](https://a.com).
 
+![an image](img.png)
+
 > A blockquote
 
 | Col A | Col B |
@@ -34,12 +36,15 @@ describe("mounted EditorView renders widgets into DOM", () => {
     const hasTask = html.includes("cm-task-toggle");
     const hasHeading = html.includes("cm-heading");
     const hasBold = html.includes("cm-emphasis");
+    const hasImage = parent.querySelector("img.cm-image") !== null;
+    const hasLink = html.includes("cm-link");
 
     view.destroy();
     document.body.removeChild(parent);
 
-    expect({ hasCode, hasTable, hasTask, hasHeading, hasBold }).toEqual({
+    expect({ hasCode, hasTable, hasTask, hasHeading, hasBold, hasImage, hasLink }).toEqual({
       hasCode: true, hasTable: true, hasTask: true, hasHeading: true, hasBold: true,
+      hasImage: true, hasLink: true,
     });
   });
 });

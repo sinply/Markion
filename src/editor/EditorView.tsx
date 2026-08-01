@@ -14,10 +14,12 @@ interface EditorViewProps {
   doc: string;
   onChange?: (doc: string) => void;
   onStateChange?: (state: EditorState) => void;
+  vaultRoot?: string;
+  docRel?: string;
 }
 
 export const MarkdownEditor = forwardRef<EditorHandle, EditorViewProps>(
-  function MarkdownEditor({ doc, onChange, onStateChange }, ref) {
+  function MarkdownEditor({ doc, onChange, onStateChange, vaultRoot, docRel }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
     const onChangeRef = useRef(onChange);
@@ -33,6 +35,8 @@ export const MarkdownEditor = forwardRef<EditorHandle, EditorViewProps>(
       }, {
         livePreview,
         onStateChange: (s) => onStateChangeRef.current?.(s),
+        markdownContext:
+          vaultRoot && docRel ? { vaultRoot, docRel } : undefined,
       });
       const view = new EditorView({ state, parent: containerRef.current });
       viewRef.current = view;

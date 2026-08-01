@@ -1,7 +1,9 @@
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view";
 import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder, EditorState, StateEffect, StateField } from "@codemirror/state";
-import { CodeBlockWidget, TableWidget, TaskCheckboxWidget } from "./widgets";
+import type { SyntaxNode } from "@lezer/common";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget } from "./widgets";
 
 interface DecoEntry {
   from: number;
@@ -33,6 +35,47 @@ export const livePreviewField = StateField.define<DecorationSet>({
 
 function hiddenMark(): Decoration {
   return Decoration.mark({ attributes: { class: "cm-hidden cm-mark" } });
+}
+
+/** Extract src + alt from an Image node (alt via regex, src via URL child). */
+function imageSrcAltFromNode(state: EditorState, node: SyntaxNode): { src: string; alt: string } {
+  let src = "";
+  const cur = node.cursor();
+  if (cur.firstChild()) {
+    do {
+      if (cur.type.name === "URL") {
+        src = state.doc.sliceString(cur.from, cur.to);
+      }
+    } while (cur.nextSibling());
+  }
+  const m = state.doc.sliceString(node.from, node.to).match(/^!\[(.*)\]\s*\(/s);
+  return { src, alt: m ? m[1] : "" };
+}
+
+/** Resolve the URL of the Link/Autolink node containing `pos` (walks parents). */
+export function resolveLinkUrl(state: EditorState, pos: number): string | null {
+  let cur: SyntaxNode | null = syntaxTree(state).resolve(pos, -1);
+  while (cur) {
+    const name = cur.type.name;
+    if (name === "Link" || name === "Autolink") {
+      const c = cur.cursor();
+      if (c.firstChild()) {
+        do {
+          if (c.type.name === "URL") {
+            return state.doc.sliceString(c.from, c.to);
+          }
+        } while (c.nextSibling());
+      }
+      return null;
+    }
+    cur = cur.parent;
+  }
+  return null;
+}
+
+/** Only external http(s) links open in the system browser. */
+export function isExternalUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url);
 }
 
 /** Pure function: build decorations from the Lezer syntax tree. */
@@ -84,18 +127,49 @@ export function buildDecorations(state: EditorState): DecorationSet {
         return false;
       }
 
+      // --- Inline: images ---
+      if (type === "Image") {
+        const { src, alt } = imageSrcAltFromNode(state, node.node);
+        entries.push({
+          from: node.from, to: node.to,
+          decoration: Decoration.replace({ widget: new ImageWidget(src, alt) }),
+        });
+        return false;
+      }
+
       // --- Inline: links ---
       if (type === "Link") {
+        const children: { name: string; from: number; to: number; node: SyntaxNode }[] = [];
         const cur = node.node.cursor();
         if (cur.firstChild()) {
           do {
-            if (cur.type.name === "LinkMark") {
-              entries.push({
-                from: cur.from, to: cur.to,
-                decoration: Decoration.mark({ attributes: { class: "cm-hidden cm-link-marker" } }),
-              });
-            }
+            children.push({ name: cur.type.name, from: cur.from, to: cur.to, node: cur.node });
           } while (cur.nextSibling());
+        }
+
+        // Image nested in a link: render the image, hide only the outer brackets.
+        const imgChild = children.find((c) => c.name === "Image");
+        if (imgChild) {
+          const { src, alt } = imageSrcAltFromNode(state, imgChild.node);
+          entries.push({
+            from: imgChild.from, to: imgChild.to,
+            decoration: Decoration.replace({ widget: new ImageWidget(src, alt) }),
+          });
+          for (const c of children) {
+            if (c.name === "LinkMark" && (c.from < imgChild.from || c.to > imgChild.to)) {
+              entries.push({ from: c.from, to: c.to, decoration: hiddenMark() });
+            }
+          }
+          return false;
+        }
+
+        for (const c of children) {
+          if (c.name === "LinkMark") {
+            entries.push({
+              from: c.from, to: c.to,
+              decoration: Decoration.mark({ attributes: { class: "cm-hidden cm-link-marker" } }),
+            });
+          }
         }
         // Link text = content after the opening [ bracket up to the URL.
         // GFM parses links as: LinkMark[ [, LinkMark[ ], LinkMark[(, URL, LinkMark[)
@@ -249,31 +323,47 @@ export const livePreviewExtension = ViewPlugin.fromClass(LivePlugin, {
   eventHandlers: {
     click(event, view) {
       const target = event.target as HTMLElement;
-      if (target.tagName !== "INPUT") return false;
-      const label = target.closest(".cm-task-toggle");
-      if (!label) return false;
-      const pos = view.posAtDOM(target);
-      const tree = syntaxTree(view.state);
-      const node = tree.resolve(pos, -1);
-      if (!node || (node.type.name !== "Task" && node.type.name !== "TaskMarker")) return false;
-      let markerNode = node;
-      if (node.type.name === "Task") {
-        const cur = node.node.cursor();
-        if (cur.firstChild()) {
-          do {
-            if (cur.type.name === "TaskMarker") {
-              markerNode = cur.node;
-              break;
-            }
-          } while (cur.nextSibling());
+
+      // Task checkbox toggle
+      if (target.tagName === "INPUT") {
+        const label = target.closest(".cm-task-toggle");
+        if (!label) return false;
+        const pos = view.posAtDOM(target);
+        const tree = syntaxTree(view.state);
+        const node = tree.resolve(pos, -1);
+        if (!node || (node.type.name !== "Task" && node.type.name !== "TaskMarker")) return false;
+        let markerNode = node;
+        if (node.type.name === "Task") {
+          const cur = node.node.cursor();
+          if (cur.firstChild()) {
+            do {
+              if (cur.type.name === "TaskMarker") {
+                markerNode = cur.node;
+                break;
+              }
+            } while (cur.nextSibling());
+          }
+        }
+        const text = view.state.doc.sliceString(markerNode.from, markerNode.to);
+        const newText = /^\[[xX]\]$/.test(text) ? "[ ]" : "[x]";
+        view.dispatch({
+          changes: { from: markerNode.from, to: markerNode.to, insert: newText },
+        });
+        return true;
+      }
+
+      // Open external links (also when clicking an image nested inside a link)
+      const clickable = target.closest(".cm-image, .cm-link");
+      if (clickable) {
+        const pos = view.posAtDOM(target);
+        const url = resolveLinkUrl(view.state, pos);
+        if (url && isExternalUrl(url)) {
+          event.preventDefault();
+          void openUrl(url);
+          return true;
         }
       }
-      const text = view.state.doc.sliceString(markerNode.from, markerNode.to);
-      const newText = /^\[[xX]\]$/.test(text) ? "[ ]" : "[x]";
-      view.dispatch({
-        changes: { from: markerNode.from, to: markerNode.to, insert: newText },
-      });
-      return true;
+      return false;
     },
   },
 });

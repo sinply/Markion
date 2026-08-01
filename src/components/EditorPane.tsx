@@ -68,6 +68,8 @@ export function EditorPane({
             key={activeDoc.id}
             ref={editorRef}
             doc={activeContent}
+            vaultRoot={vaultRoot ?? undefined}
+            docRel={activeDoc?.path}
             onChange={handleChange}
             onStateChange={(state) => onHeadingsChange(state)}
           />
