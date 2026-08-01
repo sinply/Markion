@@ -21,7 +21,7 @@ Markion — a Tauri 2 desktop Markdown editor with Obsidian-style live preview a
 npm install              # Install deps
 npx tsc --noEmit         # Type-check
 npx vitest run           # Run frontend unit tests
-npm run dev              # Vite dev server (port 1420)
+npm run dev              # Vite dev server (port 5173)
 
 # Backend (requires Rust toolchain + MSVC build tools on Windows)
 cd src-tauri

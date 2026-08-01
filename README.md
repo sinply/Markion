@@ -1,116 +1,139 @@
+**[English](README.md) | [简体中文](README.zh-CN.md)**
+
 # Markion
 
-一款基于 **Tauri 2** 的本地 Markdown 编辑器——Obsidian 式实时预览 + 语雀式多级文档树。
+A fast, local-first **Markdown editor** for Windows, macOS, and Linux. Obsidian-style live preview, Yuque-style hierarchical document tree, and a plain-files-on-disk storage model that works with your existing sync setup.
 
 ![MIT License](https://img.shields.io/badge/license-MIT-green)
-![Tauri 2](https://img.shields.io/badge/Tauri-2-blue)
+![Tauri 2](https://img.shields.io/badge/Shell-Tauri%202-blue)
 ![Rust](https://img.shields.io/badge/Rust-1.97-orange)
-![React 18](https://img.shields.io/badge/React-18-61dafb)
+![React 18](https://img.shields.io/badge/UI-React%2018-61dafb)
+![CodeMirror 6](https://img.shields.io/badge/Editor-CodeMirror%206-0f9d58)
 
-## 特性
+> ⚡ Write Markdown the way you think — the editor renders as you type, hides the syntax noise, and keeps your notes as plain files you own.
 
-- **实时预览（Live Preview）**：Obsidian 风格——输入即渲染，`**粗体**`、`# 标题`、表格、代码块、任务列表、引用实时显示，Markdown 标记自动隐藏，光标移入显现。可在设置中开关。
-- **多级文档树**：左侧文件树按文件夹层级缩进展示，支持折叠/展开、拖拽排序、跨目录移动。
-- **大纲面板**：右侧实时显示当前文档的标题树，点击跳转到对应章节。
-- **GFM 支持**：表格、任务列表、删除线、代码块语法高亮（GitHub 风格配色）。
-- **本地优先**：直接读写磁盘上的 `.md` 文件，可配合任意文件同步工具。
-- **快速轻量**：CodeMirror 6 编辑器内核，Tauri 2 后端，小体积低内存。
+![Markion first run](assets/markion-screenshot.png)
 
-## 技术栈
+---
 
-| 层 | 技术 |
+## Features
+
+| | |
 |---|---|
-| 桌面壳 | [Tauri 2](https://tauri.app)（Rust 后端） |
-| 编辑器 | [CodeMirror 6](https://codemirror.net) + @lezer/markdown + markdown-it + lowlight |
-| UI | React 18 + react-arborist + react-resizable-panels + Zustand |
-| 测试 | vitest + jsdom（前端）、Rust 单元测试（后端） |
+| 🪄 **Live Preview** | Obsidian-style rendering as you type. `**bold**`, `# headings`, tables, code blocks, task lists, and blockquotes render instantly. Syntax markers hide themselves and reappear when your cursor touches them. Toggle anytime in settings. |
+| 🌲 **Hierarchical Document Tree** | A Yuque-style file tree with nested folder indentation, collapse/expand, drag-and-drop reordering, and cross-folder moves. |
+| 🧭 **Outline Panel** | A live-updating heading tree for the open document. Click any heading to jump straight to that section. |
+| ✅ **GFM Support** | Tables, task lists, strikethrough, and GitHub-flavored syntax highlighting for code blocks. |
+| 📁 **Local-First** | Reads and writes plain `.md` files on disk. No proprietary database, no lock-in — pair it with Dropbox, Syncthing, or any sync tool. |
+| ⚡ **Fast & Light** | CodeMirror 6 editor core and a Rust (Tauri 2) backend. Small footprint, low memory, instant startup. |
 
-## 环境要求
+---
 
-- **Node.js** ≥ 20
-- **Rust** 稳定工具链（rustup）
-- **Windows**：MSVC C++ Build Tools 或 LLVM `lld-link`（见下方说明）
-- **macOS/Linux**：Xcode Command Line Tools / build-essential
+## Quick Start
 
-> Windows 下若未安装 VS Build Tools，可用 LLVM 的 `lld-link` 作为链接器：
-> 项目已自带 `src-tauri/.cargo/config.toml`（`linker = "lld-link"`），需 `lld-link` 在 PATH 中（如 `C:\Program Files\LLVM\bin`）。
+### Prerequisites
 
-## 快速开始
+- **Node.js** >= 20
+- **Rust** stable toolchain (`rustup`)
+- **Windows**: MSVC C++ Build Tools (Visual Studio Build Tools with the "Desktop development with C++" workload)
+- **macOS/Linux**: Xcode Command Line Tools / `build-essential`
+
+### Run it
 
 ```bash
-# 安装依赖
+# Install dependencies
 npm install
 
-# 开发模式（热重载，打开桌面窗口）
+# Development mode (hot reload, opens the desktop window)
 npm run tauri dev
 
-# 仅启动前端（浏览器里看 UI，无 Tauri 功能）
+# Frontend only (browser preview at http://localhost:5173, no Tauri features)
 npm run dev
 ```
 
-## 构建与测试
+> The Vite dev server runs on **port 5173** by default.
+
+### Build & test
 
 ```bash
-# TypeScript 类型检查
-npx tsc --noEmit
+npx tsc --noEmit         # TypeScript type check
+npx vitest run           # Frontend unit tests
 
-# 前端单元测试
-npx vitest run
-
-# Rust 后端检查 + 测试
 cd src-tauri
-cargo check
-cargo test
+cargo check              # Rust type check
+cargo test               # Rust unit tests
 
-# 构建可执行文件（产物在 src-tauri/target/release/）
-npm run tauri build
+cd ..
+npm run tauri build      # Production build → src-tauri/target/release/
 ```
 
-## 项目结构
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Shell | [Tauri 2](https://tauri.app) — Rust backend + WebView frontend |
+| Editor | [CodeMirror 6](https://codemirror.net) + @lezer/markdown + markdown-it + lowlight |
+| UI | React 18 + react-arborist + react-resizable-panels + Zustand |
+| Backend | Rust (serde, notify, sha2, pathdiff, walkdir) |
+| Testing | vitest + jsdom (frontend), `#[cfg(test)]` + tempfile (Rust) |
+
+---
+
+## Project Structure
 
 ```
 Markion/
-├── src/                  # 前端 (React + TS)
-│   ├── components/       # UI 组件（Layout/FileTree/EditorPane/Outline...）
-│   ├── editor/           # CodeMirror 6 编辑器内核
-│   │   ├── livePreview.ts    # 实时预览装饰（标题/粗体/表格/代码块/任务）
-│   │   ├── widgets.ts        # 块级 widget（代码块/表格/任务勾选）
-│   │   └── markdown.ts       # markdown-it + lowlight 渲染
-│   ├── stores/           # Zustand 状态（vaultStore/docStore/settingsStore）
-│   └── lib/              # IPC 封装 + 类型
-├── src-tauri/            # Rust 后端 (Tauri)
+├── src/                      # Frontend (React + TypeScript)
+│   ├── components/           # UI components (Layout / FileTree / EditorPane / Outline …)
+│   ├── editor/               # CodeMirror 6 editor core
+│   │   ├── livePreview.ts    #   Live-preview decorations (headings/bold/tables/code/tasks)
+│   │   ├── widgets.ts        #   Block-level widgets (code blocks / tables / task checkboxes)
+│   │   └── markdown.ts       #   markdown-it + lowlight renderer
+│   ├── stores/               # Zustand state (vaultStore / docStore / settingsStore)
+│   └── lib/                  # IPC wrappers + shared types
+├── src-tauri/                # Rust backend (Tauri)
 │   ├── src/
-│   │   ├── file_io.rs    # 原子读写
-│   │   ├── tree_index.rs # 文档树（FS + 索引混合模型）
-│   │   ├── image.rs      # 图片哈希/去重/路径
-│   │   ├── watcher.rs    # 文件监听
-│   │   └── commands.rs   # Tauri 命令
-│   └── .cargo/config.toml # lld-link 配置（可选）
-├── docs/superpowers/     # 设计规格与实施计划
-└── CLAUDE.md             # Claude Code 开发指引
+│   │   ├── file_io.rs        #   Atomic file reads/writes
+│   │   ├── tree_index.rs     #   Document tree (FS + index hybrid model)
+│   │   ├── image.rs          #   Image hashing / dedup / path resolution
+│   │   ├── watcher.rs        #   File-system watcher
+│   │   └── commands.rs       #   Tauri command handlers
+├── assets/                   # Screenshots & media
+└── docs/superpowers/         # Design specs & implementation plans
 ```
 
-## 文档树模型
+## Document Tree Model
 
-文件系统是**唯一事实来源**（source of truth），`.markion/index.json` 仅记录文件夹的自定义排序与折叠状态：
+The file system is the **single source of truth**; `.markion/index.json` stores only per-folder sort order and collapse state:
 
-- 同文件夹内拖拽重排 → 只更新索引
-- 跨文件夹移动 → 移动真实文件 + 更新索引
-- 外部删除/改名 → 索引自动清理，不阻塞
+- **Same-folder drag-reorder** → updates the index only
+- **Cross-folder move** → renames the file on disk + updates both folders' index entries
+- **External delete/rename** → the index self-cleans; nothing blocks
 
-## 路线图
+---
 
-- [x] 实时预览（标题/粗体/斜体/行内代码/链接/表格/任务列表/代码块/引用）
-- [x] 多级文件树 + 拖拽
-- [x] 大纲面板 + 点击跳转
-- [x] 图片粘贴/拖拽（后端 `save_image` 已就绪，UI 待接入）
-- [ ] 图片粘贴 UI 接入
-- [ ] 外部文件变更监听（watcher 已就绪，事件接线待接入）
-- [ ] 数学公式（KaTeX）、Mermaid 图表
-- [ ] 设置持久化（`.markion/config.json`）
-- [ ] `index.md` 作为层级容器正文
-- [ ] 双向链接 / 反链面板
+## Roadmap
 
-## 许可
+**Done**
+- [x] Live preview (headings / bold / italic / inline code / links / tables / task lists / code blocks / blockquotes)
+- [x] Hierarchical file tree + drag-and-drop
+- [x] Outline panel + click-to-jump
+- [x] Image paste/drag-drop backend (`save_image` ready; UI wiring pending)
 
-MIT
+**In progress**
+- [ ] Image paste UI integration
+- [ ] External file-change watcher (backend ready; event wiring pending)
+
+**Planned**
+- [ ] Math formulas (KaTeX) & Mermaid diagrams
+- [ ] Settings persistence (`.markion/config.json`)
+- [ ] `index.md` as a folder-level container body
+- [ ] Bidirectional links / backlinks panel
+
+---
+
+## License
+
+[MIT](LICENSE)
