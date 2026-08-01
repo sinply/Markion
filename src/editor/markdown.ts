@@ -1,7 +1,14 @@
 import MarkdownIt from "markdown-it";
 import { common, createLowlight } from "lowlight";
+import verilog from "highlight.js/lib/languages/verilog";
+import matlab from "highlight.js/lib/languages/matlab";
+import vhdl from "highlight.js/lib/languages/vhdl";
 
 const lowlight = createLowlight(common);
+
+// These languages are missing from lowlight's `common` set but common in
+// hardware/embedded note-taking (Verilog, MATLAB, VHDL).
+lowlight.register({ verilog, matlab, vhdl });
 
 const md = new MarkdownIt({ html: false, linkify: true });
 md.enable(["table", "strikethrough"]);
