@@ -48,16 +48,16 @@ export function BacklinksPanel() {
 
   return (
     <div style={{ padding: 8, overflow: "auto", fontSize: 13 }}>
-      <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 12, color: "#666" }}>BACKLINKS</div>
-      {loading && <div style={{ color: "#999" }}>Scanning…</div>}
+      <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 12, color: "var(--fg-muted)" }}>BACKLINKS</div>
+      {loading && <div style={{ color: "var(--fg-muted)" }}>Scanning…</div>}
       {!loading && backlinks.length === 0 && (
-        <div style={{ color: "#999" }}>No backlinks</div>
+        <div style={{ color: "var(--fg-muted)" }}>No backlinks</div>
       )}
       {backlinks.map((b) => (
         <div
           key={b.path}
           onClick={() => openLink(b.path)}
-          style={{ padding: "2px 0", cursor: "pointer", color: "#0366d6" }}
+          style={{ padding: "2px 0", cursor: "pointer", color: "var(--accent)" }}
         >
           {b.title}
         </div>

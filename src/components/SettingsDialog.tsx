@@ -11,7 +11,7 @@ export function SettingsDialog() {
     right: 8,
     zIndex: 100,
     background: "none",
-    border: "1px solid #ddd",
+    border: "1px solid var(--border)",
     borderRadius: 4,
     cursor: "pointer",
     fontSize: 16,
@@ -24,7 +24,7 @@ export function SettingsDialog() {
     <div
       style={{
         position: "fixed", top: "10%", left: "30%", width: "40%",
-        background: "#fff", boxShadow: "0 4px 24px rgba(0,0,0,0.2)", borderRadius: 8,
+        background: "var(--bg)", boxShadow: "0 4px 24px rgba(0,0,0,0.2)", borderRadius: 8,
         zIndex: 2000, padding: 16, fontSize: 14,
       }}
     >

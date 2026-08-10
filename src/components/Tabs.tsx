@@ -10,7 +10,7 @@ export function Tabs() {
   if (openDocs.length === 0) return null;
 
   return (
-    <div style={{ display: "flex", borderBottom: "1px solid #ddd", overflow: "auto", flexShrink: 0 }}>
+    <div style={{ display: "flex", borderBottom: "1px solid var(--border)", overflow: "auto", flexShrink: 0 }}>
       {openDocs.map((doc) => (
         <div
           key={doc.id}
@@ -18,7 +18,7 @@ export function Tabs() {
           style={{
             padding: "6px 10px",
             cursor: "pointer",
-            borderBottom: doc.id === activeDocId ? "2px solid #0366d6" : "2px solid transparent",
+            borderBottom: doc.id === activeDocId ? "2px solid var(--accent)" : "2px solid transparent",
             fontWeight: doc.id === activeDocId ? 600 : 400,
             whiteSpace: "nowrap",
             fontSize: 13,
@@ -29,7 +29,7 @@ export function Tabs() {
           {doc.title}
           <button
             onClick={(e) => { e.stopPropagation(); closeDoc(doc.id); }}
-            style={{ marginLeft: 6, border: "none", background: "none", cursor: "pointer", fontSize: 14, color: "#666" }}
+            style={{ marginLeft: 6, border: "none", background: "none", cursor: "pointer", fontSize: 14, color: "var(--fg-muted)" }}
           >
             {"×"}
           </button>

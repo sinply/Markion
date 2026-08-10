@@ -4,8 +4,10 @@ import { useVaultStore } from "./stores/vaultStore";
 import { useSettingsStore } from "./stores/settingsStore";
 import { startVaultWatch } from "./lib/ipc";
 import { Layout } from "./components/Layout";
+import { useTheme } from "./hooks/useTheme";
 
 export default function App() {
+  useTheme();
   const loadTree = useVaultStore((s) => s.loadTree);
   const loadSettings = useSettingsStore((s) => s.load);
   const vaultRoot = useVaultStore((s) => s.vaultRoot);

@@ -89,7 +89,7 @@ export function EditorPane({
             onModeChange={setEditorMode}
           />
         ) : (
-          <div style={{ padding: 16, color: "#999" }}>
+          <div style={{ padding: 16, color: "var(--fg-muted)" }}>
             Open a file from the tree to edit
           </div>
         )}
@@ -98,8 +98,8 @@ export function EditorPane({
         style={{
           padding: "3px 8px",
           fontSize: 11,
-          color: "#666",
-          borderTop: "1px solid #ddd",
+          color: "var(--fg-muted)",
+          borderTop: "1px solid var(--border)",
           display: "flex",
           justifyContent: "space-between",
         }}

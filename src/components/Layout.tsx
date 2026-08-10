@@ -41,17 +41,17 @@ export function Layout() {
         <Panel id="tree" defaultSize="20" minSize="12" maxSize="35">
           <FileTree />
         </Panel>
-        <Separator id="sep-tree" style={{ width: 3, background: "#e0e0e0" }} />
+        <Separator id="sep-tree" style={{ width: 3, background: "var(--border)" }} />
         <Panel id="editor" defaultSize="55" minSize="30">
           <EditorPane onHeadingsChange={setEditorState} />
         </Panel>
-        <Separator id="sep-outline" style={{ width: 3, background: "#e0e0e0" }} />
+        <Separator id="sep-outline" style={{ width: 3, background: "var(--border)" }} />
         <Panel id="outline" defaultSize="25" minSize="10" maxSize="35">
           <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             <div style={{ flex: 1, overflow: "auto" }}>
               <OutlinePane state={editorState} onJump={handleJump} />
             </div>
-            <div style={{ borderTop: "1px solid #e0e0e0" }}>
+            <div style={{ borderTop: "1px solid var(--border)" }}>
               <BacklinksPanel />
             </div>
           </div>

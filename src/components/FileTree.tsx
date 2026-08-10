@@ -115,14 +115,14 @@ export function FileTree() {
   }, [tree]);
 
   if (!tree) {
-    return <div style={{ padding: 8, color: "#999", fontSize: 13 }}>No vault open</div>;
+    return <div style={{ padding: 8, color: "var(--fg-muted)", fontSize: 13 }}>No vault open</div>;
   }
 
   const rowData: RowData[] = tree.children.map(convertTree);
 
   return (
     <div style={{ height: "100%", overflow: "auto" }}>
-      <div style={{ padding: "6px 8px", borderBottom: "1px solid #ddd", fontSize: 12, color: "#666" }}>
+      <div style={{ padding: "6px 8px", borderBottom: "1px solid var(--border)", fontSize: 12, color: "var(--fg-muted)" }}>
         {tree.name || "Vault"}
       </div>
       <Tree<RowData>

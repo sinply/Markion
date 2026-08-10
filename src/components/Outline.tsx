@@ -36,9 +36,9 @@ export function OutlinePane({ state, onJump }: OutlineProps) {
 
   return (
     <div style={{ padding: 8, overflow: "auto", fontSize: 13 }}>
-      <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 12, color: "#666" }}>OUTLINE</div>
+      <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 12, color: "var(--fg-muted)" }}>OUTLINE</div>
       {headings.length === 0 && (
-        <div style={{ color: "#999" }}>No headings</div>
+        <div style={{ color: "var(--fg-muted)" }}>No headings</div>
       )}
       {headings.map((h, i) => (
         <div
@@ -48,7 +48,7 @@ export function OutlinePane({ state, onJump }: OutlineProps) {
             padding: "2px 0",
             paddingLeft: (h.level - 1) * 12,
             cursor: "pointer",
-            color: "#333",
+            color: "var(--fg)",
           }}
         >
           {h.text}

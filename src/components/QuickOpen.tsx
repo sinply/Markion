@@ -48,7 +48,7 @@ export function QuickOpen() {
     <div
       style={{
         position: "fixed", top: "15%", left: "30%", width: "40%", maxHeight: "60%",
-        background: "#fff", boxShadow: "0 4px 24px rgba(0,0,0,0.25)", borderRadius: 8,
+        background: "var(--bg)", boxShadow: "0 4px 24px rgba(0,0,0,0.25)", borderRadius: 8,
         zIndex: 1000, overflow: "hidden", display: "flex", flexDirection: "column",
       }}
     >
