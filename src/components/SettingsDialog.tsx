@@ -1,24 +1,12 @@
-import { useState } from "react";
 import { useSettingsStore } from "../stores/settingsStore";
+import { useUiStore } from "../stores/uiStore";
 
 export function SettingsDialog() {
-  const [open, setOpen] = useState(false);
   const settings = useSettingsStore();
+  const open = useUiStore((s) => s.settingsOpen);
+  const setOpen = useUiStore((s) => s.setSettingsOpen);
 
-  const btnStyle = {
-    position: "fixed" as const,
-    top: 6,
-    right: 8,
-    zIndex: 100,
-    background: "none",
-    border: "1px solid var(--border)",
-    borderRadius: 4,
-    cursor: "pointer",
-    fontSize: 16,
-    padding: "2px 6px",
-  };
-
-  if (!open) return <button style={btnStyle} onClick={() => setOpen(true)}>{"⚙"}</button>;
+  if (!open) return null;
 
   return (
     <div

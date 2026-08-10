@@ -6,7 +6,6 @@ import { OutlinePane } from "./Outline";
 import { BacklinksPanel } from "./BacklinksPanel";
 import { GraphPanel } from "./GraphPanel";
 import { QuickOpen } from "./QuickOpen";
-import { SettingsDialog } from "./SettingsDialog";
 import { EditorView } from "@codemirror/view";
 import type { EditorState } from "@codemirror/state";
 
@@ -62,7 +61,6 @@ export function Layout() {
         </Panel>
       </Group>
       <QuickOpen />
-      <SettingsDialog />
     </div>
   );
 }

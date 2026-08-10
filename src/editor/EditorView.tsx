@@ -1,8 +1,9 @@
-import React, { useRef, useEffect, useImperativeHandle, forwardRef, useState } from "react";
+import React, { useRef, useEffect, useImperativeHandle, forwardRef } from "react";
 import { EditorView } from "@codemirror/view";
 import type { EditorState } from "@codemirror/state";
-import { createEditorState, setLivePreview, setEditorMode, type EditorMode } from "./codemirror";
+import { createEditorState, setLivePreview, setEditorMode } from "./codemirror";
 import { useSettingsStore } from "../stores/settingsStore";
+import { useUiStore } from "../stores/uiStore";
 
 export interface EditorHandle {
   getDoc(): string;
@@ -16,15 +17,10 @@ interface EditorViewProps {
   onStateChange?: (state: EditorState) => void;
   vaultRoot?: string;
   docRel?: string;
-  mode?: EditorMode;
-  onModeChange?: (mode: EditorMode) => void;
 }
 
 export const MarkdownEditor = forwardRef<EditorHandle, EditorViewProps>(
-  function MarkdownEditor(
-    { doc, onChange, onStateChange, vaultRoot, docRel, mode = "live", onModeChange },
-    ref,
-  ) {
+  function MarkdownEditor({ doc, onChange, onStateChange, vaultRoot, docRel }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
     const onChangeRef = useRef(onChange);
@@ -32,7 +28,7 @@ export const MarkdownEditor = forwardRef<EditorHandle, EditorViewProps>(
     const onStateChangeRef = useRef(onStateChange);
     onStateChangeRef.current = onStateChange;
     const livePreview = useSettingsStore((s) => s.livePreview);
-    const [currentMode, setCurrentMode] = useState<EditorMode>(mode);
+    const mode = useUiStore((s) => s.editorMode);
 
     useEffect(() => {
       if (!containerRef.current) return;
@@ -46,29 +42,27 @@ export const MarkdownEditor = forwardRef<EditorHandle, EditorViewProps>(
       });
       const view = new EditorView({ state, parent: containerRef.current });
       viewRef.current = view;
-      // Emit initial state so the outline populates immediately
       onStateChangeRef.current?.(state);
       return () => view.destroy();
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // Toggle live preview dynamically when the setting changes
+    // Live-preview decorations depend on the settings toggle.
     useEffect(() => {
-      if (viewRef.current && currentMode === "live") {
+      if (viewRef.current && mode === "live") {
         setLivePreview(viewRef.current, livePreview);
       }
-    }, [livePreview, currentMode]);
+    }, [livePreview, mode]);
 
-    const switchMode = (next: EditorMode) => {
-      setCurrentMode(next);
-      onModeChange?.(next);
+    // Edit/Preview mode is controlled globally via the View menu.
+    useEffect(() => {
       if (viewRef.current) {
-        setEditorMode(viewRef.current, next);
-        if (next === "live") {
+        setEditorMode(viewRef.current, mode);
+        if (mode === "live") {
           setLivePreview(viewRef.current, livePreview);
         }
       }
-    };
+    }, [mode, livePreview]);
 
     useImperativeHandle(ref, () => ({
       getDoc: () => viewRef.current?.state.doc.toString() ?? "",
@@ -84,26 +78,6 @@ export const MarkdownEditor = forwardRef<EditorHandle, EditorViewProps>(
       },
     }));
 
-    return (
-      <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-        <div className="markion-modebar">
-          <button
-            className={`markion-mode-btn ${currentMode === "live" ? "active" : ""}`}
-            onClick={() => switchMode("live")}
-            title="Edit mode (Ctrl+E)"
-          >
-            ✏️ Edit
-          </button>
-          <button
-            className={`markion-mode-btn ${currentMode === "preview" ? "active" : ""}`}
-            onClick={() => switchMode("preview")}
-            title="Preview mode (Ctrl+Shift+E)"
-          >
-            👁️ Preview
-          </button>
-        </div>
-        <div ref={containerRef} className="markdown-editor" style={{ flex: 1, minHeight: 0 }} />
-      </div>
-    );
+    return <div ref={containerRef} className="markdown-editor" style={{ height: "100%" }} />;
   },
 );

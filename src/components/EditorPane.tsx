@@ -1,9 +1,8 @@
-import { useRef, useCallback, useEffect, useState } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import { useDocStore } from "../stores/docStore";
 import { useVaultStore } from "../stores/vaultStore";
 import { writeFileAtomic } from "../lib/ipc";
 import { MarkdownEditor, type EditorHandle } from "../editor/EditorView";
-import type { EditorMode } from "../editor/codemirror";
 import { Tabs } from "./Tabs";
 import type { EditorState } from "@codemirror/state";
 
@@ -24,7 +23,6 @@ export function EditorPane({
 
   const editorRef = useRef<EditorHandle>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [editorMode, setEditorMode] = useState<EditorMode>("live");
 
   const activeDoc = openDocs.find((d) => d.id === activeDocId);
 
@@ -32,17 +30,6 @@ export function EditorPane({
   useEffect(() => {
     if (!activeDoc) onHeadingsChange(null);
   }, [activeDoc, onHeadingsChange]);
-
-  // Global shortcut: Ctrl+E toggles edit/preview; Ctrl+Shift+E toggles too.
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "e") return;
-      e.preventDefault();
-      setEditorMode((m) => (m === "live" ? "preview" : "live"));
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, []);
 
   const handleChange = useCallback(
     (doc: string) => {
@@ -85,8 +72,6 @@ export function EditorPane({
             docRel={activeDoc?.path}
             onChange={handleChange}
             onStateChange={(state) => onHeadingsChange(state)}
-            mode={editorMode}
-            onModeChange={setEditorMode}
           />
         ) : (
           <div style={{ padding: 16, color: "var(--fg-muted)" }}>

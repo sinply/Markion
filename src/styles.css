@@ -545,3 +545,82 @@ h1, h2, h3, h4, h5, h6 {
 label {
   color: var(--fg);
 }
+
+/* --- Menu bar --- */
+.markion-menubar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  background: var(--panel-bg-2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1500;
+}
+.markion-menubar-btn {
+  border: none;
+  background: transparent;
+  padding: 4px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--fg);
+  border-radius: 4px;
+}
+.markion-menubar-btn:hover {
+  background: var(--hover-bg);
+}
+.markion-menubar-item {
+  position: relative;
+}
+.markion-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 220px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  padding: 4px;
+  z-index: 2000;
+}
+.markion-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 6px 10px;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--fg);
+  border-radius: 4px;
+}
+.markion-menu-item:hover {
+  background: var(--hover-bg);
+}
+.markion-menu-item.checked .markion-menu-check {
+  visibility: visible;
+}
+.markion-menu-check {
+  visibility: hidden;
+  width: 14px;
+  color: var(--accent);
+}
+.markion-menu-label {
+  flex: 1;
+  white-space: nowrap;
+}
+.markion-menu-shortcut {
+  color: var(--fg-muted);
+  font-size: 12px;
+  margin-left: 16px;
+}
+.markion-menu-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 8px;
+}

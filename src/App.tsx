@@ -4,10 +4,15 @@ import { useVaultStore } from "./stores/vaultStore";
 import { useSettingsStore } from "./stores/settingsStore";
 import { startVaultWatch } from "./lib/ipc";
 import { Layout } from "./components/Layout";
+import { MenuBar } from "./components/MenuBar";
+import { AboutDialog } from "./components/AboutDialog";
+import { SettingsDialog } from "./components/SettingsDialog";
 import { useTheme } from "./hooks/useTheme";
+import { useCommands } from "./hooks/useCommands";
 
 export default function App() {
   useTheme();
+  useCommands();
   const loadTree = useVaultStore((s) => s.loadTree);
   const loadSettings = useSettingsStore((s) => s.load);
   const vaultRoot = useVaultStore((s) => s.vaultRoot);
@@ -52,5 +57,16 @@ export default function App() {
     );
   }
 
-  return <Layout />;
+  return (
+    <>
+      <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+        <MenuBar />
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <Layout />
+        </div>
+      </div>
+      <SettingsDialog />
+      <AboutDialog />
+    </>
+  );
 }
