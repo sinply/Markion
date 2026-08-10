@@ -149,10 +149,10 @@ export function MenuBar() {
         { label: t.cut, shortcut: "Ctrl+X", action: () => { ui.requestEdit("cut"); close(); } },
         { label: t.copy, shortcut: "Ctrl+C", action: () => { ui.requestEdit("copy"); close(); } },
         { label: t.paste, shortcut: "Ctrl+V", action: () => { ui.requestEdit("paste"); close(); } },
-        { label: t.selectAll, shortcut: "Ctrl+A", action: () => { ui.requestEdit("selectAll"); close(); }, separatorAfter: true },
-        { label: t.format, submenu: formatMenu },
+        { label: t.selectAll, shortcut: "Ctrl+A", action: () => { ui.requestEdit("selectAll"); close(); } },
       ],
     },
+    formatMenu,
     {
       label: t.menuView,
       items: [
