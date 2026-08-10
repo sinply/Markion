@@ -168,3 +168,37 @@ html, body, #root {
 .hljs-strong {
   font-weight: 700;
 }
+
+/* --- YAML frontmatter -> Obsidian-style Properties panel --- */
+.cm-frontmatter {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 12px;
+  padding: 10px 12px;
+  background: #f7f7f8;
+  border: 1px solid #e5e5e7;
+  border-radius: 8px;
+}
+.cm-frontmatter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+}
+.cm-frontmatter-icon {
+  width: 18px;
+  text-align: center;
+  opacity: 0.8;
+  font-size: 12px;
+}
+.cm-frontmatter-key {
+  font-weight: 600;
+  color: #1f2328;
+  font-size: 13px;
+  min-width: 72px;
+}
+.cm-frontmatter-value {
+  color: #57606a;
+  font-size: 13px;
+}

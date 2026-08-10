@@ -3,7 +3,7 @@ import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder, EditorState, StateEffect, StateField } from "@codemirror/state";
 import type { SyntaxNode } from "@lezer/common";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget } from "./widgets";
+import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget, FrontmatterWidget, parseFrontmatter } from "./widgets";
 
 interface DecoEntry {
   from: number;
@@ -294,8 +294,23 @@ export function buildDecorations(state: EditorState): DecorationSet {
     },
   });
 
-  // --- Block math: $$...$$ (Lezer markdown has no math nodes; scan the doc) ---
+  // --- YAML frontmatter: `---...---` at the very start of the doc becomes a
+  //     Properties panel (Obsidian-style). Lezer sees it as HorizontalRule +
+  //     SetextHeading, so scan the raw text first and take the doc-leading block.
   const docText = state.doc.toString();
+  const fmMatch = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(docText);
+  if (fmMatch) {
+    const props = parseFrontmatter(fmMatch[1]);
+    if (props.length > 0) {
+      entries.push({
+        from: 0,
+        to: fmMatch[0].length,
+        decoration: Decoration.replace({ widget: new FrontmatterWidget(props), block: true }),
+      });
+    }
+  }
+
+  // --- Block math: $$...$$ (Lezer markdown has no math nodes; scan the doc) ---
   const mathRe = /\$\$([\s\S]+?)\$\$/g;
   let m: RegExpExecArray | null;
   while ((m = mathRe.exec(docText)) !== null) {

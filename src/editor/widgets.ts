@@ -96,6 +96,80 @@ export class MathBlockWidget extends WidgetType {
   }
 }
 
+/** Parse a YAML frontmatter body into [key, value] pairs (top-level only). */
+export function parseFrontmatter(body: string): [string, string][] {
+  const props: [string, string][] = [];
+  for (const line of body.split("\n")) {
+    const idx = line.indexOf(":");
+    if (idx <= 0) continue; // skip comment/blank/indented lines
+    let key = line.slice(0, idx).trim();
+    let val = line.slice(idx + 1).trim();
+    // strip surrounding quotes
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1);
+    }
+    if (key) props.push([key, val]);
+  }
+  return props;
+}
+
+/** Map a frontmatter key to an Obsidian-style property icon. */
+function propertyIcon(key: string): string {
+  const k = key.toLowerCase();
+  if (k.includes("author") || k.includes("creator")) return "✏️";
+  if (k.includes("date") || k.includes("created") || k.includes("updated")) return "\u{1F4C5}";
+  if (k.includes("class") || k.includes("category") || k.includes("type")) return "\u{1F4C1}";
+  if (k.includes("tag")) return "\u{1F3F7}️";
+  if (k.includes("url") || k.includes("link")) return "\u{1F517}";
+  if (k.includes("version")) return "\u{1F4C8}";
+  if (k.includes("status")) return "\u{1F4CC}";
+  return "\u{1F4CB}"; // clipboard
+}
+
+/** Obsidian-style Properties panel for YAML frontmatter. */
+export class FrontmatterWidget extends WidgetType {
+  constructor(readonly props: [string, string][]) {
+    super();
+  }
+
+  eq(other: FrontmatterWidget): boolean {
+    return JSON.stringify(other.props) === JSON.stringify(this.props);
+  }
+
+  toDOM(_view: EditorView): HTMLElement {
+    const card = document.createElement("div");
+    card.className = "cm-frontmatter";
+    for (const [key, value] of this.props) {
+      const row = document.createElement("div");
+      row.className = "cm-frontmatter-row";
+
+      const icon = document.createElement("span");
+      icon.className = "cm-frontmatter-icon";
+      icon.textContent = propertyIcon(key);
+      row.appendChild(icon);
+
+      const keyEl = document.createElement("span");
+      keyEl.className = "cm-frontmatter-key";
+      keyEl.textContent = key;
+      row.appendChild(keyEl);
+
+      if (value !== "") {
+        const valEl = document.createElement("span");
+        valEl.className = "cm-frontmatter-value";
+        valEl.textContent = value;
+        row.appendChild(valEl);
+      }
+
+      card.appendChild(row);
+    }
+    return card;
+  }
+
+  ignoreEvent(): boolean {
+    return false;
+  }
+}
+
 export class TableWidget extends WidgetType {
   constructor(readonly raw: string) {
     super();

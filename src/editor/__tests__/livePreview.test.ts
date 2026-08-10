@@ -138,3 +138,35 @@ describe("isExternalUrl", () => {
     expect(isExternalUrl("other.md")).toBe(false);
   });
 });
+
+describe("frontmatter", () => {
+  it("replaces a leading YAML frontmatter block with a properties widget", () => {
+    const state = stateOf("---\nauthor: sinply\ncreated: 2022-03-12\n---\n\n# Title\n");
+    const decos = buildDecorations(state);
+    const iter = decos.iter();
+    let foundFrontmatter = false;
+    while (iter.value) {
+      const spec = iter.value.spec;
+      if (spec?.widget && spec.widget.constructor.name === "FrontmatterWidget") {
+        foundFrontmatter = true;
+      }
+      iter.next();
+    }
+    expect(foundFrontmatter).toBe(true);
+  });
+
+  it("does NOT replace a horizontal rule mid-document", () => {
+    const state = stateOf("Text before\n\n---\n\nafter\n");
+    const decos = buildDecorations(state);
+    const iter = decos.iter();
+    let foundFrontmatter = false;
+    while (iter.value) {
+      const spec = iter.value.spec;
+      if (spec?.widget && spec.widget.constructor.name === "FrontmatterWidget") {
+        foundFrontmatter = true;
+      }
+      iter.next();
+    }
+    expect(foundFrontmatter).toBe(false);
+  });
+});
