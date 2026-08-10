@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { EditorMode } from "../editor/codemirror";
+import type { MarkdownCommand } from "../editor/commands";
 
 const RECENT_KEY = "markion.recentFiles";
 const MAX_RECENT = 10;
@@ -27,6 +28,14 @@ interface UiState {
   saveAsTick: number;
   requestSaveAs: () => void;
 
+  editTick: number;
+  editCmd: "undo" | "redo" | "selectAll" | "copy" | "cut" | "paste";
+  requestEdit: (cmd: "undo" | "redo" | "selectAll" | "copy" | "cut" | "paste") => void;
+
+  mdTick: number;
+  mdCmd: MarkdownCommand;
+  requestMarkdown: (cmd: MarkdownCommand) => void;
+
   recentFiles: string[];
   addRecent: (path: string) => void;
   clearRecent: () => void;
@@ -50,6 +59,14 @@ export const useUiStore = create<UiState>((set, get) => ({
   requestSave: () => set((s) => ({ saveTick: s.saveTick + 1 })),
   saveAsTick: 0,
   requestSaveAs: () => set((s) => ({ saveAsTick: s.saveAsTick + 1 })),
+
+  editTick: 0,
+  editCmd: "undo",
+  requestEdit: (editCmd) => set((s) => ({ editTick: s.editTick + 1, editCmd })),
+
+  mdTick: 0,
+  mdCmd: "bold",
+  requestMarkdown: (mdCmd) => set((s) => ({ mdTick: s.mdTick + 1, mdCmd })),
 
   recentFiles: loadRecent(),
   addRecent: (path) => {

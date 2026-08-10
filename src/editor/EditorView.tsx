@@ -4,6 +4,7 @@ import type { EditorState } from "@codemirror/state";
 import { createEditorState, setLivePreview, setEditorMode } from "./codemirror";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useUiStore } from "../stores/uiStore";
+import { setEditorView } from "./registry";
 
 export interface EditorHandle {
   getDoc(): string;
@@ -42,8 +43,12 @@ export const MarkdownEditor = forwardRef<EditorHandle, EditorViewProps>(
       });
       const view = new EditorView({ state, parent: containerRef.current });
       viewRef.current = view;
+      setEditorView(view);
       onStateChangeRef.current?.(state);
-      return () => view.destroy();
+      return () => {
+        setEditorView(null);
+        view.destroy();
+      };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 

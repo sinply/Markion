@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useUiStore } from "../stores/uiStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import type { Theme } from "../lib/types";
+import type { MarkdownCommand } from "../editor/commands";
 
 const THEMES: { value: Theme; label: string }[] = [
   { value: "system", label: "System (follow OS)" },
@@ -46,7 +47,46 @@ export function MenuBar() {
     return () => window.removeEventListener("mousedown", onDown);
   }, [open]);
 
+  const md = (cmd: MarkdownCommand, label: string, shortcut?: string) => ({
+    label,
+    shortcut,
+    action: () => {
+      ui.requestMarkdown(cmd);
+      close();
+    },
+  });
+
   const menus: Menu[] = [
+    {
+      label: "Edit",
+      items: [
+        { label: "Undo", shortcut: "Ctrl+Z", action: () => { ui.requestEdit("undo"); close(); } },
+        { label: "Redo", shortcut: "Ctrl+Y", action: () => { ui.requestEdit("redo"); close(); }, separatorAfter: true },
+        { label: "Cut", shortcut: "Ctrl+X", action: () => { ui.requestEdit("cut"); close(); } },
+        { label: "Copy", shortcut: "Ctrl+C", action: () => { ui.requestEdit("copy"); close(); } },
+        { label: "Paste", shortcut: "Ctrl+V", action: () => { ui.requestEdit("paste"); close(); } },
+        { label: "Select All", shortcut: "Ctrl+A", action: () => { ui.requestEdit("selectAll"); close(); }, separatorAfter: true },
+        ...(
+          [
+            ["bold", "Bold", "Ctrl+B"],
+            ["italic", "Italic", "Ctrl+I"],
+            ["strike", "Strikethrough"],
+            ["code", "Inline Code"],
+            ["heading1", "Heading 1", "Ctrl+1"],
+            ["heading2", "Heading 2", "Ctrl+2"],
+            ["heading3", "Heading 3", "Ctrl+3"],
+          ] as [MarkdownCommand, string, string?][]
+        ).map(([c, l, s]) => md(c, l, s)),
+        md("codeblock", "Code Block"),
+        md("table", "Table"),
+        md("link", "Link"),
+        md("image", "Image"),
+        md("quote", "Blockquote"),
+        md("bullet", "Bullet List"),
+        md("ordered", "Numbered List"),
+        md("task", "Task List"),
+      ],
+    },
     {
       label: "File",
       items: [

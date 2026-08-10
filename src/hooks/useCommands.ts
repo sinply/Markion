@@ -5,6 +5,9 @@ import { useVaultStore } from "../stores/vaultStore";
 import { useDocStore } from "../stores/docStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { readFile, writeFileAtomic } from "../lib/ipc";
+import { getEditorView } from "../editor/registry";
+import { runMarkdownCommand } from "../editor/commands";
+import { undo, redo } from "@codemirror/commands";
 
 /** Wire menu-bar / keyboard commands to app actions. */
 export function useCommands() {
@@ -63,6 +66,39 @@ export function useCommands() {
     if (ui.saveAsTick === 0) return;
     void saveActive(true);
   }, [ui.saveAsTick]);
+
+  // Edit operations (undo/redo/selectAll/copy/cut/paste)
+  useEffect(() => {
+    if (ui.editTick === 0) return;
+    const view = getEditorView();
+    if (!view) return;
+    const cmd = ui.editCmd;
+    if (cmd === "undo") {
+      undo(view);
+    } else if (cmd === "redo") {
+      redo(view);
+    } else if (cmd === "selectAll") {
+      view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } });
+    } else {
+      // copy / cut / paste via the browser clipboard
+      const ok = document.execCommand(cmd === "paste" ? "paste" : cmd);
+      if (!ok && cmd !== "paste") {
+        const sel = view.state.selection.main;
+        const text = view.state.sliceDoc(sel.from, sel.to);
+        void navigator.clipboard.writeText(text);
+      }
+    }
+    view.focus();
+  }, [ui.editTick, ui.editCmd]);
+
+  // Markdown formatting commands
+  useEffect(() => {
+    if (ui.mdTick === 0) return;
+    const view = getEditorView();
+    if (!view) return;
+    runMarkdownCommand(view, ui.mdCmd);
+    view.focus();
+  }, [ui.mdTick, ui.mdCmd]);
 
   // Keyboard shortcuts
   useEffect(() => {
