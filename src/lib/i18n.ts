@@ -1,0 +1,261 @@
+import { useSettingsStore } from "../stores/settingsStore";
+import type { Language, Theme } from "./types";
+
+export const THEME_LABELS: Record<Language, Record<Theme, string>> = {
+  en: {
+    system: "System (follow OS)",
+    light: "Light",
+    dark: "Dark",
+    sepia: "Sepia",
+    eye: "Eye-care",
+    nord: "Nord",
+    dracula: "Dracula",
+    solarized: "Solarized",
+  },
+  zh: {
+    system: "跟随系统",
+    light: "浅色",
+    dark: "深色",
+    sepia: "羊皮纸",
+    eye: "护眼",
+    nord: "北极",
+    dracula: "德古拉",
+    solarized: "日光",
+  },
+};
+
+export interface HelpSection {
+  title: string;
+  body: string[];
+}
+
+const en = {
+  menuFile: "File",
+  menuEdit: "Edit",
+  menuView: "View",
+  menuHelp: "Help",
+  openFolder: "Open Folder…",
+  openFile: "Open File…",
+  save: "Save",
+  saveAs: "Save As…",
+  preferences: "Preferences…",
+  recent: "Recent",
+  clearRecent: "Clear Recent",
+  exit: "Exit",
+  undo: "Undo",
+  redo: "Redo",
+  cut: "Cut",
+  copy: "Copy",
+  paste: "Paste",
+  selectAll: "Select All",
+  format: "Format",
+  formatInline: "Inline",
+  formatBlocks: "Blocks",
+  formatLists: "Lists",
+  formatInsert: "Insert",
+  bold: "Bold",
+  italic: "Italic",
+  strikethrough: "Strikethrough",
+  inlineCode: "Inline Code",
+  heading1: "Heading 1",
+  heading2: "Heading 2",
+  heading3: "Heading 3",
+  codeBlock: "Code Block",
+  table: "Table",
+  blockquote: "Blockquote",
+  bulletList: "Bullet List",
+  numberedList: "Numbered List",
+  taskList: "Task List",
+  link: "Link",
+  image: "Image",
+  editMode: "Edit Mode",
+  previewMode: "Preview Mode",
+  theme: "Theme",
+  language: "Language",
+  documentation: "Documentation",
+  about: "About Markion",
+  ok: "OK",
+  close: "Close",
+  dialogTitle: "Markion — Documentation",
+  settingsTitle: "Settings",
+  assetsDir: "Assets directory:",
+  vaultAssets: "Vault-level (assets/)",
+  docAssets: "Document-side (assets/)",
+  customPath: "Custom path",
+  pathStyle: "Path style:",
+  relToDoc: "Relative to document",
+  absPath: "Absolute path",
+  showHidden: "Show hidden files",
+  livePreviewLabel: "Live preview (real-time markdown rendering)",
+  aboutVersion: "Version",
+  aboutDesc:
+    "A fast, local-first Markdown editor for Windows, macOS, and Linux. Obsidian-style live preview, Yuque-style hierarchical document tree, and plain .md files you own.",
+  aboutCredits: "Tauri 2 · CodeMirror 6 · React 18 · Rust — MIT licensed.",
+  helpSections: [
+    {
+      title: "Getting started",
+      body: [
+        "Markion works on a vault: a folder of plain .md files. Click File → Open Folder… (or Ctrl+Shift+O) to choose one.",
+        "The left sidebar shows your document tree; the middle is the editor; the right sidebar has the outline, backlinks, and graph.",
+      ],
+    },
+    {
+      title: "Editing",
+      body: [
+        "Markion has two view modes (View menu or Ctrl+E): Edit (live preview as you type) and Preview (full rendered document).",
+        "Select text and use Edit → Format (or Ctrl+B, Ctrl+I, Ctrl+1..3) to apply bold, italic, headings, lists, links, and more.",
+        "Type - [ ] to create a task item; click the checkbox to toggle it. Tables, code blocks, images, and math render live.",
+      ],
+    },
+    {
+      title: "Markdown supported",
+      body: [
+        "Headings (# .. ######), bold/italic/strikethrough, inline code, fenced code blocks with syntax highlighting.",
+        "GFM tables, task lists, blockquotes, ordered/bullet lists, links, images, horizontal rules.",
+        "$$...$$ block math and $...$ inline math (KaTeX). ```mermaid code blocks render as diagrams.",
+        "YAML frontmatter at the top of a note (---...---) renders as a Properties panel.",
+      ],
+    },
+    {
+      title: "Document tree & links",
+      body: [
+        "Drag files to reorder (within a folder) or move (across folders). A folder containing index.md opens it when you click the folder name.",
+        "Link notes with [[note-name]]. The backlinks panel shows what links to the current note; the graph view maps all connections.",
+      ],
+    },
+    {
+      title: "Settings",
+      body: [
+        "File → Preferences opens settings: assets directory strategy, image path style, live-preview toggle, theme, and language.",
+        "8 themes are available (View → Theme). Settings persist to .markion/config.json inside your vault.",
+      ],
+    },
+    {
+      title: "Shortcuts",
+      body: [
+        "Ctrl+O open file · Ctrl+Shift+O open folder · Ctrl+S save · Ctrl+Shift+S save as.",
+        "Ctrl+E toggle edit/preview · Ctrl+Z/Y undo/redo · Ctrl+B/I bold/italic · Ctrl+1..3 headings.",
+        "F1 open documentation.",
+      ],
+    },
+  ] as HelpSection[],
+};
+
+const zh: typeof en = {
+  menuFile: "文件",
+  menuEdit: "编辑",
+  menuView: "视图",
+  menuHelp: "帮助",
+  openFolder: "打开文件夹…",
+  openFile: "打开文件…",
+  save: "保存",
+  saveAs: "另存为…",
+  preferences: "偏好设置…",
+  recent: "最近打开",
+  clearRecent: "清除最近记录",
+  exit: "退出",
+  undo: "撤销",
+  redo: "重做",
+  cut: "剪切",
+  copy: "复制",
+  paste: "粘贴",
+  selectAll: "全选",
+  format: "格式",
+  formatInline: "行内",
+  formatBlocks: "块级",
+  formatLists: "列表",
+  formatInsert: "插入",
+  bold: "粗体",
+  italic: "斜体",
+  strikethrough: "删除线",
+  inlineCode: "行内代码",
+  heading1: "标题 1",
+  heading2: "标题 2",
+  heading3: "标题 3",
+  codeBlock: "代码块",
+  table: "表格",
+  blockquote: "引用",
+  bulletList: "无序列表",
+  numberedList: "有序列表",
+  taskList: "任务列表",
+  link: "链接",
+  image: "图片",
+  editMode: "编辑模式",
+  previewMode: "预览模式",
+  theme: "主题",
+  language: "语言",
+  documentation: "使用说明",
+  about: "关于 Markion",
+  ok: "确定",
+  close: "关闭",
+  dialogTitle: "Markion — 使用说明",
+  settingsTitle: "设置",
+  assetsDir: "资源目录：",
+  vaultAssets: "库级 (assets/)",
+  docAssets: "文档同级 (assets/)",
+  customPath: "自定义路径",
+  pathStyle: "路径格式：",
+  relToDoc: "相对文档",
+  absPath: "绝对路径",
+  showHidden: "显示隐藏文件",
+  livePreviewLabel: "实时预览（Markdown 实时渲染）",
+  aboutVersion: "版本",
+  aboutDesc:
+    "一款快速、本地优先的 Markdown 编辑器，支持 Windows / macOS / Linux。Obsidian 式实时预览、语雀式多级文档树，笔记就是你能掌控的普通 .md 文件。",
+  aboutCredits: "Tauri 2 · CodeMirror 6 · React 18 · Rust —— MIT 许可。",
+  helpSections: [
+    {
+      title: "快速开始",
+      body: [
+        "Markion 基于 vault（库）工作：一个存放普通 .md 文件的文件夹。点击 文件 → 打开文件夹…（或 Ctrl+Shift+O）选择一个目录。",
+        "左侧边栏是文档树；中间是编辑器；右侧边栏包含大纲、反链和图谱。",
+      ],
+    },
+    {
+      title: "编辑",
+      body: [
+        "Markion 有两种视图模式（视图菜单或 Ctrl+E）：编辑（输入即实时预览）和预览（整篇渲染）。",
+        "选中文字后用 编辑 → 格式（或 Ctrl+B、Ctrl+I、Ctrl+1..3）应用粗体、斜体、标题、列表、链接等。",
+        "输入 - [ ] 创建任务项，点击复选框勾选。表格、代码块、图片、数学公式实时渲染。",
+      ],
+    },
+    {
+      title: "支持的 Markdown",
+      body: [
+        "标题（# .. ######）、粗体/斜体/删除线、行内代码、带语法高亮的围栏代码块。",
+        "GFM 表格、任务列表、引用、有序/无序列表、链接、图片、分割线。",
+        "$$...$$ 块级数学和 $...$ 行内数学（KaTeX）。```mermaid 代码块渲染为图表。",
+        "笔记顶部的 YAML frontmatter（---...---）渲染为属性面板。",
+      ],
+    },
+    {
+      title: "文档树与链接",
+      body: [
+        "拖拽文件可排序（同文件夹内）或移动（跨文件夹）。含 index.md 的文件夹，点击文件夹名会打开该 index.md。",
+        "用 [[笔记名]] 链接笔记。反链面板显示哪些笔记链接到当前文档；图谱视图展示所有连接。",
+      ],
+    },
+    {
+      title: "设置",
+      body: [
+        "文件 → 偏好设置 打开设置：资源目录策略、图片路径格式、实时预览开关、主题和语言。",
+        "共 8 种主题（视图 → 主题）。设置持久化到库内的 .markion/config.json。",
+      ],
+    },
+    {
+      title: "快捷键",
+      body: [
+        "Ctrl+O 打开文件 · Ctrl+Shift+O 打开文件夹 · Ctrl+S 保存 · Ctrl+Shift+S 另存为。",
+        "Ctrl+E 切换编辑/预览 · Ctrl+Z/Y 撤销/重做 · Ctrl+B/I 粗体/斜体 · Ctrl+1..3 标题。",
+        "F1 打开使用说明。",
+      ],
+    },
+  ] as HelpSection[],
+};
+
+const dicts: Record<Language, typeof en> = { en, zh };
+
+export function useI18n() {
+  const language = useSettingsStore((s) => s.language);
+  return dicts[language] ?? en;
+}

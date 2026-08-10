@@ -1,19 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useUiStore } from "../stores/uiStore";
 import { useSettingsStore } from "../stores/settingsStore";
-import type { Theme } from "../lib/types";
 import type { MarkdownCommand } from "../editor/commands";
-
-const THEMES: { value: Theme; label: string }[] = [
-  { value: "system", label: "System (follow OS)" },
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
-  { value: "sepia", label: "Sepia" },
-  { value: "eye", label: "Eye-care" },
-  { value: "nord", label: "Nord" },
-  { value: "dracula", label: "Dracula" },
-  { value: "solarized", label: "Solarized" },
-];
+import { useI18n, THEME_LABELS } from "../lib/i18n";
+import type { Theme } from "../lib/types";
 
 interface MenuItem {
   label: string;
@@ -36,7 +26,9 @@ export function MenuBar() {
 
   const ui = useUiStore();
   const settings = useSettingsStore();
+  const t = useI18n();
   const theme = settings.theme;
+  const language = settings.language;
   const mode = ui.editorMode;
 
   const close = () => {
@@ -63,62 +55,70 @@ export function MenuBar() {
   });
 
   const themeSubmenu: Menu = {
-    label: "Theme",
-    items: THEMES.map((t) => ({
-      label: t.label,
-      checked: theme === t.value,
+    label: t.theme,
+    items: (Object.keys(THEME_LABELS[language]) as Theme[]).map((val) => ({
+      label: THEME_LABELS[language][val],
+      checked: theme === val,
       action: () => {
-        settings.setTheme(t.value);
+        settings.setTheme(val);
         close();
       },
     })),
   };
 
+  const languageSubmenu: Menu = {
+    label: t.language,
+    items: [
+      { label: "中文", checked: language === "zh", action: () => { settings.setLanguage("zh"); close(); } },
+      { label: "English", checked: language === "en", action: () => { settings.setLanguage("en"); close(); } },
+    ],
+  };
+
   const formatMenu: Menu = {
-    label: "Format",
+    label: t.format,
     items: [
       {
-        label: "Inline",
+        label: t.formatInline,
         submenu: {
-          label: "Inline",
+          label: t.formatInline,
           items: [
-            md("bold", "Bold", "Ctrl+B"),
-            md("italic", "Italic", "Ctrl+I"),
-            md("strike", "Strikethrough"),
-            md("code", "Inline Code"),
+            md("bold", t.bold, "Ctrl+B"),
+            md("italic", t.italic, "Ctrl+I"),
+            md("strike", t.strikethrough),
+            md("code", t.inlineCode),
           ],
         },
       },
       {
-        label: "Blocks",
+        label: t.formatBlocks,
         submenu: {
-          label: "Blocks",
+          label: t.formatBlocks,
           items: [
-            md("heading1", "Heading 1", "Ctrl+1"),
-            md("heading2", "Heading 2", "Ctrl+2"),
-            md("heading3", "Heading 3", "Ctrl+3"),
-            md("codeblock", "Code Block"),
-            md("table", "Table"),
-            md("quote", "Blockquote"),
+            md("heading1", t.heading1, "Ctrl+1"),
+            md("heading2", t.heading2, "Ctrl+2"),
+            md("heading3", t.heading3, "Ctrl+3"),
+            md("codeblock", t.codeBlock),
+            md("table", t.table),
+            md("quote", t.blockquote),
           ],
         },
       },
       {
-        label: "Lists",
+        label: t.formatLists,
         submenu: {
-          label: "Lists",
+          label: t.formatLists,
           items: [
-            md("bullet", "Bullet List"),
-            md("ordered", "Numbered List"),
-            md("task", "Task List"),
+            md("bullet", t.bulletList),
+            md("ordered", t.numberedList),
+            md("task", t.taskList),
           ],
         },
       },
       {
-        label: "Insert",
+        label: t.formatInsert,
         submenu: {
-          label: "Insert",
-          items: [md("link", "Link"), md("image", "Image")],
+          label: t.formatInsert,
+          items: [md("link", t.link), md("image", t.image)],
         },
       },
     ],
@@ -126,14 +126,14 @@ export function MenuBar() {
 
   const menus: Menu[] = [
     {
-      label: "File",
+      label: t.menuFile,
       items: [
-        { label: "Open Folder…", shortcut: "Ctrl+Shift+O", action: () => { ui.requestOpenFolder(); close(); } },
-        { label: "Open File…", shortcut: "Ctrl+O", action: () => { ui.requestOpenFile(); close(); } },
-        { label: "Save", shortcut: "Ctrl+S", action: () => { ui.requestSave(); close(); } },
-        { label: "Save As…", shortcut: "Ctrl+Shift+S", action: () => { ui.requestSaveAs(); close(); }, separatorAfter: true },
-        { label: "Preferences…", action: () => { ui.setSettingsOpen(true); close(); }, separatorAfter: true },
-        { label: "Recent", action: () => close(), separatorAfter: true },
+        { label: t.openFolder, shortcut: "Ctrl+Shift+O", action: () => { ui.requestOpenFolder(); close(); } },
+        { label: t.openFile, shortcut: "Ctrl+O", action: () => { ui.requestOpenFile(); close(); } },
+        { label: t.save, shortcut: "Ctrl+S", action: () => { ui.requestSave(); close(); } },
+        { label: t.saveAs, shortcut: "Ctrl+Shift+S", action: () => { ui.requestSaveAs(); close(); }, separatorAfter: true },
+        { label: t.preferences, action: () => { ui.setSettingsOpen(true); close(); }, separatorAfter: true },
+        { label: t.recent, action: () => close(), separatorAfter: true },
         ...ui.recentFiles.slice(0, 5).map((p, i) => ({
           label: `  ${p}`,
           action: () => {
@@ -141,46 +141,47 @@ export function MenuBar() {
             close();
           },
         })),
-        { label: "Clear Recent", action: () => { ui.clearRecent(); close(); }, separatorAfter: true },
-        { label: "Exit", action: () => { window.close(); close(); } },
+        { label: t.clearRecent, action: () => { ui.clearRecent(); close(); }, separatorAfter: true },
+        { label: t.exit, action: () => { window.close(); close(); } },
       ],
     },
     {
-      label: "Edit",
+      label: t.menuEdit,
       items: [
-        { label: "Undo", shortcut: "Ctrl+Z", action: () => { ui.requestEdit("undo"); close(); } },
-        { label: "Redo", shortcut: "Ctrl+Y", action: () => { ui.requestEdit("redo"); close(); }, separatorAfter: true },
-        { label: "Cut", shortcut: "Ctrl+X", action: () => { ui.requestEdit("cut"); close(); } },
-        { label: "Copy", shortcut: "Ctrl+C", action: () => { ui.requestEdit("copy"); close(); } },
-        { label: "Paste", shortcut: "Ctrl+V", action: () => { ui.requestEdit("paste"); close(); } },
-        { label: "Select All", shortcut: "Ctrl+A", action: () => { ui.requestEdit("selectAll"); close(); }, separatorAfter: true },
-        { label: "Format", submenu: formatMenu },
+        { label: t.undo, shortcut: "Ctrl+Z", action: () => { ui.requestEdit("undo"); close(); } },
+        { label: t.redo, shortcut: "Ctrl+Y", action: () => { ui.requestEdit("redo"); close(); }, separatorAfter: true },
+        { label: t.cut, shortcut: "Ctrl+X", action: () => { ui.requestEdit("cut"); close(); } },
+        { label: t.copy, shortcut: "Ctrl+C", action: () => { ui.requestEdit("copy"); close(); } },
+        { label: t.paste, shortcut: "Ctrl+V", action: () => { ui.requestEdit("paste"); close(); } },
+        { label: t.selectAll, shortcut: "Ctrl+A", action: () => { ui.requestEdit("selectAll"); close(); }, separatorAfter: true },
+        { label: t.format, submenu: formatMenu },
       ],
     },
     {
-      label: "View",
+      label: t.menuView,
       items: [
         {
-          label: "Edit Mode",
+          label: t.editMode,
           shortcut: "Ctrl+E",
           checked: mode === "live",
           action: () => { ui.setEditorMode("live"); close(); },
         },
         {
-          label: "Preview Mode",
+          label: t.previewMode,
           shortcut: "Ctrl+Shift+E",
           checked: mode === "preview",
           action: () => { ui.setEditorMode("preview"); close(); },
           separatorAfter: true,
         },
-        { label: "Theme", submenu: themeSubmenu },
+        { label: t.theme, submenu: themeSubmenu },
+        { label: t.language, submenu: languageSubmenu },
       ],
     },
     {
-      label: "Help",
+      label: t.menuHelp,
       items: [
-        { label: "Documentation", shortcut: "F1", action: () => { ui.setHelpOpen(true); close(); }, separatorAfter: true },
-        { label: "About Markion", action: () => { ui.setAboutOpen(true); close(); } },
+        { label: t.documentation, shortcut: "F1", action: () => { ui.setHelpOpen(true); close(); }, separatorAfter: true },
+        { label: t.about, action: () => { ui.setAboutOpen(true); close(); } },
       ],
     },
   ];
@@ -256,7 +257,6 @@ function SubmenuItem({
   );
 }
 
-// helper used in menu actions — opens a recent path (assumes it's inside the active vault)
 async function openRecentPath(path: string) {
   const { useVaultStore } = await import("../stores/vaultStore");
   const { useDocStore } = await import("../stores/docStore");

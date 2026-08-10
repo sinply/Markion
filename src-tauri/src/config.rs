@@ -5,6 +5,7 @@ use std::path::Path;
 /// Field names are snake_case on the Rust side; Tauri auto-converts the
 /// frontend's camelCase keys (`assetsStrategy` -> `assets_strategy`, etc.).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
 pub struct Settings {
     /// "vault-assets" | "doc-assets" | "custom:<path>"
     pub assets_strategy: String,
@@ -14,6 +15,8 @@ pub struct Settings {
     pub theme: String,
     pub show_hidden_files: bool,
     pub live_preview: bool,
+    /// "zh" | "en"
+    pub language: String,
 }
 
 impl Default for Settings {
@@ -24,6 +27,7 @@ impl Default for Settings {
             theme: "system".to_string(),
             show_hidden_files: false,
             live_preview: true,
+            language: "zh".to_string(),
         }
     }
 }
@@ -96,17 +100,15 @@ mod tests {
 
     #[test]
     fn partial_config_keeps_defaults_for_missing_fields() {
-        // A config written with only some fields should still load (serde
-        // default on missing fields). We write a minimal JSON and expect the
-        // provided field to win and others to be... actually serde will fail
-        // on missing non-Option fields unless #[serde(default)]. This test
-        // documents current behavior: missing field => parse error => default.
+        // #[serde(default)] means a config with only some fields still loads;
+        // the provided field wins and the rest fall back to defaults.
         let dir = tempdir().unwrap();
         let p = dir.path().join(".markion/config.json");
         fs::create_dir_all(p.parent().unwrap()).unwrap();
         fs::write(&p, r#"{"theme":"dark"}"#).unwrap();
         let s = load_config(dir.path()).unwrap();
-        // Falls back to full default because parsing a partial Settings fails
-        assert_eq!(s, Settings::default());
+        let mut expected = Settings::default();
+        expected.theme = "dark".to_string();
+        assert_eq!(s, expected);
     }
 }

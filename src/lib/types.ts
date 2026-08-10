@@ -21,12 +21,15 @@ export type Theme =
   | "dracula"
   | "solarized";
 
+export type Language = "en" | "zh";
+
 export interface Settings {
   assetsStrategy: AssetsStrategy;
   pathStyle: PathStyle;
   theme: Theme;
   showHiddenFiles: boolean;
   livePreview: boolean;
+  language: Language;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -35,4 +38,5 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: "system",
   showHiddenFiles: false,
   livePreview: true,
+  language: "zh",
 };

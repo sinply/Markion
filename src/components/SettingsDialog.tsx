@@ -1,12 +1,17 @@
 import { useSettingsStore } from "../stores/settingsStore";
 import { useUiStore } from "../stores/uiStore";
+import { useI18n, THEME_LABELS } from "../lib/i18n";
+import type { Theme } from "../lib/types";
 
 export function SettingsDialog() {
   const settings = useSettingsStore();
   const open = useUiStore((s) => s.settingsOpen);
   const setOpen = useUiStore((s) => s.setSettingsOpen);
+  const t = useI18n();
 
   if (!open) return null;
+
+  const themes = Object.keys(THEME_LABELS[settings.language]) as Theme[];
 
   return (
     <div
@@ -16,45 +21,53 @@ export function SettingsDialog() {
         zIndex: 2000, padding: 16, fontSize: 14,
       }}
     >
-      <h2 style={{ margin: "0 0 12px 0" }}>Settings</h2>
+      <h2 style={{ margin: "0 0 12px 0" }}>{t.settingsTitle}</h2>
 
       <div style={{ margin: "8px 0" }}>
-        <label>Assets directory:{" "}</label>
+        <label>{t.language}{" "}</label>
+        <select
+          value={settings.language}
+          onChange={(e) => settings.setLanguage(e.target.value as any)}
+        >
+          <option value="zh">中文</option>
+          <option value="en">English</option>
+        </select>
+      </div>
+
+      <div style={{ margin: "8px 0" }}>
+        <label>{t.assetsDir}{" "}</label>
         <select
           value={settings.assetsStrategy}
           onChange={(e) => settings.setAssetsStrategy(e.target.value as any)}
         >
-          <option value="vault-assets">Vault-level (assets/)</option>
-          <option value="doc-assets">Document-side (assets/)</option>
-          <option value="custom">Custom path</option>
+          <option value="vault-assets">{t.vaultAssets}</option>
+          <option value="doc-assets">{t.docAssets}</option>
+          <option value="custom">{t.customPath}</option>
         </select>
       </div>
 
       <div style={{ margin: "8px 0" }}>
-        <label>Path style:{" "}</label>
+        <label>{t.pathStyle}{" "}</label>
         <select
           value={settings.pathStyle}
           onChange={(e) => settings.setPathStyle(e.target.value as any)}
         >
-          <option value="relative">Relative to document</option>
-          <option value="absolute">Absolute path</option>
+          <option value="relative">{t.relToDoc}</option>
+          <option value="absolute">{t.absPath}</option>
         </select>
       </div>
 
       <div style={{ margin: "8px 0" }}>
-        <label>Theme:{" "}</label>
+        <label>{t.theme}:{" "}</label>
         <select
           value={settings.theme}
           onChange={(e) => settings.setTheme(e.target.value as any)}
         >
-          <option value="system">System (follow OS)</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-          <option value="sepia">Sepia</option>
-          <option value="eye">Eye-care</option>
-          <option value="nord">Nord</option>
-          <option value="dracula">Dracula</option>
-          <option value="solarized">Solarized</option>
+          {themes.map((val) => (
+            <option key={val} value={val}>
+              {THEME_LABELS[settings.language][val]}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -65,7 +78,7 @@ export function SettingsDialog() {
             checked={settings.livePreview}
             onChange={(e) => settings.setLivePreview(e.target.checked)}
           />
-          {" "}Live preview (real-time markdown rendering)
+          {" "}{t.livePreviewLabel}
         </label>
       </div>
 
@@ -76,12 +89,12 @@ export function SettingsDialog() {
             checked={settings.showHiddenFiles}
             onChange={(e) => settings.setShowHiddenFiles(e.target.checked)}
           />
-          {" "}Show hidden files
+          {" "}{t.showHidden}
         </label>
       </div>
 
       <button onClick={() => setOpen(false)} style={{ marginTop: 8 }}>
-        Close
+        {t.close}
       </button>
     </div>
   );

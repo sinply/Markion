@@ -10,6 +10,7 @@ interface SettingsState extends Settings {
   setPathStyle: (p: Settings["pathStyle"]) => void;
   setShowHiddenFiles: (v: boolean) => void;
   setLivePreview: (v: boolean) => void;
+  setLanguage: (l: Settings["language"]) => void;
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -28,7 +29,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   save: async (vaultRoot) => {
     try {
       const { saveConfig } = await import("../lib/ipc");
-      const { load, save, setTheme, setAssetsStrategy, setPathStyle, setShowHiddenFiles, setLivePreview, ...settings } = get();
+      const { load, save, setTheme, setAssetsStrategy, setPathStyle, setShowHiddenFiles, setLivePreview, setLanguage, ...settings } = get();
       await saveConfig(vaultRoot, settings as Settings);
     } catch {
       // IPC not available yet
@@ -40,4 +41,5 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setPathStyle: (pathStyle) => set({ pathStyle }),
   setShowHiddenFiles: (showHiddenFiles) => set({ showHiddenFiles }),
   setLivePreview: (livePreview) => set({ livePreview }),
+  setLanguage: (language) => set({ language }),
 }));
