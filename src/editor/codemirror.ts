@@ -4,11 +4,13 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { Table, TaskList, Strikethrough } from "@lezer/markdown";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
-import { livePreviewExtension, livePreviewField } from "./livePreview";
+import { livePreviewExtension, livePreviewField, previewField } from "./livePreview";
 import { markdownContextFacet, imagePasteDropExtension, type MarkdownContext } from "./media";
 
 const themeCompartment = new Compartment();
 const livePreviewCompartment = new Compartment();
+
+export type EditorMode = "live" | "preview";
 
 export function createEditorState(
   doc: string,
@@ -45,7 +47,17 @@ export function createEditorState(
   });
 }
 
-/** Toggle live preview on an existing EditorView by reconfiguring its compartment. */
+/** Set the editor mode on an existing view. "live" = live preview (default),
+ *  "preview" = full read-only rendered document. */
+export function setEditorMode(view: EditorView, mode: EditorMode): void {
+  const ext =
+    mode === "preview" ? [previewField] : [livePreviewField, livePreviewExtension];
+  view.dispatch({
+    effects: livePreviewCompartment.reconfigure(ext),
+  });
+}
+
+/** Toggle live preview decorations (the settings toggle): off = raw source. */
 export function setLivePreview(view: EditorView, enabled: boolean): void {
   view.dispatch({
     effects: livePreviewCompartment.reconfigure(enabled ? [livePreviewField, livePreviewExtension] : []),

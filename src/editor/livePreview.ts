@@ -3,7 +3,7 @@ import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder, EditorState, StateEffect, StateField } from "@codemirror/state";
 import type { SyntaxNode } from "@lezer/common";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget, FrontmatterWidget, parseFrontmatter } from "./widgets";
+import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget, FrontmatterWidget, PreviewWidget, parseFrontmatter } from "./widgets";
 
 interface DecoEntry {
   from: number;
@@ -29,6 +29,31 @@ export const livePreviewField = StateField.define<DecorationSet>({
       }
     }
     return decos;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
+/** Preview-mode StateField: replaces the entire doc with a read-only rendered
+ *  PreviewWidget. Provided via EditorView.decorations.from so block replacement
+ *  of the whole document is allowed.
+ */
+export const previewField = StateField.define<DecorationSet>({
+  create(state: EditorState) {
+    return Decoration.set([
+      Decoration.replace({
+        widget: new PreviewWidget(state.doc.toString()),
+        block: true,
+      }).range(0, state.doc.length),
+    ]);
+  },
+  update(_decos: DecorationSet, tr) {
+    if (!tr.docChanged) return _decos;
+    return Decoration.set([
+      Decoration.replace({
+        widget: new PreviewWidget(tr.state.doc.toString()),
+        block: true,
+      }).range(0, tr.state.doc.length),
+    ]);
   },
   provide: (f) => EditorView.decorations.from(f),
 });

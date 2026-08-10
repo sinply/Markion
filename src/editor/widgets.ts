@@ -1,7 +1,7 @@
 import { WidgetType } from "@codemirror/view";
 import type { EditorView } from "@codemirror/view";
 import { renderMarkdown, highlightCode } from "./markdown";
-import { markdownContextFacet, imageToSrc } from "./media";
+import { markdownContextFacet, imageToSrc, isRemoteSrc } from "./media";
 
 export class CodeBlockWidget extends WidgetType {
   readonly language: string;
@@ -88,6 +88,38 @@ export class MathBlockWidget extends WidgetType {
         // keep the raw fallback text
       }
     })();
+    return div;
+  }
+
+  ignoreEvent(): boolean {
+    return false;
+  }
+}
+
+/** Read-only full-document preview: renders the whole markdown to HTML. */
+export class PreviewWidget extends WidgetType {
+  constructor(readonly raw: string) {
+    super();
+  }
+
+  eq(other: PreviewWidget): boolean {
+    return other.raw === this.raw;
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    const div = document.createElement("div");
+    div.className = "cm-preview";
+    div.innerHTML = renderMarkdown(this.raw);
+    // Resolve local image srcs (rewrite relative paths via the context facet).
+    const ctx = view.state.facet(markdownContextFacet)[0];
+    if (ctx) {
+      div.querySelectorAll("img").forEach((img) => {
+        const src = img.getAttribute("src") ?? "";
+        if (src && !isRemoteSrc(src)) {
+          img.src = imageToSrc(src, ctx);
+        }
+      });
+    }
     return div;
   }
 
