@@ -117,8 +117,18 @@ export function useCommands() {
         ui.setEditorMode(ui.editorMode === "live" ? "preview" : "live");
       }
     };
+    const helpHandler = (e: KeyboardEvent) => {
+      if (e.key === "F1") {
+        e.preventDefault();
+        ui.setHelpOpen(true);
+      }
+    };
     window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    window.addEventListener("keydown", helpHandler);
+    return () => {
+      window.removeEventListener("keydown", handler);
+      window.removeEventListener("keydown", helpHandler);
+    };
   }, [ui]);
 
   return null;

@@ -45,6 +45,9 @@ interface UiState {
 
   settingsOpen: boolean;
   setSettingsOpen: (b: boolean) => void;
+
+  helpOpen: boolean;
+  setHelpOpen: (b: boolean) => void;
 }
 
 export const useUiStore = create<UiState>((set, get) => ({
@@ -92,4 +95,6 @@ export const useUiStore = create<UiState>((set, get) => ({
   setAboutOpen: (aboutOpen) => set({ aboutOpen }),
   settingsOpen: false,
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
+  helpOpen: false,
+  setHelpOpen: (helpOpen) => set({ helpOpen }),
 }));

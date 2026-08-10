@@ -179,6 +179,7 @@ export function MenuBar() {
     {
       label: "Help",
       items: [
+        { label: "Documentation", shortcut: "F1", action: () => { ui.setHelpOpen(true); close(); }, separatorAfter: true },
         { label: "About Markion", action: () => { ui.setAboutOpen(true); close(); } },
       ],
     },

@@ -6,6 +6,7 @@ import { startVaultWatch } from "./lib/ipc";
 import { Layout } from "./components/Layout";
 import { MenuBar } from "./components/MenuBar";
 import { AboutDialog } from "./components/AboutDialog";
+import { HelpDialog } from "./components/HelpDialog";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { useTheme } from "./hooks/useTheme";
 import { useCommands } from "./hooks/useCommands";
@@ -67,6 +68,7 @@ export default function App() {
       </div>
       <SettingsDialog />
       <AboutDialog />
+      <HelpDialog />
     </>
   );
 }

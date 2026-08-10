@@ -1,6 +1,6 @@
 import { useUiStore } from "../stores/uiStore";
 
-const VERSION = "0.3.0";
+const VERSION = "0.5.1";
 
 export function AboutDialog() {
   const open = useUiStore((s) => s.aboutOpen);
