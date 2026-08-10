@@ -59,9 +59,13 @@ export function SettingsDialog() {
           value={settings.theme}
           onChange={(e) => settings.setTheme(e.target.value as any)}
         >
-          <option value="system">System</option>
+          <option value="system">System (follow OS)</option>
           <option value="light">Light</option>
           <option value="dark">Dark</option>
+          <option value="sepia">Sepia</option>
+          <option value="nord">Nord</option>
+          <option value="dracula">Dracula</option>
+          <option value="solarized">Solarized</option>
         </select>
       </div>
 

@@ -60,6 +60,130 @@
   --hljs-meta: #79c0ff;
 }
 
+/* --- Sepia (warm, paper-like light theme) --- */
+[data-theme="sepia"] {
+  --bg: #f4ecd8;
+  --fg: #433422;
+  --fg-muted: #8a6f50;
+  --border: #d8c9a3;
+  --panel-bg: #efe4cc;
+  --panel-bg-2: #f0e7d2;
+  --code-bg: #efe4cc;
+  --inline-code-bg: rgba(67, 52, 34, 0.08);
+  --accent: #a05f1f;
+  --accent-fg: #fff;
+  --table-header-bg: #efe4cc;
+  --quote-border: #d8c9a3;
+  --quote-fg: #8a6f50;
+  --frontmatter-bg: #efe4cc;
+  --frontmatter-border: #d8c9a3;
+  --input-border: #c9b788;
+  --hover-bg: #eadfc4;
+  --selection-bg: #d8c9a3;
+
+  /* highlight.js (sepia-tinted) */
+  --hljs-comment: #8a6f50;
+  --hljs-keyword: #a02c2c;
+  --hljs-number: #1a6f9e;
+  --hljs-string: #3a7a3a;
+  --hljs-title: #6f42c1;
+  --hljs-type: #b05a1f;
+  --hljs-meta: #1a6f9e;
+}
+
+/* --- Nord (arctic, low-contrast cold theme) --- */
+[data-theme="nord"] {
+  --bg: #2e3440;
+  --fg: #d8dee9;
+  --fg-muted: #8f9bb3;
+  --border: #434c5e;
+  --panel-bg: #3b4252;
+  --panel-bg-2: #3b4252;
+  --code-bg: #3b4252;
+  --inline-code-bg: rgba(216, 222, 233, 0.1);
+  --accent: #88c0d0;
+  --accent-fg: #2e3440;
+  --table-header-bg: #3b4252;
+  --quote-border: #4c566a;
+  --quote-fg: #8f9bb3;
+  --frontmatter-bg: #3b4252;
+  --frontmatter-border: #434c5e;
+  --input-border: #4c566a;
+  --hover-bg: #434c5e;
+  --selection-bg: #4c566a;
+
+  /* highlight.js (Nord palette) */
+  --hljs-comment: #616e88;
+  --hljs-keyword: #81a1c1;
+  --hljs-number: #b48ead;
+  --hljs-string: #a3be8c;
+  --hljs-title: #8fbcbb;
+  --hljs-type: #d08770;
+  --hljs-meta: #5e81ac;
+}
+
+/* --- Dracula (high-contrast purple dark theme) --- */
+[data-theme="dracula"] {
+  --bg: #282a36;
+  --fg: #f8f8f2;
+  --fg-muted: #6272a4;
+  --border: #44475a;
+  --panel-bg: #21222c;
+  --panel-bg-2: #21222c;
+  --code-bg: #21222c;
+  --inline-code-bg: rgba(248, 248, 242, 0.08);
+  --accent: #bd93f9;
+  --accent-fg: #282a36;
+  --table-header-bg: #21222c;
+  --quote-border: #44475a;
+  --quote-fg: #6272a4;
+  --frontmatter-bg: #21222c;
+  --frontmatter-border: #44475a;
+  --input-border: #44475a;
+  --hover-bg: #343746;
+  --selection-bg: #44475a;
+
+  /* highlight.js (Dracula palette) */
+  --hljs-comment: #6272a4;
+  --hljs-keyword: #ff79c6;
+  --hljs-number: #bd93f9;
+  --hljs-string: #f1fa8c;
+  --hljs-title: #50fa7b;
+  --hljs-type: #ffb86c;
+  --hljs-meta: #8be9fd;
+}
+
+/* --- Solarized (soft warm light theme) --- */
+[data-theme="solarized"] {
+  --bg: #fdf6e3;
+  --fg: #657b83;
+  --fg-muted: #93a1a1;
+  --border: #eee8d5;
+  --panel-bg: #f5edda;
+  --panel-bg-2: #faf3e0;
+  --code-bg: #f5edda;
+  --inline-code-bg: rgba(101, 123, 131, 0.08);
+  --accent: #268bd2;
+  --accent-fg: #fdf6e3;
+  --table-header-bg: #f5edda;
+  --quote-border: #eee8d5;
+  --quote-fg: #93a1a1;
+  --frontmatter-bg: #f5edda;
+  --frontmatter-border: #eee8d5;
+  --input-border: #d9d0b0;
+  --hover-bg: #eee8d5;
+  --selection-bg: #eee8d5;
+
+  /* highlight.js (Solarized palette) */
+  --hljs-comment: #93a1a1;
+  --hljs-keyword: #859900;
+  --hljs-number: #2aa198;
+  --hljs-string: #2aa198;
+  --hljs-title: #268bd2;
+  --hljs-type: #b58900;
+  --hljs-meta: #268bd2;
+}
+
 * {
   box-sizing: border-box;
 }

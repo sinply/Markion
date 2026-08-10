@@ -11,10 +11,19 @@ export interface TreeNode {
 export type AssetsStrategy = "vault-assets" | "doc-assets" | `custom:${string}`;
 export type PathStyle = "relative" | "absolute";
 
+export type Theme =
+  | "system"
+  | "light"
+  | "dark"
+  | "sepia"
+  | "nord"
+  | "dracula"
+  | "solarized";
+
 export interface Settings {
   assetsStrategy: AssetsStrategy;
   pathStyle: PathStyle;
-  theme: "system" | "light" | "dark";
+  theme: Theme;
   showHiddenFiles: boolean;
   livePreview: boolean;
 }
