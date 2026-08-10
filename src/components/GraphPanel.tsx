@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useVaultStore } from "../stores/vaultStore";
 import { useDocStore } from "../stores/docStore";
 import { readFile, scanGraph, type GraphNode, type GraphEdge } from "../lib/ipc";
@@ -100,6 +100,10 @@ export function GraphPanel() {
   const [data, setData] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const dragRef = useRef<{ x: number; y: number } | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -154,59 +158,132 @@ export function GraphPanel() {
         <div style={{ color: "var(--fg-muted)" }}>No notes yet</div>
       )}
       {data && data.nodes.length > 0 && (
-        <svg
-          width="100%"
-          height={360}
-          viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
-          style={{ background: "var(--panel-bg)", borderRadius: 6, border: "1px solid var(--border)" }}
-        >
-          {data.edges.map((e, i) => {
-            const a = pos.get(e.source);
-            const b = pos.get(e.target);
-            if (!a || !b) return null;
-            return (
-              <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="var(--border)" strokeWidth={1} />
-            );
-          })}
-          {data.nodes.map((n) => {
-            const p = pos.get(n.id);
-            if (!p) return null;
-            const active = hover === n.id;
-            return (
-              <g
-                key={n.id}
-                onClick={() => openNode(n.id)}
-                onMouseEnter={() => setHover(n.id)}
-                onMouseLeave={() => setHover(null)}
-                style={{ cursor: "pointer" }}
-              >
-                <circle
-                  cx={p.x}
-                  cy={p.y}
-                  r={active ? 9 : 6}
-                  fill="var(--accent)"
-                  opacity={active ? 1 : 0.75}
-                />
-                {active && (
-                  <g>
-                    <rect
-                      x={p.x + 10}
-                      y={p.y - 9}
-                      width={Math.max(40, n.title.length * 6 + 12)}
-                      height={18}
-                      rx={3}
-                      fill="var(--bg)"
-                      stroke="var(--border)"
+        <div style={{ position: "relative" }}>
+          <svg
+            ref={svgRef}
+            width="100%"
+            height={360}
+            viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+            style={{
+              background: "var(--panel-bg)", borderRadius: 6, border: "1px solid var(--border)",
+              touchAction: "none", cursor: "grab",
+            }}
+            onWheel={(e) => {
+              e.preventDefault();
+              const factor = e.deltaY > 0 ? 0.9 : 1.1;
+              const rect = svgRef.current?.getBoundingClientRect();
+              const ox = rect ? e.clientX - rect.left : VIEW_W / 2;
+              const oy = rect ? e.clientY - rect.top : VIEW_H / 2;
+              const scaleX = VIEW_W / (rect?.width ?? VIEW_W);
+              const scaleY = VIEW_H / (rect?.height ?? VIEW_H);
+              const px = ox * scaleX;
+              const py = oy * scaleY;
+              const next = Math.min(4, Math.max(0.2, zoom * factor));
+              const k = next / zoom;
+              setPan((p) => ({ x: px - k * (px - p.x), y: py - k * (py - p.y) }));
+              setZoom(next);
+            }}
+            onMouseDown={(e) => {
+              if (e.button !== 0) return;
+              dragRef.current = { x: e.clientX, y: e.clientY };
+              (e.currentTarget as SVGElement).style.cursor = "grabbing";
+            }}
+            onMouseMove={(e) => {
+              if (dragRef.current) {
+                const rect = svgRef.current?.getBoundingClientRect();
+                const sx = (rect?.width ?? VIEW_W) / VIEW_W;
+                const sy = (rect?.height ?? VIEW_H) / VIEW_H;
+                const dx = (e.clientX - dragRef.current.x) * sx;
+                const dy = (e.clientY - dragRef.current.y) * sy;
+                dragRef.current = { x: e.clientX, y: e.clientY };
+                setPan((p) => ({ x: p.x + dx, y: p.y + dy }));
+              }
+            }}
+            onMouseUp={() => {
+              dragRef.current = null;
+              if (svgRef.current) svgRef.current.style.cursor = "grab";
+            }}
+            onMouseLeave={() => {
+              dragRef.current = null;
+              if (svgRef.current) svgRef.current.style.cursor = "grab";
+            }}
+          >
+            <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
+              {data.edges.map((e, i) => {
+                const a = pos.get(e.source);
+                const b = pos.get(e.target);
+                if (!a || !b) return null;
+                return (
+                  <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="var(--border)" strokeWidth={1} />
+                );
+              })}
+              {data.nodes.map((n) => {
+                const p = pos.get(n.id);
+                if (!p) return null;
+                const active = hover === n.id;
+                return (
+                  <g
+                    key={n.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void openNode(n.id);
+                    }}
+                    onMouseEnter={() => setHover(n.id)}
+                    onMouseLeave={() => setHover(null)}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <circle
+                      cx={p.x}
+                      cy={p.y}
+                      r={active ? 9 : 6}
+                      fill="var(--accent)"
+                      opacity={active ? 1 : 0.75}
                     />
-                    <text x={p.x + 16} y={p.y + 4} fontSize={11} fill="var(--fg)">
-                      {n.title}
-                    </text>
+                    {active && (
+                      <g>
+                        <rect
+                          x={p.x + 10}
+                          y={p.y - 9}
+                          width={Math.max(40, n.title.length * 6 + 12)}
+                          height={18}
+                          rx={3}
+                          fill="var(--bg)"
+                          stroke="var(--border)"
+                        />
+                        <text x={p.x + 16} y={p.y + 4} fontSize={11} fill="var(--fg)">
+                          {n.title}
+                        </text>
+                      </g>
+                    )}
                   </g>
-                )}
-              </g>
-            );
-          })}
-        </svg>
+                );
+              })}
+            </g>
+          </svg>
+          <div style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 4 }}>
+            <button
+              onClick={() => { setZoom((z) => Math.min(4, z * 1.25)); }}
+              style={{ width: 24, height: 24, cursor: "pointer", border: "1px solid var(--border)", background: "var(--bg)", color: "var(--fg)", borderRadius: 4 }}
+              title="Zoom in"
+            >
+              +
+            </button>
+            <button
+              onClick={() => { setZoom((z) => Math.max(0.2, z * 0.8)); }}
+              style={{ width: 24, height: 24, cursor: "pointer", border: "1px solid var(--border)", background: "var(--bg)", color: "var(--fg)", borderRadius: 4 }}
+              title="Zoom out"
+            >
+              −
+            </button>
+            <button
+              onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+              style={{ width: 24, height: 24, cursor: "pointer", border: "1px solid var(--border)", background: "var(--bg)", color: "var(--fg)", borderRadius: 4 }}
+              title="Reset"
+            >
+              ⟲
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
