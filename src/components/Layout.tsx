@@ -4,6 +4,7 @@ import { FileTree } from "./FileTree";
 import { EditorPane } from "./EditorPane";
 import { OutlinePane } from "./Outline";
 import { BacklinksPanel } from "./BacklinksPanel";
+import { GraphPanel } from "./GraphPanel";
 import { QuickOpen } from "./QuickOpen";
 import { SettingsDialog } from "./SettingsDialog";
 import { EditorView } from "@codemirror/view";
@@ -53,6 +54,9 @@ export function Layout() {
             </div>
             <div style={{ borderTop: "1px solid var(--border)" }}>
               <BacklinksPanel />
+            </div>
+            <div style={{ borderTop: "1px solid var(--border)" }}>
+              <GraphPanel />
             </div>
           </div>
         </Panel>

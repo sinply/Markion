@@ -16,6 +16,7 @@ export type Theme =
   | "light"
   | "dark"
   | "sepia"
+  | "eye"
   | "nord"
   | "dracula"
   | "solarized";

@@ -63,6 +63,39 @@ function renderMermaid(code: string): HTMLElement {
   return wrap;
 }
 
+/** Render inline math ($...$) via KaTeX. Lazy-loads katex. */
+export class MathInlineWidget extends WidgetType {
+  constructor(readonly tex: string) {
+    super();
+  }
+
+  eq(other: MathInlineWidget): boolean {
+    return other.tex === this.tex;
+  }
+
+  toDOM(_view: EditorView): HTMLElement {
+    const span = document.createElement("span");
+    span.className = "cm-math-inline";
+    span.textContent = `$${this.tex}$`; // fallback until katex loads
+    void (async () => {
+      try {
+        const katex = (await import("katex")).default;
+        span.innerHTML = katex.renderToString(this.tex, {
+          displayMode: false,
+          throwOnError: false,
+        });
+      } catch {
+        // keep fallback
+      }
+    })();
+    return span;
+  }
+
+  ignoreEvent(): boolean {
+    return false;
+  }
+}
+
 /** Render a block-math ($$...$$) via KaTeX. Lazy-loads katex. */
 export class MathBlockWidget extends WidgetType {
   constructor(readonly tex: string) {

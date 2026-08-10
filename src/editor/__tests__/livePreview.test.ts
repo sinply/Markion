@@ -170,3 +170,32 @@ describe("frontmatter", () => {
     expect(foundFrontmatter).toBe(false);
   });
 });
+
+describe("inline math", () => {
+  it("replaces $...$ with an inline math widget", () => {
+    const decos = buildDecorations(stateOf("Euler: $e^{i\pi} = -1$ is neat."));
+    const iter = decos.iter();
+    let found = false;
+    while (iter.value) {
+      const w = iter.value.spec?.widget;
+      if (w && w.constructor.name === "MathInlineWidget") {
+        found = true;
+        expect(w.tex).toContain("e^{i");
+      }
+      iter.next();
+    }
+    expect(found).toBe(true);
+  });
+
+  it("does NOT treat $$...$$ as inline math", () => {
+    const decos = buildDecorations(stateOf("$$\nE = mc^2\n$$"));
+    const iter = decos.iter();
+    let inline = false;
+    while (iter.value) {
+      const w = iter.value.spec?.widget;
+      if (w && w.constructor.name === "MathInlineWidget") inline = true;
+      iter.next();
+    }
+    expect(inline).toBe(false);
+  });
+});

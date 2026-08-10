@@ -48,8 +48,22 @@ export interface Backlink {
   title: string;
 }
 
+export interface GraphNode {
+  id: string;
+  title: string;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+}
+
 export async function findBacklinks(vaultRoot: string, target: string): Promise<Backlink[]> {
   return invoke<Backlink[]>("find_backlinks", { vaultRoot, target });
+}
+
+export async function scanGraph(vaultRoot: string): Promise<[GraphNode[], GraphEdge[]]> {
+  return invoke<[GraphNode[], GraphEdge[]]>("scan_graph", { vaultRoot });
 }
 
 export async function readConfig(vaultRoot: string): Promise<Settings> {

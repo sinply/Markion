@@ -23,6 +23,9 @@ function convertTree(node: { name: string; path: string; kind: "file" | "folder"
 
 function NodeView({ node, style, dragHandle }: NodeRendererProps<RowData>) {
   const isFolder = node.data.kind === "folder";
+  const hasIndex =
+    isFolder &&
+    !!node.data.children?.some((c) => c.name === "index.md" && c.kind === "file");
   return (
     <div
       style={{
@@ -32,10 +35,18 @@ function NodeView({ node, style, dragHandle }: NodeRendererProps<RowData>) {
         cursor: isFolder ? "default" : "pointer",
       }}
       ref={dragHandle}
-      onClick={isFolder ? (e) => { e.stopPropagation(); node.toggle(); } : undefined}
-      title={isFolder ? (node.isOpen ? "Collapse" : "Expand") : node.data.name}
+      title={
+        isFolder
+          ? hasIndex
+            ? "Click name to open index.md (folder body)"
+            : node.isOpen
+              ? "Collapse"
+              : "Expand"
+          : node.data.name
+      }
     >
       <span
+        onClick={isFolder ? (e) => { e.stopPropagation(); node.toggle(); } : undefined}
         style={{
           marginRight: 2,
           fontSize: 10,
@@ -43,6 +54,7 @@ function NodeView({ node, style, dragHandle }: NodeRendererProps<RowData>) {
           display: "inline-block",
           color: "#888",
           cursor: isFolder ? "pointer" : "default",
+          userSelect: "none",
         }}
       >
         {isFolder ? (node.isOpen ? "▾" : "▸") : ""}
@@ -60,6 +72,21 @@ function NodeView({ node, style, dragHandle }: NodeRendererProps<RowData>) {
       >
         {node.data.name}
       </span>
+      {hasIndex && (
+        <span
+          style={{
+            marginLeft: 6,
+            fontSize: 9,
+            color: "var(--fg-muted)",
+            border: "1px solid var(--border)",
+            borderRadius: 3,
+            padding: "0 4px",
+            opacity: 0.8,
+          }}
+        >
+          index
+        </span>
+      )}
     </div>
   );
 }
@@ -75,7 +102,17 @@ export function FileTree() {
   const handleActivate = useCallback(
     async (node: any) => {
       const d = node.data;
-      if (d.kind !== "file" || !vaultRoot) return;
+      if (!vaultRoot) return;
+      // A folder with an index.md opens that file (folder-as-container body).
+      if (d.kind === "folder") {
+        const index = d.children?.find((c: any) => c.name === "index.md" && c.kind === "file");
+        if (!index) return; // no index.md: keep default folder behavior
+        const content = await readFile(vaultRoot, index.id);
+        openDoc(index.name, index.id);
+        setActiveContent(content);
+        return;
+      }
+      if (d.kind !== "file") return;
       const content = await readFile(vaultRoot, d.id);
       openDoc(d.name, d.id);
       setActiveContent(content);

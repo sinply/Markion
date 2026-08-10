@@ -60,6 +60,37 @@
   --hljs-meta: #79c0ff;
 }
 
+/* --- Eye-care (护眼): soft green-tinted low-glare theme --- */
+[data-theme="eye"] {
+  --bg: #c7edcc;
+  --fg: #2b3a2f;
+  --fg-muted: #5c7566;
+  --border: #a8d5b0;
+  --panel-bg: #bce4c2;
+  --panel-bg-2: #c2e8c8;
+  --code-bg: #bce4c2;
+  --inline-code-bg: rgba(43, 58, 47, 0.08);
+  --accent: #2f6b3c;
+  --accent-fg: #eaffef;
+  --table-header-bg: #bce4c2;
+  --quote-border: #a8d5b0;
+  --quote-fg: #5c7566;
+  --frontmatter-bg: #bce4c2;
+  --frontmatter-border: #a8d5b0;
+  --input-border: #96c49e;
+  --hover-bg: #b3dfba;
+  --selection-bg: #a3d3ab;
+
+  /* highlight.js (soft green) */
+  --hljs-comment: #5c7566;
+  --hljs-keyword: #1a5c3a;
+  --hljs-number: #205c8a;
+  --hljs-string: #1f5e3c;
+  --hljs-title: #5a3e8a;
+  --hljs-type: #8a4a1a;
+  --hljs-meta: #205c8a;
+}
+
 /* --- Sepia (warm, paper-like light theme) --- */
 [data-theme="sepia"] {
   --bg: #f4ecd8;
@@ -373,6 +404,13 @@ body {
   margin: 8px 0;
   text-align: center;
   overflow-x: auto;
+}
+
+/* Inline math */
+.cm-math-inline {
+  display: inline-block;
+  vertical-align: middle;
+  padding: 0 2px;
 }
 
 /* ---------- highlight.js theme ---------- */

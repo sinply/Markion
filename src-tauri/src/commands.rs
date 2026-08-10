@@ -1,4 +1,4 @@
-use crate::backlinks::{self, Backlink};
+use crate::backlinks::{self, Backlink, GraphNode, GraphEdge};
 use crate::file_io;
 use crate::image::{self, AssetsStrategy, PathStyle};
 use crate::tree_index::{self, TreeNode};
@@ -105,6 +105,13 @@ use crate::config;
 #[tauri::command]
 pub fn find_backlinks(vault_root: String, target: String) -> Result<Vec<Backlink>, String> {
     backlinks::find_backlinks(Path::new(&vault_root), &target).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn scan_graph(
+    vault_root: String,
+) -> Result<(Vec<GraphNode>, Vec<GraphEdge>), String> {
+    backlinks::scan_graph(Path::new(&vault_root)).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

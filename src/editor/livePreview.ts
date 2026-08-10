@@ -3,7 +3,7 @@ import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder, EditorState, StateEffect, StateField } from "@codemirror/state";
 import type { SyntaxNode } from "@lezer/common";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget, FrontmatterWidget, PreviewWidget, parseFrontmatter } from "./widgets";
+import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget, MathInlineWidget, FrontmatterWidget, PreviewWidget, parseFrontmatter } from "./widgets";
 
 interface DecoEntry {
   from: number;
@@ -343,6 +343,24 @@ export function buildDecorations(state: EditorState): DecorationSet {
       from: m.index,
       to: m.index + m[0].length,
       decoration: Decoration.replace({ widget: new MathBlockWidget(m[1].trim()), block: true }),
+    });
+  }
+
+  // --- Inline math: $...$ (single dollar, not part of $$...$$) ---
+  // A crude-but-robust scan: find `$` pairs on the same line, non-empty,
+  // not preceded/followed by another `$`.
+  const inlineMathRe = /(?<![\$\\])\$([^\$\n]+?)\$(?!\$)/g;
+  let im: RegExpExecArray | null;
+  while ((im = inlineMathRe.exec(docText)) !== null) {
+    // Skip if this range overlaps an already-added block math range
+    const overlapsBlock = entries.some(
+      (e) => im!.index < e.to && im!.index + im![0].length > e.from && e.decoration.spec?.widget,
+    );
+    if (overlapsBlock) continue;
+    entries.push({
+      from: im.index,
+      to: im.index + im[0].length,
+      decoration: Decoration.replace({ widget: new MathInlineWidget(im[1].trim()) }),
     });
   }
 

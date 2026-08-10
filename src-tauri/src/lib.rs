@@ -23,6 +23,7 @@ pub fn run() {
             commands::move_node,
             commands::save_image,
             commands::find_backlinks,
+            commands::scan_graph,
             commands::read_config,
             commands::save_config,
             commands::start_vault_watch,

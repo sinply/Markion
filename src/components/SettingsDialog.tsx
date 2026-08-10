@@ -63,6 +63,7 @@ export function SettingsDialog() {
           <option value="light">Light</option>
           <option value="dark">Dark</option>
           <option value="sepia">Sepia</option>
+          <option value="eye">Eye-care</option>
           <option value="nord">Nord</option>
           <option value="dracula">Dracula</option>
           <option value="solarized">Solarized</option>
