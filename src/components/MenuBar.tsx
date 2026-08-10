@@ -21,7 +21,6 @@ interface Menu {
 
 export function MenuBar() {
   const [open, setOpen] = useState<string | null>(null);
-  const [subOpen, setSubOpen] = useState<string | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
 
   const ui = useUiStore();
@@ -31,10 +30,7 @@ export function MenuBar() {
   const language = settings.language;
   const mode = ui.editorMode;
 
-  const close = () => {
-    setOpen(null);
-    setSubOpen(null);
-  };
+  const close = () => setOpen(null);
 
   useEffect(() => {
     if (!open) return;
@@ -191,7 +187,7 @@ export function MenuBar() {
       <div key={i}>
         {item.separatorAfter && <div className="markion-menu-sep" />}
         {item.submenu ? (
-          <SubmenuItem key={i} item={item} open={subOpen} onOpen={setSubOpen} render={renderItems} />
+          <Submenu key={i} item={item} render={renderItems} />
         ) : (
           <button
             className={`markion-menu-item${item.checked ? " checked" : ""}`}
@@ -211,14 +207,7 @@ export function MenuBar() {
         <div key={menu.label} className="markion-menubar-item">
           <button
             className="markion-menubar-btn"
-            onClick={() => {
-              if (open === menu.label) {
-                close();
-              } else {
-                setOpen(menu.label);
-                setSubOpen(null);
-              }
-            }}
+            onClick={() => setOpen(open === menu.label ? null : menu.label)}
           >
             {menu.label}
           </button>
@@ -231,26 +220,18 @@ export function MenuBar() {
   );
 }
 
-function SubmenuItem({
-  item,
-  open,
-  onOpen,
-  render,
-}: {
-  item: MenuItem;
-  open: string | null;
-  onOpen: (k: string | null) => void;
-  render: (items: MenuItem[]) => React.ReactNode;
-}) {
-  const label = item.submenu!.label;
+/** Hover-driven nested submenu; each level manages its own open state, so
+ *  arbitrary nesting (Format → Inline → Bold) works without collisions. */
+function Submenu({ item, render }: { item: MenuItem; render: (i: MenuItem[]) => React.ReactNode }) {
+  const [open, setOpen] = useState(false);
   return (
-    <div className="markion-menu-sub">
-      <button className="markion-menu-item" onClick={() => onOpen(open === label ? null : label)}>
+    <div className="markion-menu-sub" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <button className="markion-menu-item">
         <span className="markion-menu-check" />
         <span className="markion-menu-label">{item.label}</span>
         <span className="markion-menu-shortcut">▸</span>
       </button>
-      {open === label && (
+      {open && (
         <div className="markion-menu markion-submenu">{render(item.submenu!.items)}</div>
       )}
     </div>
