@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useUiStore } from "../stores/uiStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import type { Theme } from "../lib/types";
@@ -15,19 +15,23 @@ const THEMES: { value: Theme; label: string }[] = [
   { value: "solarized", label: "Solarized" },
 ];
 
+interface MenuItem {
+  label: string;
+  shortcut?: string;
+  action?: () => void;
+  checked?: boolean;
+  submenu?: Menu;
+  separatorAfter?: boolean;
+}
+
 interface Menu {
   label: string;
-  items: {
-    label: string;
-    shortcut?: string;
-    action: () => void;
-    checked?: boolean;
-    separatorAfter?: boolean;
-  }[];
+  items: MenuItem[];
 }
 
 export function MenuBar() {
   const [open, setOpen] = useState<string | null>(null);
+  const [subOpen, setSubOpen] = useState<string | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
 
   const ui = useUiStore();
@@ -35,9 +39,11 @@ export function MenuBar() {
   const theme = settings.theme;
   const mode = ui.editorMode;
 
-  const close = () => setOpen(null);
+  const close = () => {
+    setOpen(null);
+    setSubOpen(null);
+  };
 
-  // close when clicking outside
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
@@ -47,7 +53,7 @@ export function MenuBar() {
     return () => window.removeEventListener("mousedown", onDown);
   }, [open]);
 
-  const md = (cmd: MarkdownCommand, label: string, shortcut?: string) => ({
+  const md = (cmd: MarkdownCommand, label: string, shortcut?: string): MenuItem => ({
     label,
     shortcut,
     action: () => {
@@ -56,44 +62,77 @@ export function MenuBar() {
     },
   });
 
+  const themeSubmenu: Menu = {
+    label: "Theme",
+    items: THEMES.map((t) => ({
+      label: t.label,
+      checked: theme === t.value,
+      action: () => {
+        settings.setTheme(t.value);
+        close();
+      },
+    })),
+  };
+
+  const formatMenu: Menu = {
+    label: "Format",
+    items: [
+      {
+        label: "Inline",
+        submenu: {
+          label: "Inline",
+          items: [
+            md("bold", "Bold", "Ctrl+B"),
+            md("italic", "Italic", "Ctrl+I"),
+            md("strike", "Strikethrough"),
+            md("code", "Inline Code"),
+          ],
+        },
+      },
+      {
+        label: "Blocks",
+        submenu: {
+          label: "Blocks",
+          items: [
+            md("heading1", "Heading 1", "Ctrl+1"),
+            md("heading2", "Heading 2", "Ctrl+2"),
+            md("heading3", "Heading 3", "Ctrl+3"),
+            md("codeblock", "Code Block"),
+            md("table", "Table"),
+            md("quote", "Blockquote"),
+          ],
+        },
+      },
+      {
+        label: "Lists",
+        submenu: {
+          label: "Lists",
+          items: [
+            md("bullet", "Bullet List"),
+            md("ordered", "Numbered List"),
+            md("task", "Task List"),
+          ],
+        },
+      },
+      {
+        label: "Insert",
+        submenu: {
+          label: "Insert",
+          items: [md("link", "Link"), md("image", "Image")],
+        },
+      },
+    ],
+  };
+
   const menus: Menu[] = [
-    {
-      label: "Edit",
-      items: [
-        { label: "Undo", shortcut: "Ctrl+Z", action: () => { ui.requestEdit("undo"); close(); } },
-        { label: "Redo", shortcut: "Ctrl+Y", action: () => { ui.requestEdit("redo"); close(); }, separatorAfter: true },
-        { label: "Cut", shortcut: "Ctrl+X", action: () => { ui.requestEdit("cut"); close(); } },
-        { label: "Copy", shortcut: "Ctrl+C", action: () => { ui.requestEdit("copy"); close(); } },
-        { label: "Paste", shortcut: "Ctrl+V", action: () => { ui.requestEdit("paste"); close(); } },
-        { label: "Select All", shortcut: "Ctrl+A", action: () => { ui.requestEdit("selectAll"); close(); }, separatorAfter: true },
-        ...(
-          [
-            ["bold", "Bold", "Ctrl+B"],
-            ["italic", "Italic", "Ctrl+I"],
-            ["strike", "Strikethrough"],
-            ["code", "Inline Code"],
-            ["heading1", "Heading 1", "Ctrl+1"],
-            ["heading2", "Heading 2", "Ctrl+2"],
-            ["heading3", "Heading 3", "Ctrl+3"],
-          ] as [MarkdownCommand, string, string?][]
-        ).map(([c, l, s]) => md(c, l, s)),
-        md("codeblock", "Code Block"),
-        md("table", "Table"),
-        md("link", "Link"),
-        md("image", "Image"),
-        md("quote", "Blockquote"),
-        md("bullet", "Bullet List"),
-        md("ordered", "Numbered List"),
-        md("task", "Task List"),
-      ],
-    },
     {
       label: "File",
       items: [
         { label: "Open Folder…", shortcut: "Ctrl+Shift+O", action: () => { ui.requestOpenFolder(); close(); } },
         { label: "Open File…", shortcut: "Ctrl+O", action: () => { ui.requestOpenFile(); close(); } },
         { label: "Save", shortcut: "Ctrl+S", action: () => { ui.requestSave(); close(); } },
-        { label: "Save As…", shortcut: "Ctrl+Shift+S", action: () => { ui.requestSaveAs(); close(); } },
+        { label: "Save As…", shortcut: "Ctrl+Shift+S", action: () => { ui.requestSaveAs(); close(); }, separatorAfter: true },
+        { label: "Preferences…", action: () => { ui.setSettingsOpen(true); close(); }, separatorAfter: true },
         { label: "Recent", action: () => close(), separatorAfter: true },
         ...ui.recentFiles.slice(0, 5).map((p, i) => ({
           label: `  ${p}`,
@@ -104,6 +143,18 @@ export function MenuBar() {
         })),
         { label: "Clear Recent", action: () => { ui.clearRecent(); close(); }, separatorAfter: true },
         { label: "Exit", action: () => { window.close(); close(); } },
+      ],
+    },
+    {
+      label: "Edit",
+      items: [
+        { label: "Undo", shortcut: "Ctrl+Z", action: () => { ui.requestEdit("undo"); close(); } },
+        { label: "Redo", shortcut: "Ctrl+Y", action: () => { ui.requestEdit("redo"); close(); }, separatorAfter: true },
+        { label: "Cut", shortcut: "Ctrl+X", action: () => { ui.requestEdit("cut"); close(); } },
+        { label: "Copy", shortcut: "Ctrl+C", action: () => { ui.requestEdit("copy"); close(); } },
+        { label: "Paste", shortcut: "Ctrl+V", action: () => { ui.requestEdit("paste"); close(); } },
+        { label: "Select All", shortcut: "Ctrl+A", action: () => { ui.requestEdit("selectAll"); close(); }, separatorAfter: true },
+        { label: "Format", submenu: formatMenu },
       ],
     },
     {
@@ -122,17 +173,7 @@ export function MenuBar() {
           action: () => { ui.setEditorMode("preview"); close(); },
           separatorAfter: true,
         },
-        ...THEMES.map((t) => ({
-          label: t.label,
-          checked: theme === t.value,
-          action: () => { settings.setTheme(t.value); close(); },
-        })),
-      ],
-    },
-    {
-      label: "Settings",
-      items: [
-        { label: "Preferences…", action: () => { ui.setSettingsOpen(true); close(); } },
+        { label: "Theme", submenu: themeSubmenu },
       ],
     },
     {
@@ -143,35 +184,73 @@ export function MenuBar() {
     },
   ];
 
+  const renderItems = (items: MenuItem[]) =>
+    items.map((item, i) => (
+      <div key={i}>
+        {item.separatorAfter && <div className="markion-menu-sep" />}
+        {item.submenu ? (
+          <SubmenuItem key={i} item={item} open={subOpen} onOpen={setSubOpen} render={renderItems} />
+        ) : (
+          <button
+            className={`markion-menu-item${item.checked ? " checked" : ""}`}
+            onClick={item.action}
+          >
+            <span className="markion-menu-check">{item.checked ? "✓" : ""}</span>
+            <span className="markion-menu-label">{item.label}</span>
+            {item.shortcut && <span className="markion-menu-shortcut">{item.shortcut}</span>}
+          </button>
+        )}
+      </div>
+    ));
+
   return (
     <div ref={barRef} className="markion-menubar" onMouseLeave={() => setOpen(null)}>
       {menus.map((menu) => (
         <div key={menu.label} className="markion-menubar-item">
           <button
             className="markion-menubar-btn"
-            onClick={() => setOpen(open === menu.label ? null : menu.label)}
+            onClick={() => {
+              if (open === menu.label) {
+                close();
+              } else {
+                setOpen(menu.label);
+                setSubOpen(null);
+              }
+            }}
           >
             {menu.label}
           </button>
           {open === menu.label && (
-            <div className="markion-menu">
-              {menu.items.map((item, i) => (
-                <div key={i}>
-                  {item.separatorAfter && <div className="markion-menu-sep" />}
-                  <button
-                    className={`markion-menu-item${item.checked ? " checked" : ""}`}
-                    onClick={item.action}
-                  >
-                    <span className="markion-menu-check">{item.checked ? "✓" : ""}</span>
-                    <span className="markion-menu-label">{item.label}</span>
-                    {item.shortcut && <span className="markion-menu-shortcut">{item.shortcut}</span>}
-                  </button>
-                </div>
-              ))}
-            </div>
+            <div className="markion-menu">{renderItems(menu.items)}</div>
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+function SubmenuItem({
+  item,
+  open,
+  onOpen,
+  render,
+}: {
+  item: MenuItem;
+  open: string | null;
+  onOpen: (k: string | null) => void;
+  render: (items: MenuItem[]) => React.ReactNode;
+}) {
+  const label = item.submenu!.label;
+  return (
+    <div className="markion-menu-sub">
+      <button className="markion-menu-item" onClick={() => onOpen(open === label ? null : label)}>
+        <span className="markion-menu-check" />
+        <span className="markion-menu-label">{item.label}</span>
+        <span className="markion-menu-shortcut">▸</span>
+      </button>
+      {open === label && (
+        <div className="markion-menu markion-submenu">{render(item.submenu!.items)}</div>
+      )}
     </div>
   );
 }
