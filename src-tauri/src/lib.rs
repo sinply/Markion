@@ -1,14 +1,19 @@
+pub mod backlinks;
 pub mod commands;
+pub mod config;
 pub mod file_io;
 pub mod image;
 pub mod tree_index;
 pub mod watcher;
+
+use std::sync::Mutex;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .manage(Mutex::new(None::<notify::RecommendedWatcher>))
         .invoke_handler(tauri::generate_handler![
             commands::read_file,
             commands::write_file_atomic,
@@ -17,6 +22,10 @@ pub fn run() {
             commands::set_collapsed,
             commands::move_node,
             commands::save_image,
+            commands::find_backlinks,
+            commands::read_config,
+            commands::save_config,
+            commands::start_vault_watch,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

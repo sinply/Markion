@@ -43,6 +43,15 @@ export async function saveImage(
   });
 }
 
+export interface Backlink {
+  path: string;
+  title: string;
+}
+
+export async function findBacklinks(vaultRoot: string, target: string): Promise<Backlink[]> {
+  return invoke<Backlink[]>("find_backlinks", { vaultRoot, target });
+}
+
 export async function readConfig(vaultRoot: string): Promise<Settings> {
   return invoke<Settings>("read_config", { vaultRoot });
 }

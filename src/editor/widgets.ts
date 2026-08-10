@@ -19,6 +19,10 @@ export class CodeBlockWidget extends WidgetType {
   }
 
   toDOM(_view: EditorView): HTMLElement {
+    // Mermaid diagrams: render as SVG instead of code
+    if (this.language === "mermaid") {
+      return renderMermaid(this.code);
+    }
     const pre = document.createElement("pre");
     pre.className = "cm-codeblock";
 
@@ -33,6 +37,58 @@ export class CodeBlockWidget extends WidgetType {
     code.innerHTML = highlightCode(this.code, this.language);
     pre.appendChild(code);
     return pre;
+  }
+
+  ignoreEvent(): boolean {
+    return false;
+  }
+}
+
+/** Render a Mermaid diagram into a container. Lazy-loads mermaid. */
+function renderMermaid(code: string): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "cm-mermaid";
+  wrap.textContent = code; // fallback shown until mermaid loads
+  void (async () => {
+    try {
+      const mermaid = (await import("mermaid")).default;
+      mermaid.initialize({ startOnLoad: false, theme: "default" });
+      const { svg } = await mermaid.render("m" + Math.random().toString(36).slice(2), code);
+      wrap.innerHTML = svg;
+    } catch (e) {
+      wrap.className = "cm-mermaid cm-mermaid-error";
+      wrap.textContent = `[Mermaid error: ${String(e)}]\n\n${code}`;
+    }
+  })();
+  return wrap;
+}
+
+/** Render a block-math ($$...$$) via KaTeX. Lazy-loads katex. */
+export class MathBlockWidget extends WidgetType {
+  constructor(readonly tex: string) {
+    super();
+  }
+
+  eq(other: MathBlockWidget): boolean {
+    return other.tex === this.tex;
+  }
+
+  toDOM(_view: EditorView): HTMLElement {
+    const div = document.createElement("div");
+    div.className = "cm-math-block";
+    div.textContent = `$$${this.tex}$$`; // fallback until katex loads
+    void (async () => {
+      try {
+        const katex = (await import("katex")).default;
+        div.innerHTML = katex.renderToString(this.tex, {
+          displayMode: true,
+          throwOnError: false,
+        });
+      } catch {
+        // keep the raw fallback text
+      }
+    })();
+    return div;
   }
 
   ignoreEvent(): boolean {

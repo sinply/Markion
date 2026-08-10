@@ -3,6 +3,7 @@ import { Panel, Group, Separator } from "react-resizable-panels";
 import { FileTree } from "./FileTree";
 import { EditorPane } from "./EditorPane";
 import { OutlinePane } from "./Outline";
+import { BacklinksPanel } from "./BacklinksPanel";
 import { QuickOpen } from "./QuickOpen";
 import { SettingsDialog } from "./SettingsDialog";
 import { EditorView } from "@codemirror/view";
@@ -46,7 +47,14 @@ export function Layout() {
         </Panel>
         <Separator id="sep-outline" style={{ width: 3, background: "#e0e0e0" }} />
         <Panel id="outline" defaultSize="25" minSize="10" maxSize="35">
-          <OutlinePane state={editorState} onJump={handleJump} />
+          <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+            <div style={{ flex: 1, overflow: "auto" }}>
+              <OutlinePane state={editorState} onJump={handleJump} />
+            </div>
+            <div style={{ borderTop: "1px solid #e0e0e0" }}>
+              <BacklinksPanel />
+            </div>
+          </div>
         </Panel>
       </Group>
       <QuickOpen />

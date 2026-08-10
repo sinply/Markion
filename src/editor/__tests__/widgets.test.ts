@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { EditorState } from "@codemirror/state";
-import { TaskCheckboxWidget, CodeBlockWidget, TableWidget, ImageWidget } from "../widgets";
+import { TaskCheckboxWidget, CodeBlockWidget, TableWidget, ImageWidget, MathBlockWidget } from "../widgets";
 import type { EditorView } from "@codemirror/view";
 import { markdownContextFacet, type MarkdownContext } from "../media";
 
@@ -119,5 +119,28 @@ describe("ImageWidget", () => {
     expect(new ImageWidget("a.png", "x").eq(new ImageWidget("a.png", "x"))).toBe(true);
     expect(new ImageWidget("a.png", "x").eq(new ImageWidget("b.png", "x"))).toBe(false);
     expect(new ImageWidget("a.png", "x").eq(new ImageWidget("a.png", "y"))).toBe(false);
+  });
+});
+
+describe("CodeBlockWidget mermaid", () => {
+  it("renders a mermaid container for mermaid blocks", () => {
+    const w = new CodeBlockWidget("graph TD\n  A-->B", "mermaid");
+    const dom = w.toDOM(mockView());
+    expect(dom.className).toBe("cm-mermaid");
+  });
+});
+
+describe("MathBlockWidget", () => {
+  it("renders a math-block container with tex fallback", () => {
+    const w = new MathBlockWidget("E = mc^2");
+    const dom = w.toDOM(mockView());
+    expect(dom.className).toBe("cm-math-block");
+    // katex loads async; fallback text present immediately
+    expect(dom.textContent).toContain("E = mc^2");
+  });
+
+  it("eq compares tex", () => {
+    expect(new MathBlockWidget("a").eq(new MathBlockWidget("a"))).toBe(true);
+    expect(new MathBlockWidget("a").eq(new MathBlockWidget("b"))).toBe(false);
   });
 });

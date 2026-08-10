@@ -1,3 +1,4 @@
+use crate::backlinks::{self, Backlink};
 use crate::file_io;
 use crate::image::{self, AssetsStrategy, PathStyle};
 use crate::tree_index::{self, TreeNode};
@@ -97,4 +98,46 @@ pub fn save_image(
         &date,
     )
     .map_err(|e| e.to_string())
+}
+
+use crate::config;
+
+#[tauri::command]
+pub fn find_backlinks(vault_root: String, target: String) -> Result<Vec<Backlink>, String> {
+    backlinks::find_backlinks(Path::new(&vault_root), &target).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn read_config(vault_root: String) -> Result<config::Settings, String> {
+    config::load_config(&std::path::Path::new(&vault_root)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_config(vault_root: String, settings: config::Settings) -> Result<(), String> {
+    config::save_config(&std::path::Path::new(&vault_root), &settings).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn start_vault_watch(
+    vault_root: String,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, std::sync::Mutex<Option<notify::RecommendedWatcher>>>,
+) -> Result<(), String> {
+    use tauri::Emitter;
+    let root = std::path::PathBuf::from(&vault_root);
+    let (watcher, rx) = crate::watcher::start_watcher(&root, std::time::Duration::from_millis(200))
+        .map_err(|e| e.to_string())?;
+    // Replace any previous watcher (dropping the old one stops its watch).
+    *state.lock().unwrap() = Some(watcher);
+    let app_handle = app.clone();
+    std::thread::spawn(move || {
+        // rx.recv blocks until the watcher is dropped (app exit) or events arrive.
+        while let Ok(paths) = rx.recv() {
+            if paths.is_empty() {
+                continue;
+            }
+            let _ = app_handle.emit("vault-changed", paths);
+        }
+    });
+    Ok(())
 }

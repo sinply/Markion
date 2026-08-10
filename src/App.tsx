@@ -2,6 +2,7 @@ import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useVaultStore } from "./stores/vaultStore";
 import { useSettingsStore } from "./stores/settingsStore";
+import { startVaultWatch } from "./lib/ipc";
 import { Layout } from "./components/Layout";
 
 export default function App() {
@@ -16,6 +17,13 @@ export default function App() {
     setLoading(true);
     await loadTree(folder);
     await loadSettings(folder);
+    // Begin watching for external file changes (tree rebuilds + open-file reload
+    // are handled by listeners in Layout/EditorPane).
+    try {
+      await startVaultWatch(folder);
+    } catch {
+      // watcher failure is non-fatal - the app still works, just no live refresh
+    }
     setLoading(false);
   };
 

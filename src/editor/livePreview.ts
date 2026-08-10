@@ -3,7 +3,7 @@ import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder, EditorState, StateEffect, StateField } from "@codemirror/state";
 import type { SyntaxNode } from "@lezer/common";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget } from "./widgets";
+import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget } from "./widgets";
 
 interface DecoEntry {
   from: number;
@@ -293,6 +293,18 @@ export function buildDecorations(state: EditorState): DecorationSet {
       }
     },
   });
+
+  // --- Block math: $$...$$ (Lezer markdown has no math nodes; scan the doc) ---
+  const docText = state.doc.toString();
+  const mathRe = /\$\$([\s\S]+?)\$\$/g;
+  let m: RegExpExecArray | null;
+  while ((m = mathRe.exec(docText)) !== null) {
+    entries.push({
+      from: m.index,
+      to: m.index + m[0].length,
+      decoration: Decoration.replace({ widget: new MathBlockWidget(m[1].trim()), block: true }),
+    });
+  }
 
   entries.sort((a, b) => a.from - b.from || a.to - b.to);
 
