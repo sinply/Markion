@@ -94,7 +94,7 @@ export const MarkdownEditor = forwardRef<EditorHandle, EditorViewProps>(
             onClick={() => setEditorModeUi("live")}
             title="Edit mode (Ctrl+E)"
           >
-            ✏️
+            ✏️ Edit
           </button>
           <button
             className="markion-mode-btn"
@@ -102,7 +102,7 @@ export const MarkdownEditor = forwardRef<EditorHandle, EditorViewProps>(
             onClick={() => setEditorModeUi("preview")}
             title="Preview mode (Ctrl+E)"
           >
-            👁️
+            👁️ Preview
           </button>
         </div>
       </div>
