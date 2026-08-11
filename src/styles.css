@@ -474,6 +474,30 @@ body {
   background: var(--panel-bg);
 }
 
+/* Source badge on image/math widgets */
+.cm-image-wrap, .cm-math-inline, .cm-math-block {
+  position: relative;
+}
+.cm-source-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 10px;
+  color: var(--fg-muted);
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+  cursor: pointer;
+  opacity: 0.7;
+  line-height: 1.4;
+  user-select: none;
+}
+.cm-source-badge:hover {
+  opacity: 1;
+  color: var(--accent);
+}
+
 /* Mermaid */
 .cm-mermaid {
   background: var(--bg);

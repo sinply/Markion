@@ -179,9 +179,12 @@ export function buildDecorations(state: EditorState): DecorationSet {
           return false; // keep source editable on the cursor line
         }
         const { src, alt } = imageSrcAltFromNode(state, node.node);
+        const imageWidget = new ImageWidget(src, alt);
+        imageWidget.from = node.from;
+        imageWidget.to = node.to;
         entries.push({
           from: node.from, to: node.to,
-          decoration: Decoration.replace({ widget: new ImageWidget(src, alt) }),
+          decoration: Decoration.replace({ widget: imageWidget }),
         });
         return false;
       }
@@ -203,9 +206,12 @@ export function buildDecorations(state: EditorState): DecorationSet {
             return false; // keep source editable on the cursor line
           }
           const { src, alt } = imageSrcAltFromNode(state, imgChild.node);
+          const linkImageWidget = new ImageWidget(src, alt);
+          linkImageWidget.from = imgChild.from;
+          linkImageWidget.to = imgChild.to;
           entries.push({
             from: imgChild.from, to: imgChild.to,
-            decoration: Decoration.replace({ widget: new ImageWidget(src, alt) }),
+            decoration: Decoration.replace({ widget: linkImageWidget }),
           });
           for (const c of children) {
             if (c.name === "LinkMark" && (c.from < imgChild.from || c.to > imgChild.to)) {
@@ -376,10 +382,13 @@ export function buildDecorations(state: EditorState): DecorationSet {
     if (isOnActiveLine(state, m.index, m.index + m[0].length, activeLine)) {
       continue; // keep source editable on the cursor line
     }
+    const mathBlockWidget = new MathBlockWidget(m[1].trim());
+    mathBlockWidget.from = m.index;
+    mathBlockWidget.to = m.index + m[0].length;
     entries.push({
       from: m.index,
       to: m.index + m[0].length,
-      decoration: Decoration.replace({ widget: new MathBlockWidget(m[1].trim()), block: true }),
+      decoration: Decoration.replace({ widget: mathBlockWidget, block: true }),
     });
   }
 
@@ -397,10 +406,13 @@ export function buildDecorations(state: EditorState): DecorationSet {
     if (isOnActiveLine(state, im.index, im.index + im[0].length, activeLine)) {
       continue; // keep source editable on the cursor line
     }
+    const mathInlineWidget = new MathInlineWidget(im[1].trim());
+    mathInlineWidget.from = im.index;
+    mathInlineWidget.to = im.index + im[0].length;
     entries.push({
       from: im.index,
       to: im.index + im[0].length,
-      decoration: Decoration.replace({ widget: new MathInlineWidget(im[1].trim()) }),
+      decoration: Decoration.replace({ widget: mathInlineWidget }),
     });
   }
 
@@ -472,17 +484,15 @@ export const livePreviewExtension = ViewPlugin.fromClass(LivePlugin, {
         }
       }
 
-      // Source badge on image/math widgets: flip that block to source.
+      // Source badge on image/math widgets: flip that block to source. The
+      // block's range is stored on the badge as data attributes (set by
+      // appendSourceBadge) because math blocks have no Lezer node to resolve.
       const badge = target.closest<HTMLElement>(".cm-source-badge");
       if (badge) {
-        const pos = view.posAtDOM(badge);
-        const node = syntaxTree(view.state).resolve(pos + 1, -1);
-        let block: SyntaxNode | null = node;
-        while (block && !["Image", "FencedCode", "CodeBlock", "Table"].includes(block.type.name)) {
-          block = block.parent;
-        }
-        if (!block) return false;
-        view.dispatch({ selection: { anchor: block.from }, scrollIntoView: true });
+        const from = Number(badge.dataset.from);
+        const to = Number(badge.dataset.to);
+        if (!Number.isFinite(from) || !Number.isFinite(to)) return false;
+        view.dispatch({ selection: { anchor: from }, scrollIntoView: true });
         return true;
       }
 

@@ -75,8 +75,28 @@ function renderMermaid(code: string): HTMLElement {
   return wrap;
 }
 
+/** Small persistent "source" badge that flips this block to raw source when
+ *  clicked. `from`/`to` are the block's range in the document; stored as
+ *  data attributes so the click handler (livePreview.ts) can flip the block
+ *  to source without re-resolving the syntax tree (math blocks have no Lezer
+ *  node). Returns the badge element so callers can re-attach it after a later
+ *  `innerHTML` replacement (katex rendering) would have wiped it out. */
+function appendSourceBadge(container: HTMLElement, from: number, to: number): HTMLElement {
+  const badge = document.createElement("span");
+  badge.className = "cm-source-badge";
+  badge.dataset.from = String(from);
+  badge.dataset.to = String(to);
+  badge.textContent = "source";
+  badge.title = "Edit source";
+  container.appendChild(badge);
+  return badge;
+}
+
 /** Render inline math ($...$) via KaTeX. Lazy-loads katex. */
 export class MathInlineWidget extends WidgetType {
+  from = 0;
+  to = 0;
+
   constructor(readonly tex: string) {
     super();
   }
@@ -89,6 +109,7 @@ export class MathInlineWidget extends WidgetType {
     const span = document.createElement("span");
     span.className = "cm-math-inline";
     span.textContent = `$${this.tex}$`; // fallback until katex loads
+    const badge = appendSourceBadge(span, this.from, this.to);
     void (async () => {
       try {
         const katex = (await import("katex")).default;
@@ -96,6 +117,8 @@ export class MathInlineWidget extends WidgetType {
           displayMode: false,
           throwOnError: false,
         });
+        // innerHTML replaced all children — re-attach the badge.
+        span.appendChild(badge);
       } catch {
         // keep fallback
       }
@@ -110,6 +133,9 @@ export class MathInlineWidget extends WidgetType {
 
 /** Render a block-math ($$...$$) via KaTeX. Lazy-loads katex. */
 export class MathBlockWidget extends WidgetType {
+  from = 0;
+  to = 0;
+
   constructor(readonly tex: string) {
     super();
   }
@@ -122,6 +148,7 @@ export class MathBlockWidget extends WidgetType {
     const div = document.createElement("div");
     div.className = "cm-math-block";
     div.textContent = `$$${this.tex}$$`; // fallback until katex loads
+    const badge = appendSourceBadge(div, this.from, this.to);
     void (async () => {
       try {
         const katex = (await import("katex")).default;
@@ -129,6 +156,8 @@ export class MathBlockWidget extends WidgetType {
           displayMode: true,
           throwOnError: false,
         });
+        // innerHTML replaced all children — re-attach the badge.
+        div.appendChild(badge);
       } catch {
         // keep the raw fallback text
       }
@@ -310,6 +339,9 @@ export class TaskCheckboxWidget extends WidgetType {
 }
 
 export class ImageWidget extends WidgetType {
+  from = 0;
+  to = 0;
+
   constructor(
     readonly src: string,
     readonly alt: string,
@@ -344,6 +376,7 @@ export class ImageWidget extends WidgetType {
     });
 
     wrap.appendChild(img);
+    appendSourceBadge(wrap, this.from, this.to);
     return wrap;
   }
 
