@@ -310,8 +310,14 @@ export class TableWidget extends WidgetType {
     div.className = "cm-table";
     div.innerHTML = renderMarkdownWithTableSource(this.raw);
     // Make each cell editable; edits are committed to the CM6 doc on blur.
+    // Cells the user actually edits are marked data-edited so serialization
+    // preserves the raw source of untouched cells verbatim (links, bold,
+    // entities etc. survive a no-op blur instead of being stripped).
     div.querySelectorAll("td, th").forEach((cell) => {
       cell.setAttribute("contenteditable", "true");
+      cell.addEventListener("input", () => {
+        cell.setAttribute("data-edited", "true");
+      });
     });
     div.addEventListener(
       "blur",
@@ -351,8 +357,16 @@ export function serializeTableCells(tableEl: HTMLElement): string {
 
 function cellText(cell: HTMLElement): string {
   const src = cell.getAttribute("data-source") ?? "";
+  if (cell.getAttribute("data-edited") !== "true") {
+    // Unedited cell — write the raw inline source verbatim so links, bold,
+    // entities, code spans etc. survive (their rendered textContent differs
+    // from data-source, so the comparison-based approach destroyed them on a
+    // no-op blur). data-source holds the parser-unescaped source, so re-escape
+    // literal pipes to keep the row parseable as a GFM table.
+    return src.replace(/\|/g, "\\|");
+  }
+  // The cell was edited — re-serialize, preserving a simple format wrap.
   const text = (cell.textContent ?? "").trim();
-  // If the cell was edited, try to preserve a simple format wrap from data-source.
   return preserveWrap(src, text);
 }
 
@@ -360,6 +374,7 @@ function cellText(cell: HTMLElement): string {
  *  text changed, re-wrap. Otherwise return plain text, re-escaping literal
  *  pipes so the row still parses as a GFM table when written back. */
 function preserveWrap(src: string, newText: string): string {
+  if (newText === "") return ""; // cleared cell — emit nothing, not a stray `**`
   const m = /^(\*{1,2}|`|_{1,2}|~~)([\s\S]*?)\1$/.exec(src);
   if (m) {
     // The markdown parser already unescaped pipes in data-source (`*a\|b*`

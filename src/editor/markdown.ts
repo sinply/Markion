@@ -18,24 +18,29 @@ export function renderMarkdownInline(src: string): string {
  *  that the rendered HTML drops, so table edit-in-place can preserve formats.
  *
  *  Note: the th/td render rules are temporarily overridden on the shared `md`
- *  instance; they fall back to the original rules and only add a data attribute,
- *  so this is safe to call concurrently with `renderMarkdown`. */
+ *  instance and restored afterwards, so `renderMarkdown` (used by the full-doc
+ *  preview) is not permanently polluted with the data-source injection. */
 export function renderMarkdownWithTableSource(src: string): string {
-  const thDefault = md.renderer.rules.th_open ?? ((tokens: any, i: number, options: any, env: any, self: any) => self.renderToken(tokens, i, options));
-  const tdDefault = md.renderer.rules.td_open ?? ((tokens: any, i: number, options: any, env: any, self: any) => self.renderToken(tokens, i, options));
+  const thDefault = md.renderer.rules.th_open;
+  const tdDefault = md.renderer.rules.td_open;
   md.renderer.rules.th_open = (tokens: any, idx: number, options: any, env: any, self: any) => {
     const token = tokens[idx];
     const next = tokens[idx + 1];
     if (next && next.type === "inline") token.attrSet("data-source", next.content);
-    return thDefault(tokens, idx, options, env, self);
+    return self.renderToken(tokens, idx, options);
   };
   md.renderer.rules.td_open = (tokens: any, idx: number, options: any, env: any, self: any) => {
     const token = tokens[idx];
     const next = tokens[idx + 1];
     if (next && next.type === "inline") token.attrSet("data-source", next.content);
-    return tdDefault(tokens, idx, options, env, self);
+    return self.renderToken(tokens, idx, options);
   };
-  return md.render(src);
+  try {
+    return md.render(src);
+  } finally {
+    md.renderer.rules.th_open = thDefault;
+    md.renderer.rules.td_open = tdDefault;
+  }
 }
 
 /** Serialize a HAST (lowlight v3) node to HTML.

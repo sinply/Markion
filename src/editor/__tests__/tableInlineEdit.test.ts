@@ -43,8 +43,10 @@ describe("TableWidget serialize", () => {
   it("preserves a format wrap when a cell's inner text is edited", () => {
     const div = document.createElement("div");
     div.innerHTML = renderMarkdownWithTableSource("| A | B |\n| --- | --- |\n| *em* | `code` |");
-    // change the first body cell text from 'em' to 'em!'
+    // Simulate what the cell's input listener does: mark the cell edited, then
+    // change its inner text from 'em' to 'em!'.
     const firstBodyCell = div.querySelector("tbody td") as HTMLElement;
+    firstBodyCell.dataset.edited = "true";
     firstBodyCell.textContent = "em!";
     const out = serializeTableCells(div);
     expect(out).toContain("*em!*");
@@ -84,5 +86,38 @@ describe("TableWidget serialize", () => {
     // An unchanged table must serialize back to the exact original source —
     // the wrapped escaped pipe is not a formatting/emphasis edit.
     expect(out).toBe("| A | B |\n| --- | --- |\n| *a\\|b* | c |");
+  });
+});
+
+describe("TableWidget serialize — no data loss on unchanged cells", () => {
+  it("preserves a link cell verbatim on a no-op blur", () => {
+    const div = document.createElement("div");
+    div.innerHTML = renderMarkdownWithTableSource(
+      "| A | B |\n| --- | --- |\n| see [docs](https://x) | c |",
+    );
+    const out = serializeTableCells(div);
+    // The link must survive — no cells were edited, so all sources are verbatim.
+    expect(out).toContain("[docs](https://x)");
+  });
+
+  it("preserves bold text inside a cell on a no-op blur", () => {
+    const div = document.createElement("div");
+    div.innerHTML = renderMarkdownWithTableSource(
+      "| A | B |\n| --- | --- |\n| a **bold** b | c |",
+    );
+    const out = serializeTableCells(div);
+    expect(out).toContain("a **bold** b");
+  });
+
+  it("returns an empty string when a wrapped cell is cleared to empty", () => {
+    const div = document.createElement("div");
+    div.innerHTML = renderMarkdownWithTableSource("| A | B |\n| --- | --- |\n| *em* | c |");
+    // mark the first body cell as edited (as the input handler would)
+    const first = div.querySelector("tbody td") as HTMLElement;
+    first.dataset.edited = "true";
+    first.textContent = "";
+    const out = serializeTableCells(div);
+    // must NOT emit a stray '* *' marker for the cleared cell
+    expect(out).not.toContain("**");
   });
 });
