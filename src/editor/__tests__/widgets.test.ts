@@ -43,15 +43,16 @@ describe("TaskCheckboxWidget", () => {
 });
 
 describe("CodeBlockWidget", () => {
-  it("renders code element with language class", () => {
+  it("renders the code as plain editable text (no hljs spans)", () => {
     const w = new CodeBlockWidget("let x = 1;", "ts");
     const dom = w.toDOM(mockView());
     const code = dom.querySelector("code")!;
     expect(code).toBeTruthy();
-    // lowlight produces <span class="hljs-keyword"> etc.
-    expect(code.innerHTML).toContain("let");
-    expect(code.innerHTML).toContain("=");
-    expect(code.innerHTML).toContain("1");
+    // Plain text contenteditable now (syntax highlighting removed for
+    // contenteditable safety) — textContent must hold the source verbatim.
+    expect(code.textContent).toBe("let x = 1;");
+    expect(code.getAttribute("contenteditable")).toBe("true");
+    expect(code.innerHTML).not.toContain("hljs-");
   });
 
   it("shows language badge", () => {

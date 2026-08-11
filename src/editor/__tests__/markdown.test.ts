@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { renderMarkdown, highlightCode } from "../markdown";
+import { renderMarkdown } from "../markdown";
 
 describe("renderMarkdown", () => {
   it("renders GFM tables", () => {
@@ -18,33 +18,6 @@ describe("renderMarkdown", () => {
     const html = renderMarkdown("```js\nconst x = 1;\n```\n");
     expect(html).toContain("<code");
     expect(html).toContain("const x = 1");
-  });
-
-  it("syntax-highlights Verilog via highlightCode (used by the code-block widget)", () => {
-    const html = highlightCode(
-      "always @ (posedge clk) begin\n    if (rst == 1'b1)\n        Rnew <= 'd0;\nend\n",
-      "verilog",
-    );
-    // highlight.js verilog produces hljs-* spans (keyword/type/etc.)
-    expect(html).toContain("hljs-");
-    expect(html).toContain("posedge");
-  });
-
-  it("syntax-highlights MATLAB via highlightCode", () => {
-    const html = highlightCode(
-      "for i = 1:14\n    if i <= 8\n        conf_list(i) = 85;\n    end\nend\n",
-      "matlab",
-    );
-    expect(html).toContain("hljs-");
-    expect(html).toContain("conf_list");
-  });
-
-  it("syntax-highlights VHDL via highlightCode", () => {
-    const html = highlightCode(
-      "process(clk) begin\n    if rising_edge(clk) then\n        q <= d;\n    end if;\nend process;\n",
-      "vhdl",
-    );
-    expect(html).toContain("hljs-");
   });
 
   it("renders headings", () => {
