@@ -61,6 +61,96 @@
   --hljs-meta: #79c0ff;
 }
 
+/* --- Tokyo Night (deep blue dark theme) --- */
+[data-theme="tokyo"] {
+  --bg: #1a1b26;
+  --fg: #c0caf5;
+  --fg-muted: #565f89;
+  --border: #3b4261;
+  --panel-bg: #16161e;
+  --panel-bg-2: #1f2335;
+  --code-bg: #16161e;
+  --inline-code-bg: rgba(122, 162, 247, 0.15);
+  --accent: #7aa2f7;
+  --accent-fg: #1a1b26;
+  --table-header-bg: #16161e;
+  --quote-border: #3b4261;
+  --quote-fg: #565f89;
+  --frontmatter-bg: #16161e;
+  --frontmatter-border: #3b4261;
+  --input-border: #3b4261;
+  --hover-bg: #24283b;
+  --selection-bg: #33467c;
+
+  --hljs-comment: #565f89;
+  --hljs-keyword: #bb9af7;
+  --hljs-number: #ff9e64;
+  --hljs-string: #9ece6a;
+  --hljs-title: #7dcfff;
+  --hljs-type: #e0af68;
+  --hljs-meta: #7aa2f7;
+}
+
+/* --- Catppuccin Mocha (soft pastel dark theme) --- */
+[data-theme="catppuccin"] {
+  --bg: #1e1e2e;
+  --fg: #cdd6f4;
+  --fg-muted: #a6adc8;
+  --border: #313244;
+  --panel-bg: #181825;
+  --panel-bg-2: #1e1e2e;
+  --code-bg: #181825;
+  --inline-code-bg: rgba(205, 214, 244, 0.12);
+  --accent: #89b4fa;
+  --accent-fg: #1e1e2e;
+  --table-header-bg: #181825;
+  --quote-border: #45475a;
+  --quote-fg: #a6adc8;
+  --frontmatter-bg: #181825;
+  --frontmatter-border: #313244;
+  --input-border: #45475a;
+  --hover-bg: #313244;
+  --selection-bg: #45475a;
+
+  --hljs-comment: #6c7086;
+  --hljs-keyword: #cba6f7;
+  --hljs-number: #fab387;
+  --hljs-string: #a6e3a1;
+  --hljs-title: #89dceb;
+  --hljs-type: #f9e2af;
+  --hljs-meta: #89b4fa;
+}
+
+/* --- Gruvbox (warm retro theme) --- */
+[data-theme="gruvbox"] {
+  --bg: #282828;
+  --fg: #ebdbb2;
+  --fg-muted: #a89984;
+  --border: #504945;
+  --panel-bg: #1d2021;
+  --panel-bg-2: #282828;
+  --code-bg: #1d2021;
+  --inline-code-bg: rgba(235, 219, 178, 0.12);
+  --accent: #b8bb26;
+  --accent-fg: #282828;
+  --table-header-bg: #1d2021;
+  --quote-border: #504945;
+  --quote-fg: #a89984;
+  --frontmatter-bg: #1d2021;
+  --frontmatter-border: #504945;
+  --input-border: #504945;
+  --hover-bg: #3c3836;
+  --selection-bg: #504945;
+
+  --hljs-comment: #928374;
+  --hljs-keyword: #fb4934;
+  --hljs-number: #d3869b;
+  --hljs-string: #b8bb26;
+  --hljs-title: #83a598;
+  --hljs-type: #fe8019;
+  --hljs-meta: #8ec07c;
+}
+
 /* --- Eye-care (护眼): soft green-tinted low-glare theme --- */
 [data-theme="eye"] {
   --bg: #c7edcc;

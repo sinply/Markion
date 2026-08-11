@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useUiStore } from "../stores/uiStore";
 import { useSettingsStore } from "../stores/settingsStore";
+import { useVaultStore } from "../stores/vaultStore";
 import type { MarkdownCommand } from "../editor/commands";
 import { useI18n, THEME_LABELS } from "../lib/i18n";
 import type { Theme } from "../lib/types";
@@ -25,6 +26,7 @@ export function MenuBar() {
 
   const ui = useUiStore();
   const settings = useSettingsStore();
+  const vaultStore = useVaultStore();
   const t = useI18n();
   const theme = settings.theme;
   const language = settings.language;
@@ -128,6 +130,7 @@ export function MenuBar() {
         { label: t.openFile, shortcut: "Ctrl+O", action: () => { ui.requestOpenFile(); close(); } },
         { label: t.save, shortcut: "Ctrl+S", action: () => { ui.requestSave(); close(); } },
         { label: t.saveAs, shortcut: "Ctrl+Shift+S", action: () => { ui.requestSaveAs(); close(); }, separatorAfter: true },
+        { label: t.setDefaultVault, action: () => { vaultStore.setAsDefault(); close(); }, separatorAfter: true },
         { label: t.preferences, action: () => { ui.setSettingsOpen(true); close(); }, separatorAfter: true },
         { label: t.recent, action: () => close(), separatorAfter: true },
         ...ui.recentFiles.slice(0, 5).map((p, i) => ({

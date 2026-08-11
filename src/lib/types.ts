@@ -19,7 +19,10 @@ export type Theme =
   | "eye"
   | "nord"
   | "dracula"
-  | "solarized";
+  | "solarized"
+  | "tokyo"
+  | "catppuccin"
+  | "gruvbox";
 
 export type Language = "en" | "zh";
 

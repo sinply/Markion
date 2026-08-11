@@ -11,6 +11,9 @@ export const THEME_LABELS: Record<Language, Record<Theme, string>> = {
     nord: "Nord",
     dracula: "Dracula",
     solarized: "Solarized",
+    tokyo: "Tokyo Night",
+    catppuccin: "Catppuccin",
+    gruvbox: "Gruvbox",
   },
   zh: {
     system: "跟随系统",
@@ -21,6 +24,9 @@ export const THEME_LABELS: Record<Language, Record<Theme, string>> = {
     nord: "北极",
     dracula: "德古拉",
     solarized: "日光",
+    tokyo: "东京之夜",
+    catppuccin: "猫派",
+    gruvbox: "暖木",
   },
 };
 
@@ -39,6 +45,7 @@ const en = {
   save: "Save",
   saveAs: "Save As…",
   preferences: "Preferences…",
+  setDefaultVault: "Set as Default Vault",
   recent: "Recent",
   clearRecent: "Clear Recent",
   exit: "Exit",
@@ -139,9 +146,10 @@ const en = {
     {
       title: "Shortcuts",
       body: [
-        "Ctrl+O open file · Ctrl+Shift+O open folder · Ctrl+S save · Ctrl+Shift+S save as.",
-        "Ctrl+E toggle edit/preview · Ctrl+Z/Y undo/redo · Ctrl+B/I bold/italic · Ctrl+1..3 headings.",
-        "F1 open documentation.",
+        "File: Ctrl+O open file · Ctrl+Shift+O open folder · Ctrl+S save · Ctrl+Shift+S save as.",
+        "Edit: Ctrl+Z undo · Ctrl+Y redo · Ctrl+X/C/V cut/copy/paste · Ctrl+A select all · Ctrl+E toggle edit/preview.",
+        "Format: Ctrl+B bold · Ctrl+I italic · Ctrl+1/2/3 headings · (Format menu for the rest).",
+        "Other: F1 documentation.",
       ],
     },
   ] as HelpSection[],
@@ -157,6 +165,7 @@ const zh: typeof en = {
   save: "保存",
   saveAs: "另存为…",
   preferences: "偏好设置…",
+  setDefaultVault: "设为默认 Vault",
   recent: "最近打开",
   clearRecent: "清除最近记录",
   exit: "退出",
@@ -257,9 +266,10 @@ const zh: typeof en = {
     {
       title: "快捷键",
       body: [
-        "Ctrl+O 打开文件 · Ctrl+Shift+O 打开文件夹 · Ctrl+S 保存 · Ctrl+Shift+S 另存为。",
-        "Ctrl+E 切换编辑/预览 · Ctrl+Z/Y 撤销/重做 · Ctrl+B/I 粗体/斜体 · Ctrl+1..3 标题。",
-        "F1 打开使用说明。",
+        "文件：Ctrl+O 打开文件 · Ctrl+Shift+O 打开文件夹 · Ctrl+S 保存 · Ctrl+Shift+S 另存为。",
+        "编辑：Ctrl+Z 撤销 · Ctrl+Y 重做 · Ctrl+X/C/V 剪切/复制/粘贴 · Ctrl+A 全选 · Ctrl+E 切换编辑/预览。",
+        "格式：Ctrl+B 粗体 · Ctrl+I 斜体 · Ctrl+1/2/3 标题 ·（其余在格式菜单）。",
+        "其他：F1 打开使用说明。",
       ],
     },
   ] as HelpSection[],

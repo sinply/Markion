@@ -211,7 +211,8 @@ export function GraphPanel() {
               if (svgRef.current) svgRef.current.style.cursor = "grab";
             }}
           >
-            <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
+            {/* Zoom around the viewBox center so the graph stays centered while scaling */}
+            <g transform={`translate(${pan.x},${pan.y}) translate(${VIEW_W / 2},${VIEW_H / 2}) scale(${zoom}) translate(${-VIEW_W / 2},${-VIEW_H / 2})`}>
               {data.edges.map((e, i) => {
                 const a = pos.get(e.source);
                 const b = pos.get(e.target);

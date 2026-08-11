@@ -28,6 +28,8 @@ interface VaultState {
   loadTree: (root: string) => Promise<void>;
   /** Load and remember as the default vault. */
   openVault: (root: string) => Promise<void>;
+  /** Explicitly pin the current vault as the default (File → Set as Default Vault). */
+  setAsDefault: () => void;
   applyReorder: (folderRel: string, name: string, newIndex: number) => Promise<void>;
   applyMove: (fromFolder: string, fromName: string, toFolder: string, toName: string) => Promise<void>;
   setCollapsed: (folderRel: string, collapsed: boolean) => Promise<void>;
@@ -46,6 +48,11 @@ export const useVaultStore = create<VaultState>((set, get) => ({
   openVault: async (root) => {
     await get().loadTree(root);
     setDefaultVault(root);
+  },
+
+  setAsDefault: () => {
+    const root = get().vaultRoot;
+    if (root) setDefaultVault(root);
   },
 
   applyReorder: async (folderRel, name, newIndex) => {
