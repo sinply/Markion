@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { useVaultStore } from "./stores/vaultStore";
+import { useVaultStore, getDefaultVault } from "./stores/vaultStore";
 import { useSettingsStore } from "./stores/settingsStore";
 import { startVaultWatch } from "./lib/ipc";
 import { Layout } from "./components/Layout";
@@ -11,31 +11,61 @@ import { SettingsDialog } from "./components/SettingsDialog";
 import { useTheme } from "./hooks/useTheme";
 import { useCommands } from "./hooks/useCommands";
 
+async function openVaultAndWatch(
+  folder: string,
+  openVault: (r: string) => Promise<void>,
+  loadSettings: (r: string) => Promise<void>,
+) {
+  await openVault(folder);
+  await loadSettings(folder);
+  try {
+    await startVaultWatch(folder);
+  } catch {
+    // watcher failure is non-fatal
+  }
+}
+
 export default function App() {
   useTheme();
   useCommands();
-  const loadTree = useVaultStore((s) => s.loadTree);
+  const openVault = useVaultStore((s) => s.openVault);
   const loadSettings = useSettingsStore((s) => s.load);
   const vaultRoot = useVaultStore((s) => s.vaultRoot);
+  const [booted, setBooted] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // On startup, auto-open the default vault if one was saved.
+  useEffect(() => {
+    let cancelled = false;
+    const boot = async () => {
+      const saved = getDefaultVault();
+      if (saved) {
+        setLoading(true);
+        try {
+          await openVaultAndWatch(saved, openVault, loadSettings);
+        } catch {
+          // saved vault no longer accessible — fall through to the picker
+        }
+        if (!cancelled) setLoading(false);
+      }
+      if (!cancelled) setBooted(true);
+    };
+    void boot();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const pickVault = async () => {
     const folder = await open({ directory: true, multiple: false });
     if (typeof folder !== "string") return;
     setLoading(true);
-    await loadTree(folder);
-    await loadSettings(folder);
-    // Begin watching for external file changes (tree rebuilds + open-file reload
-    // are handled by listeners in Layout/EditorPane).
-    try {
-      await startVaultWatch(folder);
-    } catch {
-      // watcher failure is non-fatal - the app still works, just no live refresh
-    }
+    await openVaultAndWatch(folder, openVault, loadSettings);
     setLoading(false);
   };
 
-  if (loading) {
+  if (loading || !booted) {
     return (
       <div style={{ padding: 32, textAlign: "center", fontFamily: "sans-serif" }}>
         Loading vault…

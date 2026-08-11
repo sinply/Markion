@@ -70,7 +70,7 @@ export function layout(nodes: GraphNode[], edges: GraphEdge[]): Map<string, Pos>
     });
   }
 
-  // Normalize to fit within the viewBox with a margin.
+  // Normalize to fit within the viewBox, then center the scaled content.
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   nodes.forEach((n) => {
     const p = pos.get(n.id)!;
@@ -79,16 +79,19 @@ export function layout(nodes: GraphNode[], edges: GraphEdge[]): Map<string, Pos>
     if (p.x > maxX) maxX = p.x;
     if (p.y > maxY) maxY = p.y;
   });
-  const pad = 40;
+  const pad = 30;
   const w = Math.max(1, maxX - minX);
   const h = Math.max(1, maxY - minY);
   const sx = (VIEW_W - pad * 2) / w;
   const sy = (VIEW_H - pad * 2) / h;
   const s = Math.min(sx, sy);
+  // Center the scaled bounding box in the viewBox (handles aspect mismatch).
+  const offsetX = (VIEW_W - s * w) / 2;
+  const offsetY = (VIEW_H - s * h) / 2;
   nodes.forEach((n) => {
     const p = pos.get(n.id)!;
-    p.x = pad + (p.x - minX) * s;
-    p.y = pad + (p.y - minY) * s;
+    p.x = offsetX + (p.x - minX) * s;
+    p.y = offsetY + (p.y - minY) * s;
   });
   return pos;
 }
