@@ -148,7 +148,7 @@ describe("isExternalUrl", () => {
 });
 
 describe("frontmatter", () => {
-  it("replaces a leading YAML frontmatter block with a properties widget", () => {
+  it("keeps a leading YAML frontmatter block as editable source in edit mode", () => {
     const state = stateOf("---\nauthor: sinply\ncreated: 2022-03-12\n---\n\n# Title\n");
     const decos = buildDecorations(state);
     const iter = decos.iter();
@@ -160,7 +160,11 @@ describe("frontmatter", () => {
       }
       iter.next();
     }
-    expect(foundFrontmatter).toBe(true);
+    // Edit mode must NOT replace frontmatter with a read-only widget — the
+    // user needs to edit the YAML source directly.
+    expect(foundFrontmatter).toBe(false);
+    // The frontmatter text is still in the doc (source preserved).
+    expect(state.doc.toString()).toContain("author: sinply");
   });
 
   it("does NOT replace a horizontal rule mid-document", () => {

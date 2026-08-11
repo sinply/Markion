@@ -142,21 +142,32 @@ export class PreviewWidget extends WidgetType {
   toDOM(view: EditorView): HTMLElement {
     const div = document.createElement("div");
     div.className = "cm-preview";
-    // Strip the doc-leading YAML frontmatter (--- ... ---) so markdown-it
-    // doesn't render it as a broken heading/hr.
-    const fm = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(this.raw);
+    // Split off the doc-leading YAML frontmatter so markdown-it doesn't render
+    // it as a broken heading/hr; show it as a properties card instead.
+    const fm = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(this.raw);
     const body = fm ? this.raw.slice(fm[0].length) : this.raw;
-    div.innerHTML = renderMarkdown(body);
+    if (fm) {
+      const props = parseFrontmatter(fm[1]);
+      if (props.length > 0) {
+        const card = new FrontmatterWidget(props).toDOM(view);
+        card.classList.add("cm-preview-frontmatter");
+        div.appendChild(card);
+      }
+    }
+    const bodyEl = document.createElement("div");
+    bodyEl.className = "cm-preview-body";
+    bodyEl.innerHTML = renderMarkdown(body);
     // Resolve local image srcs (rewrite relative paths via the context facet).
     const ctx = view.state.facet(markdownContextFacet)[0];
     if (ctx) {
-      div.querySelectorAll("img").forEach((img) => {
+      bodyEl.querySelectorAll("img").forEach((img) => {
         const src = img.getAttribute("src") ?? "";
         if (src && !isRemoteSrc(src)) {
           img.src = imageToSrc(src, ctx);
         }
       });
     }
+    div.appendChild(bodyEl);
     return div;
   }
 

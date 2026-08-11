@@ -3,7 +3,7 @@ import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder, EditorState, StateEffect, StateField } from "@codemirror/state";
 import type { SyntaxNode } from "@lezer/common";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget, MathInlineWidget, FrontmatterWidget, PreviewWidget, parseFrontmatter } from "./widgets";
+import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget, MathInlineWidget, PreviewWidget } from "./widgets";
 
 interface DecoEntry {
   from: number;
@@ -334,21 +334,11 @@ export function buildDecorations(state: EditorState): DecorationSet {
     },
   });
 
-  // --- YAML frontmatter: `---...---` at the very start of the doc becomes a
-  //     Properties panel (Obsidian-style). Lezer sees it as HorizontalRule +
-  //     SetextHeading, so scan the raw text first and take the doc-leading block.
+  // NOTE: YAML frontmatter is intentionally NOT replaced in edit (live) mode —
+  // it stays as editable source so the user can edit it. Only preview mode
+  // strips it (PreviewWidget). A Decoration.replace here made the frontmatter
+  // a read-only widget and made the document appear "like preview / uneditable".
   const docText = state.doc.toString();
-  const fmMatch = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(docText);
-  if (fmMatch) {
-    const props = parseFrontmatter(fmMatch[1]);
-    if (props.length > 0) {
-      entries.push({
-        from: 0,
-        to: fmMatch[0].length,
-        decoration: Decoration.replace({ widget: new FrontmatterWidget(props), block: true }),
-      });
-    }
-  }
 
   // --- Block math: $$...$$ (Lezer markdown has no math nodes; scan the doc) ---
   const mathRe = /\$\$([\s\S]+?)\$\$/g;
