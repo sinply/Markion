@@ -6,10 +6,10 @@ import { serializeTableCells } from "../widgets";
 
 const DOC = "| A | B |\n| --- | --- |\n| *em* | `code` |\n\nx\n";
 
-function mount() {
+function mount(doc: string = DOC) {
   const parent = document.createElement("div");
   document.body.appendChild(parent);
-  const state = createEditorState(DOC, () => {}, { onStateChange: () => {} });
+  const state = createEditorState(doc, () => {}, { onStateChange: () => {} });
   const view = new EditorView({ state, parent });
   void view.contentDOM.offsetWidth;
   return { view, parent };
@@ -119,5 +119,23 @@ describe("TableWidget serialize — no data loss on unchanged cells", () => {
     const out = serializeTableCells(div);
     // must NOT emit a stray '* *' marker for the cleared cell
     expect(out).not.toContain("**");
+  });
+});
+
+describe("TableWidget does not let CM6 hijack typing", () => {
+  it("a keydown inside a table cell does NOT dispatch a CM6 transaction", () => {
+    const { view, parent } = mount("text\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\nend\n");
+    view.dispatch({ selection: { anchor: view.state.doc.length } });
+    const cell = parent.querySelector(".cm-table [contenteditable]") as HTMLElement;
+    const docBefore = view.state.doc.toString();
+    // Enter is bound in CM6's default keymap (insertNewlineAndIndent) — if the
+    // widget doesn't ignore the event, CM6 prevents it and inserts a newline at
+    // the doc-end cursor.
+    const ev = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    cell.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(false);
+    expect(view.state.doc.toString()).toBe(docBefore);
+    view.destroy();
+    document.body.removeChild(parent);
   });
 });

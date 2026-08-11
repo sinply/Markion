@@ -71,3 +71,34 @@ describe("CodeBlockWidget commit-on-blur", () => {
     document.body.removeChild(parent);
   });
 });
+
+describe("CodeBlockWidget does not let CM6 hijack typing", () => {
+  it("a keydown inside the code block does NOT dispatch a CM6 transaction", () => {
+    const { view, parent } = mount();
+    view.dispatch({ selection: { anchor: DOC.length } });
+    const ce = parent.querySelector(".cm-codeblock [contenteditable]") as HTMLElement;
+    const docBefore = view.state.doc.toString();
+    // Dispatch an Enter keydown inside the contenteditable.
+    const ev = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    ce.dispatchEvent(ev);
+    // If CM6 hijacks it, it would preventDefault and dispatch at the doc end.
+    expect(ev.defaultPrevented).toBe(false);
+    // The doc must be unchanged (no stray newline at end of file).
+    expect(view.state.doc.toString()).toBe(docBefore);
+    view.destroy();
+    document.body.removeChild(parent);
+  });
+
+  it("a character keydown inside the code block does NOT dispatch a CM6 transaction", () => {
+    const { view, parent } = mount();
+    view.dispatch({ selection: { anchor: DOC.length } });
+    const ce = parent.querySelector(".cm-codeblock [contenteditable]") as HTMLElement;
+    const docBefore = view.state.doc.toString();
+    const ev = new KeyboardEvent("keydown", { key: "a", bubbles: true, cancelable: true });
+    ce.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(false);
+    expect(view.state.doc.toString()).toBe(docBefore);
+    view.destroy();
+    document.body.removeChild(parent);
+  });
+});

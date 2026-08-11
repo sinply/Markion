@@ -65,11 +65,13 @@ export class CodeBlockWidget extends WidgetType {
     return pre;
   }
 
-  // Ignore mousedown so CM6 does not move its cursor into the block (which
-  // would trigger the isOnActiveLine source flip). The contenteditable handles
-  // the click itself and takes focus.
-  ignoreEvent(e: Event): boolean {
-    return e.type === "mousedown" || e.type === "mouseup" || e.type === "click";
+  // The widget owns a contenteditable: CM6 must ignore ALL events inside it
+  // (not just mouse events), otherwise key/input events fall through to CM6's
+  // input pipeline and get dispatched at the doc-end cursor instead of editing
+  // the block in place. The browser drives all editing inside the
+  // contenteditable; commit-on-blur writes the result back to the doc.
+  ignoreEvent(): boolean {
+    return true;
   }
 }
 
@@ -352,8 +354,13 @@ export class TableWidget extends WidgetType {
     return div;
   }
 
-  ignoreEvent(e: Event): boolean {
-    return e.type === "mousedown" || e.type === "mouseup" || e.type === "click";
+  // The widget owns contenteditable cells: CM6 must ignore ALL events inside
+  // it (not just mouse events), otherwise key/input events fall through to
+  // CM6's input pipeline and get dispatched at the doc-end cursor instead of
+  // editing the cell in place. The browser drives all editing; commit-on-blur
+  // writes the result back to the doc.
+  ignoreEvent(): boolean {
+    return true;
   }
 }
 
