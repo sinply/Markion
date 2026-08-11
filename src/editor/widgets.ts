@@ -52,7 +52,11 @@ export class CodeBlockWidget extends WidgetType {
       const newCode = code.textContent ?? "";
       const lang = this.language;
       const newSource = "```" + lang + "\n" + newCode + "\n```";
-      if (newSource !== this.code) {
+      // Compare unfenced to unfenced: `newCode` is the code body, `this.code`
+      // the constructor arg (unfenced). `newSource` is the fenced rebuild and
+      // can never equal `this.code` — comparing them would make every blur
+      // (even no-op ones) dispatch a transaction and append a phantom undo step.
+      if (newCode !== this.code) {
         this.view.dispatch({
           changes: { from: this.blockFrom, to: this.blockTo, insert: newSource },
         });

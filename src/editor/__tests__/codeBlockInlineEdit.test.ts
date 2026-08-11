@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { EditorView } from "@codemirror/view";
 import { createEditorState } from "../codemirror";
 import { livePreviewField } from "../livePreview";
@@ -55,6 +55,18 @@ describe("CodeBlockWidget commit-on-blur", () => {
     const docText = view.state.doc.toString();
     expect(docText).toContain("let a = 99;");
     expect(docText).not.toContain("let a = 1;");
+    view.destroy();
+    document.body.removeChild(parent);
+  });
+
+  it("does not dispatch on no-op blur (no edits)", () => {
+    const { view, parent } = mount();
+    view.dispatch({ selection: { anchor: DOC.length } });
+    const ce = parent.querySelector(".cm-codeblock [contenteditable]") as HTMLElement;
+    const dispatch = vi.spyOn(view, "dispatch");
+    ce.dispatchEvent(new Event("blur"));
+    expect(dispatch).not.toHaveBeenCalled();
+    dispatch.mockRestore();
     view.destroy();
     document.body.removeChild(parent);
   });
