@@ -62,6 +62,21 @@ function hiddenMark(): Decoration {
   return Decoration.mark({ attributes: { class: "cm-hidden cm-mark" } });
 }
 
+/** Mark a syntax marker as hidden — unless it's on the active (cursor) line,
+ *  where the source should stay visible so the user can edit it. */
+function markHiddenAt(state: EditorState, from: number, to: number, activeLine: number): Decoration {
+  if (activeLine >= 0 && state.doc.lineAt(from).number === activeLine) {
+    return Decoration.mark({ attributes: { class: "cm-active-line-mark", style: "opacity:0.55" } });
+  }
+  return hiddenMark();
+}
+
+/** The 1-based line the selection cursor is on, or -1 if unknown. */
+function activeLineOf(state: EditorState): number {
+  const head = state.selection.main.head;
+  return state.doc.lineAt(head).number;
+}
+
 /** Extract src + alt from an Image node (alt via regex, src via URL child). */
 function imageSrcAltFromNode(state: EditorState, node: SyntaxNode): { src: string; alt: string } {
   let src = "";
@@ -105,6 +120,7 @@ export function isExternalUrl(url: string): boolean {
 
 /** Pure function: build decorations from the Lezer syntax tree. */
 export function buildDecorations(state: EditorState): DecorationSet {
+  const activeLine = activeLineOf(state);
   const entries: DecoEntry[] = [];
   const tree = syntaxTree(state);
 
@@ -118,7 +134,7 @@ export function buildDecorations(state: EditorState): DecorationSet {
         if (cur.firstChild()) {
           do {
             if (cur.type.name === "EmphasisMark") {
-              entries.push({ from: cur.from, to: cur.to, decoration: hiddenMark() });
+              entries.push({ from: cur.from, to: cur.to, decoration: markHiddenAt(state, cur.from, cur.to, activeLine) });
             }
           } while (cur.nextSibling());
         }
@@ -138,10 +154,7 @@ export function buildDecorations(state: EditorState): DecorationSet {
         if (cur.firstChild()) {
           do {
             if (cur.type.name === "CodeMark") {
-              entries.push({
-                from: cur.from, to: cur.to,
-                decoration: Decoration.mark({ attributes: { class: "cm-hidden cm-code-marker" } }),
-              });
+              entries.push({ from: cur.from, to: cur.to, decoration: markHiddenAt(state, cur.from, cur.to, activeLine) });
             }
           } while (cur.nextSibling());
         }
@@ -182,7 +195,7 @@ export function buildDecorations(state: EditorState): DecorationSet {
           });
           for (const c of children) {
             if (c.name === "LinkMark" && (c.from < imgChild.from || c.to > imgChild.to)) {
-              entries.push({ from: c.from, to: c.to, decoration: hiddenMark() });
+              entries.push({ from: c.from, to: c.to, decoration: markHiddenAt(state, c.from, c.to, activeLine) });
             }
           }
           return false;
@@ -225,7 +238,7 @@ export function buildDecorations(state: EditorState): DecorationSet {
         if (cur.firstChild()) {
           do {
             if (cur.type.name === "HeaderMark") {
-              entries.push({ from: cur.from, to: cur.to, decoration: hiddenMark() });
+              entries.push({ from: cur.from, to: cur.to, decoration: markHiddenAt(state, cur.from, cur.to, activeLine) });
             }
           } while (cur.nextSibling());
         }
@@ -247,7 +260,7 @@ export function buildDecorations(state: EditorState): DecorationSet {
         if (cur.firstChild()) {
           do {
             if (cur.type.name === "QuoteMark") {
-              entries.push({ from: cur.from, to: cur.to, decoration: hiddenMark() });
+              entries.push({ from: cur.from, to: cur.to, decoration: markHiddenAt(state, cur.from, cur.to, activeLine) });
             }
           } while (cur.nextSibling());
         }
@@ -265,7 +278,7 @@ export function buildDecorations(state: EditorState): DecorationSet {
 
       // --- List bullet/number marker ---
       if (type === "ListMark") {
-        entries.push({ from: node.from, to: node.to, decoration: hiddenMark() });
+        entries.push({ from: node.from, to: node.to, decoration: markHiddenAt(state, node.from, node.to, activeLine) });
         return false;
       }
 
@@ -383,7 +396,7 @@ class LivePlugin {
   }
 
   update(update: ViewUpdate) {
-    if (update.docChanged || update.viewportChanged) {
+    if (update.docChanged || update.viewportChanged || update.selectionSet) {
       update.view.dispatch({
         effects: setDecorations.of(buildDecorations(update.state)),
       });

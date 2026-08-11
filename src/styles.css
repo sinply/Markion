@@ -750,3 +750,10 @@ label {
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
 }
+
+/* Active-line source markers: on the cursor line, markdown syntax shows
+   faintly so the user can edit the source; other lines hide it fully. */
+.cm-active-line-mark {
+  opacity: 0.55;
+  user-select: none;
+}

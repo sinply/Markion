@@ -5,11 +5,17 @@ import { Table, TaskList, Strikethrough } from "@lezer/markdown";
 import { buildDecorations, resolveLinkUrl, isExternalUrl } from "../livePreview";
 import { ImageWidget } from "../widgets";
 
-function stateOf(doc: string): EditorState {
+function stateOf(doc: string, cursorPos?: number): EditorState {
   return EditorState.create({
     doc,
+    selection: cursorPos !== undefined ? { anchor: cursorPos } : undefined,
     extensions: [markdown({ base: markdownLanguage, extensions: [Table, TaskList, Strikethrough] })],
   });
+}
+
+/** Put the cursor at the very end so no marker is on the active line (markers all hide). */
+function stateOfEnd(doc: string): EditorState {
+  return stateOf(doc, doc.length);
 }
 
 function countByClass(decos: ReturnType<typeof buildDecorations>, className: string): number {
@@ -44,14 +50,16 @@ function findImageWidget(decos: ReturnType<typeof buildDecorations>): ImageWidge
 
 describe("buildDecorations", () => {
   it("hides bold emphasis markers (**)", () => {
+    // On a single-line doc the cursor is on the active line, so markers are
+    // either fully hidden (cm-mark) or faint (cm-active-line-mark). Either way
+    // the two ** markers are decorated.
     const decos = buildDecorations(stateOf("**bold** text"));
-    // cm-mark class on opacity-hidden markers
-    expect(countByClass(decos, "cm-mark")).toBe(2); // opening + closing **
+    expect(countByClass(decos, "cm-mark") + countByClass(decos, "cm-active-line-mark")).toBe(2);
   });
 
   it("hides inline code backticks", () => {
     const decos = buildDecorations(stateOf("`code` text"));
-    expect(countByClass(decos, "cm-code-marker")).toBe(2); // opening + closing `
+    expect(countByClass(decos, "cm-mark") + countByClass(decos, "cm-active-line-mark")).toBe(2); // opening + closing `
     expect(countByClass(decos, "cm-inline-code")).toBe(1); // whole inline code styled
   });
 
@@ -83,7 +91,7 @@ describe("buildDecorations", () => {
   });
 
   it("styles headings and hides the # mark", () => {
-    const decos = buildDecorations(stateOf("# Title\n"));
+    const decos = buildDecorations(stateOfEnd("# Title\n"));
     expect(countByClass(decos, "cm-heading")).toBeGreaterThan(0);
     expect(countByClass(decos, "cm-mark")).toBeGreaterThan(0); // # hidden
   });
