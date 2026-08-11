@@ -1,6 +1,6 @@
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view";
 import { syntaxTree } from "@codemirror/language";
-import { RangeSetBuilder, EditorState, StateEffect, StateField } from "@codemirror/state";
+import { RangeSetBuilder, EditorState, StateField } from "@codemirror/state";
 import type { SyntaxNode } from "@lezer/common";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget, MathInlineWidget, PreviewWidget } from "./widgets";
@@ -11,8 +11,6 @@ interface DecoEntry {
   decoration: Decoration;
 }
 
-const setDecorations = StateEffect.define<DecorationSet>();
-
 /** StateField holding live-preview decorations, provided via
  *  EditorView.decorations.from(field) so line-spanning block widgets are allowed
  *  (plugin-provided decorations cannot replace line breaks).
@@ -22,13 +20,14 @@ export const livePreviewField = StateField.define<DecorationSet>({
     return buildDecorations(state);
   },
   update(decos: DecorationSet, tr) {
-    decos = decos.map(tr.changes);
-    for (const e of tr.effects) {
-      if (e.is(setDecorations)) {
-        decos = e.value;
-      }
+    // Rebuild synchronously on selection or doc changes so the block under the
+    // cursor switches to editable source immediately. (The old approach — the
+    // ViewPlugin dispatching a setDecorations effect — never reached this field,
+    // so code blocks / images stayed read-only widgets after the cursor moved.)
+    if (tr.docChanged || tr.selection) {
+      return buildDecorations(tr.state);
     }
-    return decos;
+    return decos.map(tr.changes);
   },
   provide: (f) => EditorView.decorations.from(f),
 });
@@ -418,15 +417,13 @@ export function buildDecorations(state: EditorState): DecorationSet {
 
 class LivePlugin {
   constructor(_view: EditorView) {
-    // Initial decorations are built by the StateField's `create`.
+    // Initial decorations are built by the StateField's `create`; rebuilds on
+    // selection/doc changes happen inside the StateField itself.
   }
 
-  update(update: ViewUpdate) {
-    if (update.docChanged || update.viewportChanged || update.selectionSet) {
-      update.view.dispatch({
-        effects: setDecorations.of(buildDecorations(update.state)),
-      });
-    }
+  update(_update: ViewUpdate) {
+    // Decoration updates now live in the StateField; this plugin only wires
+    // click handling (task toggle / external link open) via eventHandlers.
   }
 }
 
