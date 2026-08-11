@@ -54,19 +54,19 @@ export function Layout() {
           <>
             <Separator id="sep-outline" style={{ width: 3, background: "var(--border)" }} />
             <Panel id="outline" defaultSize="25" minSize="10" maxSize="35">
-              <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+              <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
                 {showOutline && (
-                  <div style={{ flex: 1, overflow: "auto" }}>
+                  <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
                     <OutlinePane state={editorState} onJump={handleJump} />
                   </div>
                 )}
                 {showBacklinks && (
-                  <div style={{ borderTop: "1px solid var(--border)" }}>
+                  <div style={{ borderTop: "1px solid var(--border)", overflow: "auto", maxHeight: "30%" }}>
                     <BacklinksPanel />
                   </div>
                 )}
                 {showGraph && (
-                  <div style={{ borderTop: "1px solid var(--border)" }}>
+                  <div style={{ borderTop: "1px solid var(--border)", overflow: "auto", maxHeight: "40%" }}>
                     <GraphPanel />
                   </div>
                 )}
