@@ -362,9 +362,13 @@ function cellText(cell: HTMLElement): string {
 function preserveWrap(src: string, newText: string): string {
   const m = /^(\*{1,2}|`|_{1,2}|~~)([\s\S]*?)\1$/.exec(src);
   if (m) {
-    // Whole cell is wrapped in a marker pair → any inner pipe is protected by
-    // the markers, so keep the wrap (or re-wrap the edited inner text).
-    return m[2] === newText ? src : m[1] + newText + m[1];
+    // The markdown parser already unescaped pipes in data-source (`*a\|b*`
+    // arrives here as `*a|b*`), so re-escape literal pipes on write-back. The
+    // GFM table rule splits cells on `|` even inside `*...*` markers, so an
+    // unescaped pipe would re-parse the row into extra columns and destroy the
+    // emphasis wrap. Keep the wrap (or re-wrap the edited inner text).
+    const wrapped = m[2] === newText ? src : m[1] + newText + m[1];
+    return wrapped.replace(/\|/g, "\\|");
   }
   const out = src === newText ? src : newText;
   // The markdown parser already unescaped pipes in data-source (`a\|b` arrives

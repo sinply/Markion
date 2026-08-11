@@ -59,4 +59,30 @@ describe("TableWidget serialize", () => {
     // re-escapes the literal delimiter pipe on write-back to keep the row valid.
     expect(out).toContain("a\\|b");
   });
+
+  it("re-escapes a literal pipe inside a format wrap so it round-trips as one cell", () => {
+    const div = document.createElement("div");
+    div.innerHTML = renderMarkdownWithTableSource("| A | B |\n| --- | --- |\n| *a\\|b* | c |");
+    const out = serializeTableCells(div);
+    // The parser unescaped the pipe inside the wrap (data-source is `*a|b*`), so
+    // the serializer must re-escape it on write-back, or the pipe re-splits the
+    // row into extra columns (and the emphasis wrap is destroyed).
+    expect(out).toContain("*a\\|b*");
+    // Re-parsing the serialized output must keep 2 columns, not 3.
+    const re = document.createElement("div");
+    re.innerHTML = renderMarkdownWithTableSource(out);
+    const bodyCells = Array.from(re.querySelectorAll("tbody tr")).map((tr) =>
+      Array.from(tr.querySelectorAll("th, td")).length,
+    );
+    expect(bodyCells[0]).toBe(2);
+  });
+
+  it("does not rewrite the source on a no-op blur (unchanged escaped pipe)", () => {
+    const div = document.createElement("div");
+    div.innerHTML = renderMarkdownWithTableSource("| A | B |\n| --- | --- |\n| *a\\|b* | c |");
+    const out = serializeTableCells(div);
+    // An unchanged table must serialize back to the exact original source —
+    // the wrapped escaped pipe is not a formatting/emphasis edit.
+    expect(out).toBe("| A | B |\n| --- | --- |\n| *a\\|b* | c |");
+  });
 });
