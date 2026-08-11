@@ -33,6 +33,12 @@ npm run tauri dev        # Launch desktop app in dev mode
 npm run tauri build      # Production build
 ```
 
+## Release process
+
+- **Every code change** is pushed to the `main` branch (`feat/backend-foundation` → `main`) and bump the version in package.json / Cargo.toml / tauri.conf.json / AboutDialog.
+- **GitHub Release (exe) is created ONLY for significant, bug-free feature versions** — e.g. v0.6.0, v0.7.0, v0.8.0. Do NOT create a release for every small patch; too many releases is noise. Small fixes just bump the patch version and push code.
+- Only create a release when the build passes tests and the feature set is stable.
+
 ## Architecture
 
 ### Process boundary
