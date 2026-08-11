@@ -179,7 +179,8 @@ export function MenuBar() {
     {
       label: t.menuHelp,
       items: [
-        { label: t.documentation, shortcut: "F1", action: () => { ui.setHelpOpen(true); close(); }, separatorAfter: true },
+        { label: t.documentation, shortcut: "F1", action: () => { ui.setHelpOpen(true); close(); } },
+        { label: t.shortcuts, action: () => { ui.setShortcutsOpen(true); close(); }, separatorAfter: true },
         { label: t.about, action: () => { ui.setAboutOpen(true); close(); } },
       ],
     },

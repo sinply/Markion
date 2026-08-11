@@ -241,8 +241,16 @@ export function buildDecorations(state: EditorState): DecorationSet {
         return false;
       }
 
-      // --- Blockquote ---
+      // --- Blockquote: hide the `>` mark(s), then style the content ---
       if (type === "Blockquote") {
+        const cur = node.node.cursor();
+        if (cur.firstChild()) {
+          do {
+            if (cur.type.name === "QuoteMark") {
+              entries.push({ from: cur.from, to: cur.to, decoration: hiddenMark() });
+            }
+          } while (cur.nextSibling());
+        }
         entries.push({
           from: node.from, to: node.to,
           decoration: Decoration.mark({
@@ -252,12 +260,6 @@ export function buildDecorations(state: EditorState): DecorationSet {
             },
           }),
         });
-        return false;
-      }
-
-      // --- Blockquote mark (>) ---
-      if (type === "QuoteMark") {
-        entries.push({ from: node.from, to: node.to, decoration: hiddenMark() });
         return false;
       }
 

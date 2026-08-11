@@ -29,4 +29,16 @@ describe("extractHeadings", () => {
   it("returns empty for a document with no headings", () => {
     expect(extractHeadings(stateOf("plain paragraph\n\n- list item\n"))).toEqual([]);
   });
+
+  it("ignores YAML frontmatter (--- ... ---) at the top", () => {
+    const doc = "---\nauthor: sinply\ncreated: 2022-03-12\n---\n\n# Real Title\n";
+    const headings = extractHeadings(stateOf(doc));
+    expect(headings.map((h) => h.text)).toEqual(["Real Title"]);
+  });
+
+  it("still finds headings after frontmatter", () => {
+    const doc = "---\nauthor: x\n---\n\n## Section\n\n### Sub\n";
+    const headings = extractHeadings(stateOf(doc));
+    expect(headings.map((h) => h.text)).toEqual(["Section", "Sub"]);
+  });
 });

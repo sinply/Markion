@@ -11,8 +11,19 @@ interface Heading {
 export function extractHeadings(state: EditorState): Heading[] {
   const tree = syntaxTree(state);
   const headings: Heading[] = [];
+
+  // The doc-leading YAML frontmatter (`---...---`) is parsed by Lezer as a
+  // SetextHeading, so find its end offset and skip everything inside it.
+  let fmEnd = 0;
+  const docText = state.doc.toString();
+  const fm = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(docText);
+  if (fm) fmEnd = fm[0].length;
+
   tree.iterate({
     enter(node) {
+      // Only filter out heading nodes that start inside the frontmatter;
+      // don't skip the Document node (that would hide every heading).
+      if (node.from < fmEnd) return true;
       const name = node.type.name;
       const m = name.match(/^(?:ATX|Setext)Heading(\d)$/);
       if (!m) return;

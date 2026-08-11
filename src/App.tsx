@@ -8,6 +8,7 @@ import { MenuBar } from "./components/MenuBar";
 import { AboutDialog } from "./components/AboutDialog";
 import { HelpDialog } from "./components/HelpDialog";
 import { SettingsDialog } from "./components/SettingsDialog";
+import { ShortcutsDialog } from "./components/ShortcutsDialog";
 import { useTheme } from "./hooks/useTheme";
 import { useFont } from "./hooks/useFont";
 import { useCommands } from "./hooks/useCommands";
@@ -109,6 +110,7 @@ export default function App() {
       <SettingsDialog />
       <AboutDialog />
       <HelpDialog />
+      <ShortcutsDialog />
     </>
   );
 }
