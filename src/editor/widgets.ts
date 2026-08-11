@@ -332,8 +332,11 @@ export class TableWidget extends WidgetType {
     // Cells the user actually edits are marked data-edited so serialization
     // preserves the raw source of untouched cells verbatim (links, bold,
     // entities etc. survive a no-op blur instead of being stripped).
-    div.querySelectorAll("td, th").forEach((cell) => {
+    div.querySelectorAll<HTMLElement>("td, th").forEach((cell) => {
       cell.setAttribute("contenteditable", "true");
+      // Snapshot the initial rendered text so serialization can tell whether a
+      // marked-edited cell's text actually changed (vs. merely being touched).
+      cell.dataset.originalText = cell.textContent ?? "";
       cell.addEventListener("input", () => {
         cell.setAttribute("data-edited", "true");
       });
@@ -391,6 +394,12 @@ function cellText(cell: HTMLElement): string {
   }
   // The cell was edited — re-serialize, preserving a simple format wrap.
   const text = (cell.textContent ?? "").trim();
+  // If the rendered text is unchanged from render time, the user only touched
+  // the cell without changing it — preserve the source verbatim so inline
+  // formats (links/bold) aren't stripped by comparing rendered text vs source.
+  if (text === (cell.dataset.originalText ?? "").trim()) {
+    return src.replace(/\|/g, "\\|");
+  }
   return preserveWrap(src, text);
 }
 

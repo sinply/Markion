@@ -122,6 +122,40 @@ describe("TableWidget serialize — no data loss on unchanged cells", () => {
   });
 });
 
+describe("TableWidget serialize — format preserved when a cell is touched but text unchanged", () => {
+  it("preserves a link when a cell is marked edited but text is unchanged", () => {
+    const div = document.createElement("div");
+    div.innerHTML = renderMarkdownWithTableSource("| A | B |\n| --- | --- |\n| see [docs](https://x) | c |");
+    const cell = div.querySelector("tbody td") as HTMLElement;
+    // simulate the input listener marking it edited
+    cell.dataset.edited = "true";
+    cell.dataset.originalText = cell.textContent ?? "";
+    const out = serializeTableCells(div);
+    expect(out).toContain("see [docs](https://x)"); // link survives
+  });
+
+  it("preserves bold text when a cell is marked edited but text is unchanged", () => {
+    const div = document.createElement("div");
+    div.innerHTML = renderMarkdownWithTableSource("| A | B |\n| --- | --- |\n| a **bold** b | c |");
+    const cell = div.querySelector("tbody td") as HTMLElement;
+    cell.dataset.edited = "true";
+    cell.dataset.originalText = cell.textContent ?? "";
+    const out = serializeTableCells(div);
+    expect(out).toContain("a **bold** b");
+  });
+
+  it("still re-wraps when the inner text actually changed", () => {
+    const div = document.createElement("div");
+    div.innerHTML = renderMarkdownWithTableSource("| A | B |\n| --- | --- |\n| *em* | c |");
+    const cell = div.querySelector("tbody td") as HTMLElement;
+    cell.dataset.edited = "true";
+    cell.dataset.originalText = cell.textContent ?? ""; // "em"
+    cell.textContent = "em!"; // actually changed
+    const out = serializeTableCells(div);
+    expect(out).toContain("*em!*");
+  });
+});
+
 describe("TableWidget does not let CM6 hijack typing", () => {
   it("a keydown inside a table cell does NOT dispatch a CM6 transaction", () => {
     const { view, parent } = mount("text\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\nend\n");
