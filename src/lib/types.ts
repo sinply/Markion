@@ -23,6 +23,8 @@ export type Theme =
 
 export type Language = "en" | "zh";
 
+export type FontChoice = "system" | "serif" | "sans" | "mono" | "rounded";
+
 export interface Settings {
   assetsStrategy: AssetsStrategy;
   pathStyle: PathStyle;
@@ -30,6 +32,7 @@ export interface Settings {
   showHiddenFiles: boolean;
   livePreview: boolean;
   language: Language;
+  font: FontChoice;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -39,4 +42,5 @@ export const DEFAULT_SETTINGS: Settings = {
   showHiddenFiles: false,
   livePreview: true,
   language: "zh",
+  font: "system",
 };

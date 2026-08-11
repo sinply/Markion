@@ -9,6 +9,7 @@ import { AboutDialog } from "./components/AboutDialog";
 import { HelpDialog } from "./components/HelpDialog";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { useTheme } from "./hooks/useTheme";
+import { useFont } from "./hooks/useFont";
 import { useCommands } from "./hooks/useCommands";
 
 async function openVaultAndWatch(
@@ -27,6 +28,7 @@ async function openVaultAndWatch(
 
 export default function App() {
   useTheme();
+  useFont();
   useCommands();
   const openVault = useVaultStore((s) => s.openVault);
   const loadSettings = useSettingsStore((s) => s.load);

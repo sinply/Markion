@@ -17,6 +17,8 @@ pub struct Settings {
     pub live_preview: bool,
     /// "zh" | "en"
     pub language: String,
+    /// "system" | "serif" | "sans" | "mono" | "rounded"
+    pub font: String,
 }
 
 impl Default for Settings {
@@ -28,6 +30,7 @@ impl Default for Settings {
             show_hidden_files: false,
             live_preview: true,
             language: "zh".to_string(),
+            font: "system".to_string(),
         }
     }
 }

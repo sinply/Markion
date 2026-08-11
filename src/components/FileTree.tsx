@@ -3,6 +3,7 @@ import { Tree } from "react-arborist";
 import type { NodeRendererProps } from "react-arborist";
 import { useVaultStore } from "../stores/vaultStore";
 import { useDocStore } from "../stores/docStore";
+import { useSettingsStore } from "../stores/settingsStore";
 import { readFile } from "../lib/ipc";
 
 interface RowData {
@@ -12,12 +13,25 @@ interface RowData {
   kind: "file" | "folder";
 }
 
-function convertTree(node: { name: string; path: string; kind: "file" | "folder"; children: any[] }): RowData {
+/** A file is hidden (dotfile) if its basename starts with `.` (except `.markion`? no — all dotfiles hidden by default). */
+function isDot(name: string): boolean {
+  return name.startsWith(".");
+}
+
+function convertTree(
+  node: { name: string; path: string; kind: "file" | "folder"; children: any[] },
+  showHidden: boolean,
+): RowData {
   return {
     id: node.path,
     name: node.name,
     kind: node.kind,
-    children: node.kind === "folder" ? node.children.map(convertTree) : undefined,
+    children:
+      node.kind === "folder"
+        ? node.children
+            .filter((c) => showHidden || !isDot(c.name))
+            .map((c) => convertTree(c, showHidden))
+        : undefined,
   };
 }
 
@@ -35,13 +49,14 @@ function NodeView({ node, style, dragHandle }: NodeRendererProps<RowData>) {
         cursor: isFolder ? "default" : "pointer",
       }}
       ref={dragHandle}
+      onDoubleClick={isFolder ? (e) => { e.stopPropagation(); node.toggle(); } : undefined}
       title={
         isFolder
           ? hasIndex
-            ? "Click name to open index.md (folder body)"
+            ? "Click to open index.md · double-click to expand"
             : node.isOpen
-              ? "Collapse"
-              : "Expand"
+              ? "Double-click to collapse"
+              : "Double-click to expand"
           : node.data.name
       }
     >
@@ -98,6 +113,7 @@ export function FileTree() {
   const applyMove = useVaultStore((s) => s.applyMove);
   const openDoc = useDocStore((s) => s.openDoc);
   const setActiveContent = useDocStore((s) => s.setActiveContent);
+  const showHidden = useSettingsStore((s) => s.showHiddenFiles);
 
   const handleActivate = useCallback(
     async (node: any) => {
@@ -155,7 +171,9 @@ export function FileTree() {
     return <div style={{ padding: 8, color: "var(--fg-muted)", fontSize: 13 }}>No vault open</div>;
   }
 
-  const rowData: RowData[] = tree.children.map(convertTree);
+  const rowData: RowData[] = tree.children
+    .filter((c) => showHidden || !isDot(c.name))
+    .map((c) => convertTree(c, showHidden));
 
   return (
     <div style={{ height: "100%", overflow: "auto" }}>

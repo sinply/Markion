@@ -72,6 +72,20 @@ export function SettingsDialog() {
       </div>
 
       <div style={{ margin: "8px 0" }}>
+        <label>{t.font}:{" "}</label>
+        <select
+          value={settings.font}
+          onChange={(e) => settings.setFont(e.target.value as any)}
+        >
+          <option value="system">{t.fontSystem}</option>
+          <option value="serif">{t.fontSerif}</option>
+          <option value="sans">{t.fontSans}</option>
+          <option value="mono">{t.fontMono}</option>
+          <option value="rounded">{t.fontRounded}</option>
+        </select>
+      </div>
+
+      <div style={{ margin: "8px 0" }}>
         <label>
           <input
             type="checkbox"
