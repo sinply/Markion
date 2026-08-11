@@ -1,6 +1,6 @@
 {
   "productName": "Markion",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "identifier": "com.markion.app",
   "build": {
     "frontendDist": "../dist",
@@ -12,8 +12,8 @@
     "windows": [
       {
         "title": "Markion",
-        "width": 1200,
-        "height": 800
+        "width": 1000,
+        "height": 700
       }
     ],
     "security": {

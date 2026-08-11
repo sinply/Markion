@@ -61,12 +61,12 @@ export function Layout() {
                   </div>
                 )}
                 {showBacklinks && (
-                  <div style={{ borderTop: "1px solid var(--border)", overflow: "auto", maxHeight: "30%" }}>
+                  <div style={{ borderTop: "1px solid var(--border)" }}>
                     <BacklinksPanel />
                   </div>
                 )}
                 {showGraph && (
-                  <div style={{ borderTop: "1px solid var(--border)", overflow: "auto", maxHeight: "40%" }}>
+                  <div style={{ borderTop: "1px solid var(--border)" }}>
                     <GraphPanel />
                   </div>
                 )}

@@ -165,7 +165,7 @@ export function GraphPanel() {
           <svg
             ref={svgRef}
             width="100%"
-            height={360}
+            height={240}
             viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
             style={{
               background: "var(--panel-bg)", borderRadius: 6, border: "1px solid var(--border)",
