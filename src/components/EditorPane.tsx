@@ -54,7 +54,9 @@ export function EditorPane({
         const content = await readFile(vaultRoot, activeDoc.path);
         if (!cancelled) setActiveContent(content);
       } catch {
-        // read failed — leave empty
+        // Read failed — set empty content owned by this doc so the editor is
+        // still editable and we don't loop on Loading.
+        if (!cancelled) setActiveContent("");
       }
     })();
     return () => {
