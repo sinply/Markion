@@ -324,9 +324,12 @@ export function buildDecorations(state: EditorState): DecorationSet {
           return false; // keep source editable on the cursor line
         }
         const raw = state.doc.sliceString(node.from, node.to);
+        const tableWidget = new TableWidget(raw);
+        tableWidget.blockFrom = node.from;
+        tableWidget.blockTo = node.to;
         entries.push({
           from: node.from, to: node.to,
-          decoration: Decoration.replace({ widget: new TableWidget(raw), block: true }),
+          decoration: Decoration.replace({ widget: tableWidget, block: true }),
         });
         return false;
       }

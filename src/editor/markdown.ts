@@ -13,6 +13,31 @@ export function renderMarkdownInline(src: string): string {
   return md.renderInline(src);
 }
 
+/** Render markdown to HTML, injecting each table cell's raw inline source as a
+ *  `data-source` attribute. The token stream preserves cell source (e.g. `*em*`)
+ *  that the rendered HTML drops, so table edit-in-place can preserve formats.
+ *
+ *  Note: the th/td render rules are temporarily overridden on the shared `md`
+ *  instance; they fall back to the original rules and only add a data attribute,
+ *  so this is safe to call concurrently with `renderMarkdown`. */
+export function renderMarkdownWithTableSource(src: string): string {
+  const thDefault = md.renderer.rules.th_open ?? ((tokens: any, i: number, options: any, env: any, self: any) => self.renderToken(tokens, i, options));
+  const tdDefault = md.renderer.rules.td_open ?? ((tokens: any, i: number, options: any, env: any, self: any) => self.renderToken(tokens, i, options));
+  md.renderer.rules.th_open = (tokens: any, idx: number, options: any, env: any, self: any) => {
+    const token = tokens[idx];
+    const next = tokens[idx + 1];
+    if (next && next.type === "inline") token.attrSet("data-source", next.content);
+    return thDefault(tokens, idx, options, env, self);
+  };
+  md.renderer.rules.td_open = (tokens: any, idx: number, options: any, env: any, self: any) => {
+    const token = tokens[idx];
+    const next = tokens[idx + 1];
+    if (next && next.type === "inline") token.attrSet("data-source", next.content);
+    return tdDefault(tokens, idx, options, env, self);
+  };
+  return md.render(src);
+}
+
 /** Serialize a HAST (lowlight v3) node to HTML.
  *  Handles lowlight's className arrays (output as class="a b") and
  *  escapes attribute values. */

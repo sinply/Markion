@@ -1,6 +1,6 @@
 import { WidgetType } from "@codemirror/view";
 import type { EditorView } from "@codemirror/view";
-import { renderMarkdown } from "./markdown";
+import { renderMarkdown, renderMarkdownWithTableSource } from "./markdown";
 import { markdownContextFacet, imageToSrc, isRemoteSrc } from "./media";
 
 export class CodeBlockWidget extends WidgetType {
@@ -292,6 +292,10 @@ export class FrontmatterWidget extends WidgetType {
 }
 
 export class TableWidget extends WidgetType {
+  view: EditorView | null = null;
+  blockFrom = -1;
+  blockTo = -1;
+
   constructor(readonly raw: string) {
     super();
   }
@@ -300,16 +304,91 @@ export class TableWidget extends WidgetType {
     return other.raw === this.raw;
   }
 
-  toDOM(_view: EditorView): HTMLElement {
+  toDOM(view: EditorView): HTMLElement {
+    this.view = view;
     const div = document.createElement("div");
     div.className = "cm-table";
-    div.innerHTML = renderMarkdown(this.raw);
+    div.innerHTML = renderMarkdownWithTableSource(this.raw);
+    // Make each cell editable; edits are committed to the CM6 doc on blur.
+    div.querySelectorAll("td, th").forEach((cell) => {
+      cell.setAttribute("contenteditable", "true");
+    });
+    div.addEventListener(
+      "blur",
+      () => {
+        if (!this.view || this.blockFrom < 0 || this.blockTo < 0) return;
+        const newSource = serializeTableCells(div);
+        if (newSource && newSource !== this.raw) {
+          this.view.dispatch({
+            changes: { from: this.blockFrom, to: this.blockTo, insert: newSource },
+          });
+        }
+      },
+      true,
+    );
     return div;
   }
 
-  ignoreEvent(): boolean {
-    return false;
+  ignoreEvent(e: Event): boolean {
+    return e.type === "mousedown" || e.type === "mouseup" || e.type === "click";
   }
+}
+
+/** Serialize the editable table DOM back into GFM pipe syntax. Each cell's
+ *  `data-source` holds its raw inline source; if a cell's text is unchanged we
+ *  write the source verbatim (preserving escaped pipes / format markers). */
+export function serializeTableCells(tableEl: HTMLElement): string {
+  const rows: HTMLElement[][] = [];
+  tableEl.querySelectorAll("tr").forEach((tr) => {
+    rows.push(Array.from(tr.querySelectorAll("th, td")) as HTMLElement[]);
+  });
+  if (rows.length === 0) return "";
+  const header = rows[0].map(cellText);
+  const body = rows.slice(1).map((r) => r.map(cellText));
+  const align = detectAlign(tableEl);
+  return [pipeRow(header), alignRow(align), ...body.map((r) => pipeRow(r))].join("\n");
+}
+
+function cellText(cell: HTMLElement): string {
+  const src = cell.getAttribute("data-source") ?? "";
+  const text = (cell.textContent ?? "").trim();
+  // If the cell was edited, try to preserve a simple format wrap from data-source.
+  return preserveWrap(src, text);
+}
+
+/** If data-source was a simple marker wrap (*x*, `x`, **x**) and only the inner
+ *  text changed, re-wrap. Otherwise return plain text, re-escaping literal
+ *  pipes so the row still parses as a GFM table when written back. */
+function preserveWrap(src: string, newText: string): string {
+  const m = /^(\*{1,2}|`|_{1,2}|~~)([\s\S]*?)\1$/.exec(src);
+  if (m) {
+    // Whole cell is wrapped in a marker pair → any inner pipe is protected by
+    // the markers, so keep the wrap (or re-wrap the edited inner text).
+    return m[2] === newText ? src : m[1] + newText + m[1];
+  }
+  const out = src === newText ? src : newText;
+  // The markdown parser already unescaped pipes in data-source (`a\|b` arrives
+  // here as `a|b`), so re-escape literal pipes to keep the cell parseable.
+  return out.replace(/\|/g, "\\|");
+}
+
+function pipeRow(cells: string[]): string {
+  return "| " + cells.join(" | ") + " |";
+}
+
+function detectAlign(tableEl: HTMLElement): string[] {
+  const firstRow = tableEl.querySelector("tr");
+  if (!firstRow) return [];
+  return Array.from(firstRow.querySelectorAll("th, td")).map((cell) => {
+    const style = (cell as HTMLElement).style.textAlign;
+    if (style === "right") return "---:";
+    if (style === "center") return ":---:";
+    return "---";
+  });
+}
+
+function alignRow(align: string[]): string {
+  return "| " + align.join(" | ") + " |";
 }
 
 export class TaskCheckboxWidget extends WidgetType {
