@@ -47,7 +47,7 @@ export function BacklinksPanel() {
   };
 
   return (
-    <div style={{ padding: 8, overflow: "auto", fontSize: 13 }}>
+    <div style={{ padding: 8, overflow: "hidden", fontSize: 13 }}>
       <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 12, color: "var(--fg-muted)" }}>BACKLINKS</div>
       {loading && <div style={{ color: "var(--fg-muted)" }}>Scanning…</div>}
       {!loading && backlinks.length === 0 && (

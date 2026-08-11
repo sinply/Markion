@@ -151,7 +151,7 @@ export function GraphPanel() {
   const totalHint = data && data.nodes.length === MAX_NODES ? ` (showing ${MAX_NODES} of a large vault)` : "";
 
   return (
-    <div style={{ padding: 8, overflow: "auto", fontSize: 13 }}>
+    <div style={{ padding: 8, overflow: "hidden", fontSize: 13 }}>
       <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 12, color: "var(--fg-muted)" }}>
         GRAPH{totalHint}
       </div>
