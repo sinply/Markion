@@ -315,6 +315,7 @@ html, body, #root {
   margin: 0;
   padding: 0;
   font-family: var(--app-font);
+  overflow: hidden;
 }
 
 body {
@@ -725,4 +726,27 @@ label {
   left: 100%;
   top: -5px;
   min-width: 180px;
+}
+
+/* --- Thin overlay scrollbars (Windows WebView2 supports ::-webkit-scrollbar) --- */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-muted);
+}
+.cm-scroller::-webkit-scrollbar {
+  width: 8px;
+}
+.cm-scroller {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
