@@ -17,6 +17,8 @@ interface DocState {
   markClean: (id: string) => void;
   setActiveContent: (content: string) => void;
   activeContent: string;
+  /** Which doc the activeContent belongs to (so switching tabs reloads the right file). */
+  activeContentDocId: string | null;
 }
 
 export const useDocStore = create<DocState>((set, get) => ({
@@ -24,18 +26,18 @@ export const useDocStore = create<DocState>((set, get) => ({
   activeDocId: null,
   dirtyMap: {},
   activeContent: "",
+  activeContentDocId: null,
 
   openDoc: (title, path) => {
     const existing = get().openDocs.find((d) => d.path === path);
     if (existing) {
-      set({ activeDocId: existing.id, activeContent: "" });
+      set({ activeDocId: existing.id });
       return;
     }
     const id = path;
     set((s) => ({
       openDocs: [...s.openDocs, { id, path, title }],
       activeDocId: id,
-      activeContent: "",
     }));
   },
 
@@ -53,13 +55,15 @@ export const useDocStore = create<DocState>((set, get) => ({
         openDocs: newDocs,
         activeDocId: newActive,
         dirtyMap: newDirty as Record<string, boolean>,
-        activeContent: newActive ? s.activeContent : "",
+        // Content for the closed doc is stale; clear it so the editor reloads.
+        activeContent: newActive === s.activeContentDocId ? s.activeContent : "",
+        activeContentDocId: newActive === s.activeContentDocId ? s.activeContentDocId : null,
       };
     });
   },
 
   switchTo: (id) => {
-    set({ activeDocId: id, activeContent: "" });
+    set({ activeDocId: id });
   },
 
   markDirty: (id) =>
@@ -67,5 +71,6 @@ export const useDocStore = create<DocState>((set, get) => ({
   markClean: (id) =>
     set((s) => ({ dirtyMap: { ...s.dirtyMap, [id]: false } })),
 
-  setActiveContent: (content) => set({ activeContent: content }),
+  setActiveContent: (content) =>
+    set((s) => ({ activeContent: content, activeContentDocId: s.activeDocId })),
 }));

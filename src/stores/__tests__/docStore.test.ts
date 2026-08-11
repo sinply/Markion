@@ -3,7 +3,7 @@ import { useDocStore } from "../docStore";
 
 describe("docStore", () => {
   beforeEach(() => {
-    useDocStore.setState({ openDocs: [], activeDocId: null, dirtyMap: {}, activeContent: "" });
+    useDocStore.setState({ openDocs: [], activeDocId: null, dirtyMap: {}, activeContent: "", activeContentDocId: null });
   });
 
   it("openDoc adds a document and sets it active", () => {
@@ -46,5 +46,24 @@ describe("docStore", () => {
     const docs = useDocStore.getState().openDocs;
     useDocStore.getState().switchTo(docs[0].id);
     expect(useDocStore.getState().activeDocId).toBe(docs[0].id);
+  });
+
+  it("setActiveContent records which doc the content belongs to", () => {
+    useDocStore.getState().openDoc("a.md", "a.md");
+    useDocStore.getState().setActiveContent("content A");
+    expect(useDocStore.getState().activeContentDocId).toBe("a.md");
+  });
+
+  it("closing the active doc clears stale content so the editor reloads", () => {
+    useDocStore.getState().openDoc("a.md", "a.md");
+    useDocStore.getState().setActiveContent("content A");
+    useDocStore.getState().openDoc("b.md", "b.md");
+    useDocStore.getState().setActiveContent("content B");
+    // Now close b (active) — content for b is stale, must clear.
+    useDocStore.getState().closeDoc("b.md");
+    const s = useDocStore.getState();
+    expect(s.activeDocId).toBe("a.md");
+    expect(s.activeContent).toBe("");
+    expect(s.activeContentDocId).toBeNull();
   });
 });

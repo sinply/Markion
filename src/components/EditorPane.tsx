@@ -2,7 +2,7 @@ import { useRef, useCallback, useEffect, useMemo } from "react";
 import { useDocStore } from "../stores/docStore";
 import { useVaultStore } from "../stores/vaultStore";
 import { useSettingsStore } from "../stores/settingsStore";
-import { writeFileAtomic } from "../lib/ipc";
+import { readFile, writeFileAtomic } from "../lib/ipc";
 import { MarkdownEditor, type EditorHandle } from "../editor/EditorView";
 import { Tabs } from "./Tabs";
 import type { EditorState } from "@codemirror/state";
@@ -19,6 +19,7 @@ export function EditorPane({
   const markDirty = useDocStore((s) => s.markDirty);
   const markClean = useDocStore((s) => s.markClean);
   const activeContent = useDocStore((s) => s.activeContent);
+  const activeContentDocId = useDocStore((s) => s.activeContentDocId);
   const setActiveContent = useDocStore((s) => s.setActiveContent);
   const dirtyMap = useDocStore((s) => s.dirtyMap);
   const showWordCount = useSettingsStore((s) => s.showWordCount);
@@ -41,6 +42,25 @@ export function EditorPane({
   useEffect(() => {
     if (!activeDoc) onHeadingsChange(null);
   }, [activeDoc, onHeadingsChange]);
+
+  // Load the active document's content from disk when the active doc changes
+  // and the cached content doesn't belong to it (open / switch / close tab).
+  useEffect(() => {
+    if (!activeDoc || !vaultRoot) return;
+    if (activeContentDocId === activeDoc.id) return; // content already correct
+    let cancelled = false;
+    void (async () => {
+      try {
+        const content = await readFile(vaultRoot, activeDoc.path);
+        if (!cancelled) setActiveContent(content);
+      } catch {
+        // read failed — leave empty
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeDoc, activeDocId, activeContentDocId, vaultRoot, setActiveContent]);
 
   const handleChange = useCallback(
     (doc: string) => {
@@ -75,15 +95,21 @@ export function EditorPane({
       <Tabs />
       <div style={{ flex: 1, overflow: "auto" }}>
         {activeDoc ? (
-          <MarkdownEditor
-            key={activeDoc.id}
-            ref={editorRef}
-            doc={activeContent}
-            vaultRoot={vaultRoot ?? undefined}
-            docRel={activeDoc?.path}
-            onChange={handleChange}
-            onStateChange={(state) => onHeadingsChange(state)}
-          />
+          activeContentDocId === activeDoc.id ? (
+            <MarkdownEditor
+              key={activeDoc.id}
+              ref={editorRef}
+              doc={activeContent}
+              vaultRoot={vaultRoot ?? undefined}
+              docRel={activeDoc?.path}
+              onChange={handleChange}
+              onStateChange={(state) => onHeadingsChange(state)}
+            />
+          ) : (
+            <div style={{ padding: 16, color: "var(--fg-muted)" }}>
+              Loading…
+            </div>
+          )
         ) : (
           <div style={{ padding: 16, color: "var(--fg-muted)" }}>
             Open a file from the tree to edit
