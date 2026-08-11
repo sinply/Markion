@@ -40,8 +40,8 @@ export class CodeBlockWidget extends WidgetType {
     const code = document.createElement("code");
     code.className = "cm-codeblock-editable";
     // setAttribute rather than `code.contentEditable = "true"`: jsdom doesn't
-    // reflect the property to the `contenteditable` attribute, and the app CSS
-    // selects on `[contenteditable]` (test relies on the attribute too).
+    // reflect the property to the `contenteditable` attribute, and the test
+    // selects on `[contenteditable]`.
     code.setAttribute("contenteditable", "true");
     code.textContent = this.code;
     pre.appendChild(code);
