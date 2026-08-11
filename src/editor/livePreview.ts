@@ -358,11 +358,17 @@ export function buildDecorations(state: EditorState): DecorationSet {
     },
   });
 
-  // NOTE: YAML frontmatter is intentionally NOT replaced in edit (live) mode —
-  // it stays as editable source so the user can edit it. Only preview mode
-  // strips it (PreviewWidget). A Decoration.replace here made the frontmatter
-  // a read-only widget and made the document appear "like preview / uneditable".
+  // YAML frontmatter: in edit mode keep it as editable source, but give it a
+  // subtle background bar (not highlighted) so it reads as a distinct panel.
   const docText = state.doc.toString();
+  const fmMatch = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(docText);
+  if (fmMatch) {
+    entries.push({
+      from: 0,
+      to: fmMatch[0].length,
+      decoration: Decoration.mark({ attributes: { class: "cm-frontmatter-bar" } }),
+    });
+  }
 
   // --- Block math: $$...$$ (Lezer markdown has no math nodes; scan the doc) ---
   const mathRe = /\$\$([\s\S]+?)\$\$/g;

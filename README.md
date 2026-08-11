@@ -20,11 +20,13 @@ A fast, local-first **Markdown editor** for Windows, macOS, and Linux. Obsidian-
 
 | | |
 |---|---|
-| 🪄 **Live Preview** | Obsidian-style rendering as you type. `**bold**`, `# headings`, tables, code blocks, task lists, and blockquotes render instantly. Syntax markers hide themselves and reappear when your cursor touches them. Toggle anytime in settings. |
-| 🌲 **Hierarchical Document Tree** | A Yuque-style file tree with nested folder indentation, collapse/expand, drag-and-drop reordering, and cross-folder moves. |
-| 🧭 **Outline Panel** | A live-updating heading tree for the open document. Click any heading to jump straight to that section. |
-| ✅ **GFM Support** | Tables, task lists, strikethrough, and GitHub-flavored syntax highlighting for code blocks. |
-| 📁 **Local-First** | Reads and writes plain `.md` files on disk. No proprietary database, no lock-in — pair it with Dropbox, Syncthing, or any sync tool. |
+| 🪄 **Live Preview** | Obsidian-style: other lines render as you type; the line your cursor is on shows the markdown source so you can edit directly. Edit ⇄ Preview modes. |
+| 🌲 **Hierarchical Document Tree** | Yuque-style nested folders, collapse/expand, double-click folders, drag-and-drop reordering and cross-folder moves, hide dotfiles. |
+| 🧭 **Outline / Backlinks / Graph** | Toggleable right panels: live outline, `[[wikilink]]` backlinks, and a zoomable/panable note graph. |
+| ✅ **GFM + Extras** | Tables, task lists, strikethrough, syntax highlighting, Mermaid diagrams, KaTeX math (`$$..$$` & `$..$`), YAML frontmatter. |
+| 🎨 **Themes & Fonts** | 11 themes (Light/Dark/Sepia/Eye-care/Nord/Dracula/Solarized/Tokyo/Catppuccin/Gruvbox/System) + 5 font choices. |
+| 🌐 **Bilingual** | 中文 / English UI with a built-in documentation (F1) and keyboard-shortcuts overview. |
+| 📁 **Local-First** | Reads and writes plain `.md` files on disk. No proprietary database, no lock-in. Default vault auto-opens on startup. |
 | ⚡ **Fast & Light** | CodeMirror 6 editor core and a Rust (Tauri 2) backend. Small footprint, low memory, instant startup. |
 
 ---

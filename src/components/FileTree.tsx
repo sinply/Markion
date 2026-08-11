@@ -74,8 +74,24 @@ function NodeView({ node, style, dragHandle }: NodeRendererProps<RowData>) {
       >
         {isFolder ? (node.isOpen ? "▾" : "▸") : ""}
       </span>
-      <span style={{ marginRight: 4, fontSize: 14 }}>
-        {isFolder ? "\u{1F4C1}" : "\u{1F4C4}"}
+      <span style={{ marginRight: 4, display: "inline-flex", flexShrink: 0 }}>
+        {isFolder ? (
+          node.isOpen ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--fg-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+            </svg>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--fg-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <path d="M9 13l3 3 3-3" />
+            </svg>
+          )
+        ) : (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--fg-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+          </svg>
+        )}
       </span>
       <span
         style={{

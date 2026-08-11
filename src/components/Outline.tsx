@@ -60,6 +60,8 @@ export function OutlinePane({ state, onJump }: OutlineProps) {
             paddingLeft: (h.level - 1) * 12,
             cursor: "pointer",
             color: "var(--fg)",
+            fontSize: h.level === 1 ? 14 : h.level === 2 ? 13 : 12,
+            fontWeight: h.level <= 2 ? 600 : 400,
           }}
         >
           {h.text}

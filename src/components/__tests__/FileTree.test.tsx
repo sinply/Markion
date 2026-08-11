@@ -80,9 +80,9 @@ describe("FileTree component hierarchy", () => {
 
   it("preserves nested folder data in the tree structure (expandable)", () => {
     render(<FileTree />);
-    // The notes folder is rendered as a folder (📁 icon) not a flat item
+    // The notes folder is rendered as a folder (svg icon) not a flat item
     const notesRow = screen.getByText("notes").closest('[role="treeitem"]')!;
-    expect(notesRow.textContent).toContain("\u{1F4C1}"); // folder icon
+    expect(notesRow.querySelector("svg")).toBeTruthy(); // folder icon
     expect(notesRow.textContent).toContain("▸"); // collapsed arrow indicator
   });
 

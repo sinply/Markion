@@ -757,3 +757,10 @@ label {
   opacity: 0.55;
   user-select: none;
 }
+
+/* YAML frontmatter in edit mode: subtle background bar, editable source */
+.cm-frontmatter-bar {
+  background: var(--panel-bg);
+  border-left: 3px solid var(--border);
+  border-radius: 4px;
+}
