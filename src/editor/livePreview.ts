@@ -71,6 +71,15 @@ function markHiddenAt(state: EditorState, from: number, to: number, activeLine: 
   return hiddenMark();
 }
 
+/** True if a node range spans the active (cursor) line — in that case the
+ *  block should stay as editable source instead of a read-only widget. */
+function isOnActiveLine(state: EditorState, from: number, to: number, activeLine: number): boolean {
+  if (activeLine < 0) return false;
+  const lineFrom = state.doc.lineAt(from).number;
+  const lineTo = state.doc.lineAt(to).number;
+  return lineFrom <= activeLine && activeLine <= lineTo;
+}
+
 /** The 1-based line the selection cursor is on, or -1 if unknown. */
 function activeLineOf(state: EditorState): number {
   const head = state.selection.main.head;
@@ -167,6 +176,9 @@ export function buildDecorations(state: EditorState): DecorationSet {
 
       // --- Inline: images ---
       if (type === "Image") {
+        if (isOnActiveLine(state, node.from, node.to, activeLine)) {
+          return false; // keep source editable on the cursor line
+        }
         const { src, alt } = imageSrcAltFromNode(state, node.node);
         entries.push({
           from: node.from, to: node.to,
@@ -188,6 +200,9 @@ export function buildDecorations(state: EditorState): DecorationSet {
         // Image nested in a link: render the image, hide only the outer brackets.
         const imgChild = children.find((c) => c.name === "Image");
         if (imgChild) {
+          if (isOnActiveLine(state, imgChild.from, imgChild.to, activeLine)) {
+            return false; // keep source editable on the cursor line
+          }
           const { src, alt } = imageSrcAltFromNode(state, imgChild.node);
           entries.push({
             from: imgChild.from, to: imgChild.to,
@@ -284,6 +299,9 @@ export function buildDecorations(state: EditorState): DecorationSet {
 
       // --- Block: FencedCode ---
       if (type === "FencedCode" || type === "CodeBlock") {
+        if (isOnActiveLine(state, node.from, node.to, activeLine)) {
+          return false; // keep source editable on the cursor line
+        }
         const text = state.doc.sliceString(node.from, node.to);
         const lines = text.split("\n");
         const infoLine = lines[0]?.replace(/^```/, "").trim() ?? "";
@@ -297,6 +315,9 @@ export function buildDecorations(state: EditorState): DecorationSet {
 
       // --- Block: Table (GFM) ---
       if (type === "Table") {
+        if (isOnActiveLine(state, node.from, node.to, activeLine)) {
+          return false; // keep source editable on the cursor line
+        }
         const raw = state.doc.sliceString(node.from, node.to);
         entries.push({
           from: node.from, to: node.to,
@@ -307,6 +328,9 @@ export function buildDecorations(state: EditorState): DecorationSet {
 
       // --- Block: Task / TaskMarker (GFM) ---
       if (type === "Task" || type === "TaskMarker") {
+        if (isOnActiveLine(state, node.from, node.to, activeLine)) {
+          return false; // keep source editable on the cursor line
+        }
         const text = state.doc.sliceString(node.from, node.to);
         if (type === "TaskMarker") {
           const checked = /^\[[xX]\]$/.test(text);
@@ -344,6 +368,9 @@ export function buildDecorations(state: EditorState): DecorationSet {
   const mathRe = /\$\$([\s\S]+?)\$\$/g;
   let m: RegExpExecArray | null;
   while ((m = mathRe.exec(docText)) !== null) {
+    if (isOnActiveLine(state, m.index, m.index + m[0].length, activeLine)) {
+      continue; // keep source editable on the cursor line
+    }
     entries.push({
       from: m.index,
       to: m.index + m[0].length,
@@ -362,6 +389,9 @@ export function buildDecorations(state: EditorState): DecorationSet {
       (e) => im!.index < e.to && im!.index + im![0].length > e.from && e.decoration.spec?.widget,
     );
     if (overlapsBlock) continue;
+    if (isOnActiveLine(state, im.index, im.index + im[0].length, activeLine)) {
+      continue; // keep source editable on the cursor line
+    }
     entries.push({
       from: im.index,
       to: im.index + im[0].length,

@@ -70,7 +70,8 @@ describe("buildDecorations", () => {
   });
 
   it("replaces a fenced code block with a widget", () => {
-    const decos = buildDecorations(stateOf("```js\nlet x = 1;\n```\n"));
+    // cursor at end (non-active line) → block gets replaced
+    const decos = buildDecorations(stateOfEnd("```js\nlet x = 1;\n```\n"));
     expect(hasWidget(decos)).toBe(true);
   });
 
@@ -81,12 +82,12 @@ describe("buildDecorations", () => {
   });
 
   it("replaces a GFM table with a widget", () => {
-    const decos = buildDecorations(stateOf("| a | b |\n| - | - |\n| 1 | 2 |\n"));
+    const decos = buildDecorations(stateOfEnd("| a | b |\n| - | - |\n| 1 | 2 |\n"));
     expect(hasWidget(decos)).toBe(true);
   });
 
   it("replaces a task marker with a checkbox widget", () => {
-    const decos = buildDecorations(stateOf("- [ ] buy milk\n"));
+    const decos = buildDecorations(stateOfEnd("- [ ] buy milk\n"));
     expect(hasWidget(decos)).toBe(true);
   });
 
@@ -97,7 +98,8 @@ describe("buildDecorations", () => {
   });
 
   it("replaces an image with an ImageWidget", () => {
-    const decos = buildDecorations(stateOf("![alt](img.png)"));
+    // image on line 1, cursor on line 2 (non-active) → replaced
+    const decos = buildDecorations(stateOfEnd("![alt](img.png)\n\nsecond line\n"));
     const widget = findImageWidget(decos);
     expect(widget).not.toBeNull();
     expect(widget!.src).toBe("img.png");
@@ -111,7 +113,7 @@ describe("buildDecorations", () => {
   });
 
   it("renders an image nested inside a link and hides outer brackets", () => {
-    const decos = buildDecorations(stateOf("[![a](img.png)](https://link)"));
+    const decos = buildDecorations(stateOfEnd("[![a](img.png)](https://link)\n\nline two\n"));
     const widget = findImageWidget(decos);
     expect(widget).not.toBeNull();
     expect(widget!.src).toBe("img.png");
@@ -185,7 +187,7 @@ describe("frontmatter", () => {
 
 describe("inline math", () => {
   it("replaces $...$ with an inline math widget", () => {
-    const decos = buildDecorations(stateOf("Euler: $e^{i\pi} = -1$ is neat."));
+    const decos = buildDecorations(stateOfEnd("Euler: $e^{i\pi} = -1$ is neat.\n\nsecond line\n"));
     const iter = decos.iter();
     let found = false;
     while (iter.value) {
