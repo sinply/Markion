@@ -38,6 +38,7 @@ npm run tauri build      # Production build
 - **Every code change** is pushed to the `main` branch (`feat/backend-foundation` → `main`) and bump the version in package.json / Cargo.toml / tauri.conf.json / AboutDialog.
 - **GitHub Release (exe) is created ONLY for significant, bug-free feature versions** — e.g. v0.6.0, v0.7.0, v0.8.0. Do NOT create a release for every small patch; too many releases is noise. Small fixes just bump the patch version and push code.
 - Only create a release when the build passes tests and the feature set is stable.
+- **Build the release exe with `npm run tauri build`, NEVER raw `cargo build --release`.** The Tauri CLI enables the `tauri/custom-protocol` feature, which embeds the frontend into the exe. Without it the exe is compiled as a dev build that loads `http://localhost:5173` and shows a **white screen** when run standalone (no dev server). Verify the exe loads `http://tauri.localhost` before attaching it to a release.
 
 ## Architecture
 
