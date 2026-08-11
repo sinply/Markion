@@ -101,7 +101,7 @@ export default function App() {
 
   return (
     <>
-      <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+      <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
         <MenuBar />
         <div style={{ flex: 1, minHeight: 0 }}>
           <Layout />

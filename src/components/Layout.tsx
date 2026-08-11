@@ -41,7 +41,7 @@ export function Layout() {
   }, []);
 
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
       <Group orientation="horizontal" style={{ flex: 1 }} id="main">
         <Panel id="tree" defaultSize="20" minSize="12" maxSize="35">
           <FileTree />
