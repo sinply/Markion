@@ -1,10 +1,13 @@
 import { WidgetType } from "@codemirror/view";
 import type { EditorView } from "@codemirror/view";
-import { renderMarkdown, highlightCode } from "./markdown";
+import { renderMarkdown } from "./markdown";
 import { markdownContextFacet, imageToSrc, isRemoteSrc } from "./media";
 
 export class CodeBlockWidget extends WidgetType {
   readonly language: string;
+  view: EditorView | null = null;
+  blockFrom = 0;
+  blockTo = 0;
 
   constructor(
     readonly code: string,
@@ -18,11 +21,12 @@ export class CodeBlockWidget extends WidgetType {
     return other.code === this.code && other.language === this.language;
   }
 
-  toDOM(_view: EditorView): HTMLElement {
+  toDOM(view: EditorView): HTMLElement {
     // Mermaid diagrams: render as SVG instead of code
     if (this.language === "mermaid") {
       return renderMermaid(this.code);
     }
+    this.view = view;
     const pre = document.createElement("pre");
     pre.className = "cm-codeblock";
 
@@ -34,13 +38,21 @@ export class CodeBlockWidget extends WidgetType {
     }
 
     const code = document.createElement("code");
-    code.innerHTML = highlightCode(this.code, this.language);
+    code.className = "cm-codeblock-editable";
+    // setAttribute rather than `code.contentEditable = "true"`: jsdom doesn't
+    // reflect the property to the `contenteditable` attribute, and the app CSS
+    // selects on `[contenteditable]` (test relies on the attribute too).
+    code.setAttribute("contenteditable", "true");
+    code.textContent = this.code;
     pre.appendChild(code);
     return pre;
   }
 
-  ignoreEvent(): boolean {
-    return false;
+  // Ignore mousedown so CM6 does not move its cursor into the block (which
+  // would trigger the isOnActiveLine source flip). The contenteditable handles
+  // the click itself and takes focus.
+  ignoreEvent(e: Event): boolean {
+    return e.type === "mousedown" || e.type === "mouseup" || e.type === "click";
   }
 }
 

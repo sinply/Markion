@@ -3,12 +3,14 @@ import { EditorView } from "@codemirror/view";
 import { createEditorState } from "../codemirror";
 import { livePreviewField } from "../livePreview";
 
-const DOC = "text before\n\n```js\nlet a = 1;\nlet b = 2;\nlet c = 3;\n```\n\nafter\n";
+const CODE_DOC = "text before\n\n```js\nlet a = 1;\nlet b = 2;\nlet c = 3;\n```\n\nafter\n";
 
-function mount() {
+const TABLE_DOC = "text before\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\nafter\n";
+
+function mount(doc: string) {
   const parent = document.createElement("div");
   document.body.appendChild(parent);
-  const state = createEditorState(DOC, () => {}, { onStateChange: () => {} });
+  const state = createEditorState(doc, () => {}, { onStateChange: () => {} });
   const view = new EditorView({ state, parent });
   void view.contentDOM.offsetWidth;
   return { view, parent };
@@ -23,8 +25,8 @@ function widgetCount(state: ReturnType<typeof createEditorState>): number {
 
 describe("block-click cursor placement (edit mode)", () => {
   it("renders the code block as a widget when the cursor is away", () => {
-    const { view, parent } = mount();
-    view.dispatch({ selection: { anchor: DOC.length } });
+    const { view, parent } = mount(CODE_DOC);
+    view.dispatch({ selection: { anchor: CODE_DOC.length } });
     const n = widgetCount(view.state);
     const block = parent.querySelector(".cm-codeblock");
     view.destroy();
@@ -33,10 +35,12 @@ describe("block-click cursor placement (edit mode)", () => {
     expect(block).not.toBeNull();
   });
 
-  it("clicking the block reveals source and places the cursor on the clicked line", () => {
-    const { view, parent } = mount();
-    view.dispatch({ selection: { anchor: DOC.length } }); // block rendered as widget
-    const block = parent.querySelector(".cm-codeblock")! as HTMLElement;
+  it("clicking a TABLE reveals source and places the cursor on the clicked line", () => {
+    // Code blocks now edit in place (contenteditable widget, mousedown ignored),
+    // so the click-to-reveal path only applies to tables.
+    const { view, parent } = mount(TABLE_DOC);
+    view.dispatch({ selection: { anchor: TABLE_DOC.length } }); // table rendered as widget
+    const block = parent.querySelector(".cm-table")! as HTMLElement;
 
     // Stub the block's rect so the handler's inner-line math is deterministic:
     // click 60px below the block top ≈ line 3 of a 20px/line block.
@@ -54,7 +58,7 @@ describe("block-click cursor placement (edit mode)", () => {
 
     // The block should now be revealed as source (widget gone) ...
     const after = widgetCount(view.state);
-    // ... and the cursor should be on a line INSIDE the code body (lines 4-6),
+    // ... and the cursor should be on a line INSIDE the table body (lines 4-6),
     // not the block-start line (3).
     const cursorLine = view.state.doc.lineAt(view.state.selection.main.head).number;
     void handled;
