@@ -1,6 +1,7 @@
-import { useRef, useCallback, useEffect } from "react";
+import { useRef, useCallback, useEffect, useMemo } from "react";
 import { useDocStore } from "../stores/docStore";
 import { useVaultStore } from "../stores/vaultStore";
+import { useSettingsStore } from "../stores/settingsStore";
 import { writeFileAtomic } from "../lib/ipc";
 import { MarkdownEditor, type EditorHandle } from "../editor/EditorView";
 import { Tabs } from "./Tabs";
@@ -20,11 +21,21 @@ export function EditorPane({
   const activeContent = useDocStore((s) => s.activeContent);
   const setActiveContent = useDocStore((s) => s.setActiveContent);
   const dirtyMap = useDocStore((s) => s.dirtyMap);
+  const showWordCount = useSettingsStore((s) => s.showWordCount);
 
   const editorRef = useRef<EditorHandle>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeDoc = openDocs.find((d) => d.id === activeDocId);
+
+  // Word count (CJK-aware: count CJK chars as words, others by whitespace tokens).
+  const wordCount = useMemo(() => {
+    if (!activeContent) return 0;
+    const s = activeContent.replace(/```[\s\S]*?```/g, " ").replace(/`[^`]*`/g, " ");
+    const cjk = (s.match(/[一-鿿぀-ヿ가-힯]/g) || []).length;
+    const ascii = (s.replace(/[一-鿿぀-ヿ가-힯]/g, " ").match(/\S+/g) || []).length;
+    return cjk + ascii;
+  }, [activeContent]);
 
   // Clear the outline when no document is open
   useEffect(() => {
@@ -87,11 +98,19 @@ export function EditorPane({
           borderTop: "1px solid var(--border)",
           display: "flex",
           justifyContent: "space-between",
+          gap: 12,
         }}
       >
         <span>{activeDoc?.path ?? "no file"}</span>
-        <span>
-          {activeDocId && dirtyMap[activeDocId] ? "● unsaved" : "saved"}
+        <span style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          {showWordCount && activeDoc && (
+            <span>
+              {wordCount} words · {activeContent.length} chars
+            </span>
+          )}
+          <span>
+            {activeDocId && dirtyMap[activeDocId] ? "● unsaved" : "saved"}
+          </span>
         </span>
       </div>
     </div>

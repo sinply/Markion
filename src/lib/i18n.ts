@@ -99,6 +99,10 @@ const en = {
   relToDoc: "Relative to document",
   absPath: "Absolute path",
   showHidden: "Show hidden files",
+  showOutline: "Show Outline panel",
+  showBacklinks: "Show Backlinks panel",
+  showGraph: "Show Graph panel",
+  showWordCount: "Show word count in status bar",
   livePreviewLabel: "Live preview (real-time markdown rendering)",
   aboutVersion: "Version",
   aboutDesc:
@@ -219,6 +223,10 @@ const zh: typeof en = {
   relToDoc: "相对文档",
   absPath: "绝对路径",
   showHidden: "显示隐藏文件",
+  showOutline: "显示大纲面板",
+  showBacklinks: "显示反链面板",
+  showGraph: "显示图谱面板",
+  showWordCount: "状态栏显示字数",
   livePreviewLabel: "实时预览（Markdown 实时渲染）",
   aboutVersion: "版本",
   aboutDesc:

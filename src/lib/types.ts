@@ -36,6 +36,10 @@ export interface Settings {
   livePreview: boolean;
   language: Language;
   font: FontChoice;
+  showOutline: boolean;
+  showBacklinks: boolean;
+  showGraph: boolean;
+  showWordCount: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -46,4 +50,8 @@ export const DEFAULT_SETTINGS: Settings = {
   livePreview: true,
   language: "zh",
   font: "system",
+  showOutline: true,
+  showBacklinks: true,
+  showGraph: true,
+  showWordCount: true,
 };

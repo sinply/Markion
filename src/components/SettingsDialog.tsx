@@ -107,6 +107,50 @@ export function SettingsDialog() {
         </label>
       </div>
 
+      <div style={{ marginTop: 10, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
+        <div style={{ fontWeight: 600, marginBottom: 6 }}>Panels</div>
+        <div style={{ margin: "4px 0" }}>
+          <label>
+            <input
+              type="checkbox"
+              checked={settings.showOutline}
+              onChange={(e) => settings.setShowOutline(e.target.checked)}
+            />
+            {" "}{t.showOutline}
+          </label>
+        </div>
+        <div style={{ margin: "4px 0" }}>
+          <label>
+            <input
+              type="checkbox"
+              checked={settings.showBacklinks}
+              onChange={(e) => settings.setShowBacklinks(e.target.checked)}
+            />
+            {" "}{t.showBacklinks}
+          </label>
+        </div>
+        <div style={{ margin: "4px 0" }}>
+          <label>
+            <input
+              type="checkbox"
+              checked={settings.showGraph}
+              onChange={(e) => settings.setShowGraph(e.target.checked)}
+            />
+            {" "}{t.showGraph}
+          </label>
+        </div>
+        <div style={{ margin: "4px 0" }}>
+          <label>
+            <input
+              type="checkbox"
+              checked={settings.showWordCount}
+              onChange={(e) => settings.setShowWordCount(e.target.checked)}
+            />
+            {" "}{t.showWordCount}
+          </label>
+        </div>
+      </div>
+
       <button onClick={() => setOpen(false)} style={{ marginTop: 8 }}>
         {t.close}
       </button>

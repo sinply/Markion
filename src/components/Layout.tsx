@@ -6,11 +6,16 @@ import { OutlinePane } from "./Outline";
 import { BacklinksPanel } from "./BacklinksPanel";
 import { GraphPanel } from "./GraphPanel";
 import { QuickOpen } from "./QuickOpen";
+import { useSettingsStore } from "../stores/settingsStore";
 import { EditorView } from "@codemirror/view";
 import type { EditorState } from "@codemirror/state";
 
 export function Layout() {
   const [editorState, setEditorState] = useState<EditorState | null>(null);
+  const showOutline = useSettingsStore((s) => s.showOutline);
+  const showBacklinks = useSettingsStore((s) => s.showBacklinks);
+  const showGraph = useSettingsStore((s) => s.showGraph);
+  const rightHasContent = showOutline || showBacklinks || showGraph;
 
   const handleJump = useCallback((from: number) => {
     const activeEl = document.querySelector(".cm-editor .cm-content") as HTMLElement | null;
@@ -45,20 +50,30 @@ export function Layout() {
         <Panel id="editor" defaultSize="55" minSize="30">
           <EditorPane onHeadingsChange={setEditorState} />
         </Panel>
-        <Separator id="sep-outline" style={{ width: 3, background: "var(--border)" }} />
-        <Panel id="outline" defaultSize="25" minSize="10" maxSize="35">
-          <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <div style={{ flex: 1, overflow: "auto" }}>
-              <OutlinePane state={editorState} onJump={handleJump} />
-            </div>
-            <div style={{ borderTop: "1px solid var(--border)" }}>
-              <BacklinksPanel />
-            </div>
-            <div style={{ borderTop: "1px solid var(--border)" }}>
-              <GraphPanel />
-            </div>
-          </div>
-        </Panel>
+        {rightHasContent && (
+          <>
+            <Separator id="sep-outline" style={{ width: 3, background: "var(--border)" }} />
+            <Panel id="outline" defaultSize="25" minSize="10" maxSize="35">
+              <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                {showOutline && (
+                  <div style={{ flex: 1, overflow: "auto" }}>
+                    <OutlinePane state={editorState} onJump={handleJump} />
+                  </div>
+                )}
+                {showBacklinks && (
+                  <div style={{ borderTop: "1px solid var(--border)" }}>
+                    <BacklinksPanel />
+                  </div>
+                )}
+                {showGraph && (
+                  <div style={{ borderTop: "1px solid var(--border)" }}>
+                    <GraphPanel />
+                  </div>
+                )}
+              </div>
+            </Panel>
+          </>
+        )}
       </Group>
       <QuickOpen />
     </div>

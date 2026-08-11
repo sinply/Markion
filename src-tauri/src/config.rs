@@ -19,6 +19,10 @@ pub struct Settings {
     pub language: String,
     /// "system" | "serif" | "sans" | "mono" | "rounded"
     pub font: String,
+    pub show_outline: bool,
+    pub show_backlinks: bool,
+    pub show_graph: bool,
+    pub show_word_count: bool,
 }
 
 impl Default for Settings {
@@ -31,6 +35,10 @@ impl Default for Settings {
             live_preview: true,
             language: "zh".to_string(),
             font: "system".to_string(),
+            show_outline: true,
+            show_backlinks: true,
+            show_graph: true,
+            show_word_count: true,
         }
     }
 }
