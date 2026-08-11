@@ -6,8 +6,8 @@ import { markdownContextFacet, imageToSrc, isRemoteSrc } from "./media";
 export class CodeBlockWidget extends WidgetType {
   readonly language: string;
   view: EditorView | null = null;
-  blockFrom = 0;
-  blockTo = 0;
+  blockFrom = -1;
+  blockTo = -1;
 
   constructor(
     readonly code: string,
@@ -45,6 +45,19 @@ export class CodeBlockWidget extends WidgetType {
     code.setAttribute("contenteditable", "true");
     code.textContent = this.code;
     pre.appendChild(code);
+
+    // Commit the edited code back to the document when the user leaves the block.
+    code.addEventListener("blur", () => {
+      if (!this.view || this.blockFrom < 0 || this.blockTo < 0) return;
+      const newCode = code.textContent ?? "";
+      const lang = this.language;
+      const newSource = "```" + lang + "\n" + newCode + "\n```";
+      if (newSource !== this.code) {
+        this.view.dispatch({
+          changes: { from: this.blockFrom, to: this.blockTo, insert: newSource },
+        });
+      }
+    });
     return pre;
   }
 

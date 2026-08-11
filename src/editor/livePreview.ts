@@ -311,9 +311,12 @@ export function buildDecorations(state: EditorState): DecorationSet {
         const lines = text.split("\n");
         const infoLine = lines[0]?.replace(/^```/, "").trim() ?? "";
         const codeLines = lines.slice(1, -1).join("\n");
+        const codeWidget = new CodeBlockWidget(codeLines, infoLine);
+        codeWidget.blockFrom = node.from;
+        codeWidget.blockTo = node.to;
         entries.push({
           from: node.from, to: node.to,
-          decoration: Decoration.replace({ widget: new CodeBlockWidget(codeLines, infoLine), block: true }),
+          decoration: Decoration.replace({ widget: codeWidget, block: true }),
         });
         return false;
       }
