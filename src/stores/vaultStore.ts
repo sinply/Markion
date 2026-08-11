@@ -21,15 +21,27 @@ function setDefaultVault(vaultRoot: string) {
   }
 }
 
+function clearDefaultVault() {
+  try {
+    localStorage.removeItem(DEFAULT_VAULT_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 interface VaultState {
   vaultRoot: string | null;
   tree: TreeNode | null;
   expanded: Record<string, boolean>;
   loadTree: (root: string) => Promise<void>;
-  /** Load and remember as the default vault. */
+  /** Load the vault without touching the default. */
   openVault: (root: string) => Promise<void>;
-  /** Explicitly pin the current vault as the default (File → Set as Default Vault). */
+  /** Explicitly pin the current vault as the default. */
   setAsDefault: () => void;
+  /** Remove the default vault pin. */
+  clearDefault: () => void;
+  /** Set a specific path as the default vault (from Settings). */
+  setDefaultTo: (root: string) => void;
   applyReorder: (folderRel: string, name: string, newIndex: number) => Promise<void>;
   applyMove: (fromFolder: string, fromName: string, toFolder: string, toName: string) => Promise<void>;
   setCollapsed: (folderRel: string, collapsed: boolean) => Promise<void>;
@@ -47,13 +59,16 @@ export const useVaultStore = create<VaultState>((set, get) => ({
 
   openVault: async (root) => {
     await get().loadTree(root);
-    setDefaultVault(root);
   },
 
   setAsDefault: () => {
     const root = get().vaultRoot;
     if (root) setDefaultVault(root);
   },
+
+  clearDefault: () => clearDefaultVault(),
+
+  setDefaultTo: (root) => setDefaultVault(root),
 
   applyReorder: async (folderRel, name, newIndex) => {
     const root = get().vaultRoot;

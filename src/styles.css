@@ -93,15 +93,15 @@
 
 /* --- Catppuccin Mocha (soft pastel dark theme) --- */
 [data-theme="catppuccin"] {
-  --bg: #1e1e2e;
+  --bg: #11111b;
   --fg: #cdd6f4;
   --fg-muted: #a6adc8;
   --border: #313244;
-  --panel-bg: #181825;
-  --panel-bg-2: #1e1e2e;
+  --panel-bg: #1e1e2e;
+  --panel-bg-2: #181825;
   --code-bg: #181825;
-  --inline-code-bg: rgba(205, 214, 244, 0.12);
-  --accent: #89b4fa;
+  --inline-code-bg: rgba(245, 194, 231, 0.12);
+  --accent: #f5c2e7;
   --accent-fg: #1e1e2e;
   --table-header-bg: #181825;
   --quote-border: #45475a;
@@ -118,7 +118,7 @@
   --hljs-string: #a6e3a1;
   --hljs-title: #89dceb;
   --hljs-type: #f9e2af;
-  --hljs-meta: #89b4fa;
+  --hljs-meta: #f5c2e7;
 }
 
 /* --- Gruvbox (warm retro theme) --- */

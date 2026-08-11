@@ -117,19 +117,17 @@ The file system is the **single source of truth**; `.markion/index.json` stores 
 ## Roadmap
 
 **Done**
-- [x] Live preview (headings / bold / italic / inline code / links / tables / task lists / code blocks / blockquotes / images)
-- [x] Hierarchical file tree + drag-and-drop
-- [x] Outline panel + click-to-jump
+- [x] Live preview (headings / bold / italic / inline code / links / tables / task lists / code blocks / blockquotes / images / math)
+- [x] Hierarchical file tree + drag-and-drop + double-click expand + hide dotfiles
+- [x] Outline / Backlinks / Graph panels (toggleable) + graph zoom & pan
 - [x] Image paste/drag-drop UI integration
 - [x] External file-change watcher (live tree refresh + reload)
-- [x] Settings persistence (`.markion/config.json`)
-- [x] Mermaid diagrams + KaTeX math (block `$$...$$`)
+- [x] Settings persistence (`.markion/config.json`) + default vault auto-open
+- [x] Mermaid diagrams + KaTeX math (block `$$...$$` + inline `$...$`)
 - [x] Backlinks panel ([[wikilink]] reverse lookup)
-
-**Planned**
-- [ ] `index.md` as a folder-level container body
-- [ ] Inline math (`$...$`)
-- [ ] Full graph view
+- [x] Menu bar: File · Edit · Format · View · Help (bilingual 中文/English)
+- [x] 11 themes + font choices + word count
+- [x] In-app documentation (F1)
 
 ---
 

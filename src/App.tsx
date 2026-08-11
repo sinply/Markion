@@ -31,6 +31,7 @@ export default function App() {
   useFont();
   useCommands();
   const openVault = useVaultStore((s) => s.openVault);
+  const setAsDefault = useVaultStore((s) => s.setAsDefault);
   const loadSettings = useSettingsStore((s) => s.load);
   const vaultRoot = useVaultStore((s) => s.vaultRoot);
   const [booted, setBooted] = useState(false);
@@ -65,6 +66,13 @@ export default function App() {
     setLoading(true);
     await openVaultAndWatch(folder, openVault, loadSettings);
     setLoading(false);
+    // Ask the user once (when no default is set) whether to make it the default.
+    if (!getDefaultVault()) {
+      const makeDefault = window.confirm(
+        `Set "${folder}" as the default vault to auto-open on startup?`,
+      );
+      if (makeDefault) setAsDefault();
+    }
   };
 
   if (loading || !booted) {

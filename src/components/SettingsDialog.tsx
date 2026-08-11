@@ -1,5 +1,8 @@
+import { useState } from "react";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useUiStore } from "../stores/uiStore";
+import { useVaultStore, getDefaultVault } from "../stores/vaultStore";
 import { useI18n, THEME_LABELS } from "../lib/i18n";
 import type { Theme } from "../lib/types";
 
@@ -7,11 +10,22 @@ export function SettingsDialog() {
   const settings = useSettingsStore();
   const open = useUiStore((s) => s.settingsOpen);
   const setOpen = useUiStore((s) => s.setSettingsOpen);
+  const setDefaultTo = useVaultStore((s) => s.setDefaultTo);
+  const clearDefault = useVaultStore((s) => s.clearDefault);
   const t = useI18n();
+  const [defaultPath, setDefaultPath] = useState<string | null>(getDefaultVault());
 
   if (!open) return null;
 
   const themes = Object.keys(THEME_LABELS[settings.language]) as Theme[];
+
+  const changeDefault = async () => {
+    const folder = await openDialog({ directory: true, multiple: false });
+    if (typeof folder === "string") {
+      setDefaultTo(folder);
+      setDefaultPath(folder);
+    }
+  };
 
   return (
     <div
@@ -32,6 +46,22 @@ export function SettingsDialog() {
           <option value="zh">中文</option>
           <option value="en">English</option>
         </select>
+      </div>
+
+      <div style={{ margin: "8px 0" }}>
+        <div style={{ fontWeight: 600 }}>{t.defaultVault}</div>
+        <div style={{ color: "var(--fg-muted)", fontSize: 12, margin: "2px 0 4px" }}>
+          {t.defaultVaultHint}
+        </div>
+        <code style={{ fontSize: 12, wordBreak: "break-all" }}>
+          {defaultPath || t.none}
+        </code>
+        <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+          <button onClick={changeDefault}>{t.change}</button>
+          <button onClick={() => { clearDefault(); setDefaultPath(null); }} disabled={!defaultPath}>
+            {t.clear}
+          </button>
+        </div>
       </div>
 
       <div style={{ margin: "8px 0" }}>

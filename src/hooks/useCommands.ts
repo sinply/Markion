@@ -105,13 +105,42 @@ export function useCommands() {
     const handler = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey)) return;
       const k = e.key.toLowerCase();
+      if (e.shiftKey || e.altKey) return;
       if (k === "s") {
         e.preventDefault();
-        void saveActive(e.shiftKey);
+        void saveActive(false);
       } else if (k === "o") {
         e.preventDefault();
-        if (e.shiftKey) ui.requestOpenFolder();
-        else ui.requestOpenFile();
+        ui.requestOpenFile();
+      } else if (k === "e") {
+        e.preventDefault();
+        ui.setEditorMode(ui.editorMode === "live" ? "preview" : "live");
+      } else if (k === "b") {
+        e.preventDefault();
+        ui.requestMarkdown("bold");
+      } else if (k === "i") {
+        e.preventDefault();
+        ui.requestMarkdown("italic");
+      } else if (k === "1" || k === "2" || k === "3") {
+        e.preventDefault();
+        const cmd = k === "1" ? "heading1" : k === "2" ? "heading2" : "heading3";
+        ui.requestMarkdown(cmd as any);
+      } else if (k === "w") {
+        e.preventDefault();
+        // close the active tab
+        const id = useDocStore.getState().activeDocId;
+        if (id) useDocStore.getState().closeDoc(id);
+      }
+    };
+    const shiftHandler = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || !e.shiftKey) return;
+      const k = e.key.toLowerCase();
+      if (k === "s") {
+        e.preventDefault();
+        void saveActive(true);
+      } else if (k === "o") {
+        e.preventDefault();
+        ui.requestOpenFolder();
       } else if (k === "e") {
         e.preventDefault();
         ui.setEditorMode(ui.editorMode === "live" ? "preview" : "live");
@@ -124,9 +153,11 @@ export function useCommands() {
       }
     };
     window.addEventListener("keydown", handler);
+    window.addEventListener("keydown", shiftHandler);
     window.addEventListener("keydown", helpHandler);
     return () => {
       window.removeEventListener("keydown", handler);
+      window.removeEventListener("keydown", shiftHandler);
       window.removeEventListener("keydown", helpHandler);
     };
   }, [ui]);
