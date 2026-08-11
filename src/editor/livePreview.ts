@@ -427,47 +427,8 @@ class LivePlugin {
   }
 }
 
-/** Place the cursor on the line inside a rendered block widget (code block or
- *  table) that the user clicked, instead of CM6's default of snapping to the
- *  block start/end. Returns true if handled. */
-function handleBlockClick(event: MouseEvent, view: EditorView): boolean {
-  const target = event.target as HTMLElement;
-  const blockEl = target.closest<HTMLElement>(".cm-codeblock, .cm-table");
-  if (!blockEl) return false;
-  const widgetPos = view.posAtDOM(blockEl);
-  // The widget DOM sits at the boundary of the block; resolve with side +1 so
-  // we land INSIDE the block node (side -1 can resolve to the top-level Document).
-  const node = syntaxTree(view.state).resolve(widgetPos + 1, -1);
-  let block: SyntaxNode | null = node;
-  while (block && !(block.type.name === "FencedCode" || block.type.name === "CodeBlock" || block.type.name === "Table")) {
-    block = block.parent;
-  }
-  if (!block) return false;
-  // Estimate which inner line the click landed on from the block's height.
-  const rect = blockEl.getBoundingClientRect();
-  const relY = event.clientY - rect.top;
-  const lineHeight = 20; // approx; fine for cursor placement
-  const innerLine = Math.max(0, Math.floor(relY / lineHeight));
-  const blockText = view.state.doc.sliceString(block.from, block.to);
-  const lines = blockText.split("\n");
-  const targetLine = Math.min(innerLine, lines.length - 1);
-  let cursorPos = block.from;
-  for (let i = 0; i < targetLine; i++) cursorPos += lines[i].length + 1;
-  view.dispatch({ selection: { anchor: cursorPos } });
-  return true;
-}
-
 export const livePreviewExtension = ViewPlugin.fromClass(LivePlugin, {
   eventHandlers: {
-    // Intercept mousedown (where CM6 sets the click selection) so a click on a
-    // rendered block lands on the clicked line, not the block start/end.
-    mousedown(event, view) {
-      if (handleBlockClick(event, view)) {
-        event.preventDefault();
-        return true;
-      }
-      return false;
-    },
     click(event, view) {
       const target = event.target as HTMLElement;
 
@@ -509,6 +470,20 @@ export const livePreviewExtension = ViewPlugin.fromClass(LivePlugin, {
           void openUrl(url);
           return true;
         }
+      }
+
+      // Source badge on image/math widgets: flip that block to source.
+      const badge = target.closest<HTMLElement>(".cm-source-badge");
+      if (badge) {
+        const pos = view.posAtDOM(badge);
+        const node = syntaxTree(view.state).resolve(pos + 1, -1);
+        let block: SyntaxNode | null = node;
+        while (block && !["Image", "FencedCode", "CodeBlock", "Table"].includes(block.type.name)) {
+          block = block.parent;
+        }
+        if (!block) return false;
+        view.dispatch({ selection: { anchor: block.from }, scrollIntoView: true });
+        return true;
       }
 
       return false;
