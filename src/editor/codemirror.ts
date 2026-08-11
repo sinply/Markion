@@ -51,7 +51,9 @@ export function createEditorState(
  *  "preview" = full read-only rendered document. */
 export function setEditorMode(view: EditorView, mode: EditorMode): void {
   const ext =
-    mode === "preview" ? [previewField] : [livePreviewField, livePreviewExtension];
+    mode === "preview"
+      ? [previewField, EditorState.readOnly.of(true)]
+      : [livePreviewField, livePreviewExtension, EditorState.readOnly.of(false)];
   view.dispatch({
     effects: livePreviewCompartment.reconfigure(ext),
   });

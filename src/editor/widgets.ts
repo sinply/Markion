@@ -142,7 +142,11 @@ export class PreviewWidget extends WidgetType {
   toDOM(view: EditorView): HTMLElement {
     const div = document.createElement("div");
     div.className = "cm-preview";
-    div.innerHTML = renderMarkdown(this.raw);
+    // Strip the doc-leading YAML frontmatter (--- ... ---) so markdown-it
+    // doesn't render it as a broken heading/hr.
+    const fm = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(this.raw);
+    const body = fm ? this.raw.slice(fm[0].length) : this.raw;
+    div.innerHTML = renderMarkdown(body);
     // Resolve local image srcs (rewrite relative paths via the context facet).
     const ctx = view.state.facet(markdownContextFacet)[0];
     if (ctx) {
