@@ -110,6 +110,14 @@ const en = {
   showGraph: "Show Graph panel",
   showWordCount: "Show word count in status bar",
   livePreviewLabel: "Live preview (real-time markdown rendering)",
+  palettePlaceholder: "Search files and commands…",
+  paletteNoMatches: "No matches",
+  paletteCreateNote: (name: string) => `Create note: ${name}`,
+  conflictTitle: "File changed on disk",
+  conflictBody: (path: string) =>
+    `"${path}" was modified outside Markion. Keep your edits or load the disk version?`,
+  conflictKeep: "Keep my edits",
+  conflictLoad: "Load disk version",
   aboutVersion: "Version",
   aboutDesc:
     "A fast, local-first Markdown editor for Windows, macOS, and Linux. Obsidian-style live preview, Yuque-style hierarchical document tree, and plain .md files you own.",
@@ -240,6 +248,14 @@ const zh: typeof en = {
   showGraph: "显示图谱面板",
   showWordCount: "状态栏显示字数",
   livePreviewLabel: "实时预览（Markdown 实时渲染）",
+  palettePlaceholder: "搜索文件与命令…",
+  paletteNoMatches: "无匹配",
+  paletteCreateNote: (name: string) => `新建笔记：${name}`,
+  conflictTitle: "文件在磁盘上被修改",
+  conflictBody: (path: string) =>
+    `"${path}" 在 Markion 之外被修改。保留你的编辑，还是加载磁盘版本？`,
+  conflictKeep: "保留我的编辑",
+  conflictLoad: "加载磁盘版本",
   aboutVersion: "版本",
   aboutDesc:
     "一款快速、本地优先的 Markdown 编辑器，支持 Windows / macOS / Linux。Obsidian 式实时预览、语雀式多级文档树，笔记就是你能掌控的普通 .md 文件。",
