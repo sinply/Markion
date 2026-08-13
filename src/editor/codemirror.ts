@@ -6,6 +6,7 @@ import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
 import { livePreviewExtension, livePreviewField, previewField } from "./livePreview";
 import { markdownContextFacet, imagePasteDropExtension, type MarkdownContext } from "./media";
+import { wikilinkCompletion } from "./wikilink";
 
 const themeCompartment = new Compartment();
 const livePreviewCompartment = new Compartment();
@@ -42,6 +43,7 @@ export function createEditorState(
       themeCompartment.of(EditorView.theme({})),
       opts?.markdownContext ? markdownContextFacet.of(opts.markdownContext) : [],
       imagePasteDropExtension,
+      wikilinkCompletion,
       livePreviewCompartment.of(livePreview ? [livePreviewField, livePreviewExtension] : []),
     ],
   });

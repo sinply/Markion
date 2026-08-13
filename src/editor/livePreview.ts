@@ -3,7 +3,9 @@ import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder, EditorState, StateField } from "@codemirror/state";
 import type { SyntaxNode } from "@lezer/common";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget, MathInlineWidget, PreviewWidget } from "./widgets";
+import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget, MathInlineWidget, PreviewWidget, WikiLinkWidget } from "./widgets";
+import { markdownContextFacet, type MarkdownContext } from "./media";
+import { resolveWikiLink } from "./wikiIndex";
 
 interface DecoEntry {
   from: number;
@@ -422,6 +424,36 @@ export function buildDecorations(state: EditorState): DecorationSet {
     });
   }
 
+  // --- Inline: wikilinks [[name]] / [[path/name]] / [[name|alias]] ---
+  const wikiRe = /\[\[([^\]\n]+)\]\]/g;
+  let wm: RegExpExecArray | null;
+  while ((wm = wikiRe.exec(docText)) !== null) {
+    const from = wm.index;
+    const to = from + wm[0].length;
+    // Never render `[[` inside fenced or inline code — resolve the tree at the
+    // match start and skip if any ancestor is a code node.
+    let inCode = false;
+    for (let cur: SyntaxNode | null = syntaxTree(state).resolve(from, -1); cur; cur = cur.parent) {
+      const n = cur.type.name;
+      if (n === "FencedCode" || n === "CodeBlock" || n === "InlineCode") {
+        inCode = true;
+        break;
+      }
+    }
+    if (inCode) continue;
+    if (isOnActiveLine(state, from, to, activeLine)) {
+      continue; // keep source editable on the cursor line
+    }
+    const target = wm[1].trim();
+    const wikiWidget = new WikiLinkWidget(target, resolveWikiLink(target) !== null);
+    wikiWidget.from = from;
+    wikiWidget.to = to;
+    entries.push({
+      from, to,
+      decoration: Decoration.replace({ widget: wikiWidget }),
+    });
+  }
+
   entries.sort((a, b) => a.from - b.from || a.to - b.to);
 
   const builder = new RangeSetBuilder<Decoration>();
@@ -490,6 +522,28 @@ export const livePreviewExtension = ViewPlugin.fromClass(LivePlugin, {
         }
       }
 
+      // Wiki links: Ctrl+click a resolved link opens the target note; clicking
+      // an unresolved link creates it. A plain click on a resolved link leaves
+      // the default cursor placement so the source stays editable.
+      const wikilink = target.closest<HTMLElement>(".cm-wikilink");
+      if (wikilink) {
+        const ctx = view.state.facet(markdownContextFacet)[0];
+        if (!ctx) return false;
+        const raw = wikilink.dataset.wikiTarget ?? "";
+        const targetPath = resolveWikiLink(raw);
+        if (targetPath) {
+          if (event.ctrlKey || event.metaKey) {
+            event.preventDefault();
+            void openWikiLink(ctx, targetPath);
+            return true;
+          }
+          return false;
+        }
+        event.preventDefault();
+        void createAndOpenWikiNote(ctx, raw);
+        return true;
+      }
+
       // Source badge on image/math widgets: flip that block to source. The
       // block's range is stored on the badge as data attributes (set by
       // appendSourceBadge) because math blocks have no Lezer node to resolve.
@@ -508,3 +562,49 @@ export const livePreviewExtension = ViewPlugin.fromClass(LivePlugin, {
 });
 
 export const LivePreviewPlugin = LivePlugin;
+
+async function openWikiLink(ctx: MarkdownContext, path: string): Promise<void> {
+  const { readFile } = await import("../lib/ipc");
+  const { useDocStore } = await import("../stores/docStore");
+  const { useUiStore } = await import("../stores/uiStore");
+  try {
+    const content = await readFile(ctx.vaultRoot, path);
+    const title = path.split("/").pop() ?? path;
+    useDocStore.getState().openDoc(title, path);
+    useDocStore.getState().setActiveContent(content);
+    useUiStore.getState().addRecent(path);
+  } catch {
+    // read failed — leave the editor as is
+  }
+}
+
+/** Create a missing `[[target]]` note and open it. A target with a `/` is used
+ *  as-is (vault-root-relative); a bare name is created next to the current doc
+ *  (Obsidian default). */
+async function createAndOpenWikiNote(ctx: MarkdownContext, raw: string): Promise<void> {
+  const { createFile, readFile } = await import("../lib/ipc");
+  const { useDocStore } = await import("../stores/docStore");
+  const { useUiStore } = await import("../stores/uiStore");
+  const { useVaultStore } = await import("../stores/vaultStore");
+  const target = raw.split("|")[0].trim();
+  if (!target) return;
+  const docDir = ctx.docRel.includes("/")
+    ? ctx.docRel.slice(0, ctx.docRel.lastIndexOf("/"))
+    : "";
+  const newPath = target.includes("/")
+    ? `${target}.md`
+    : docDir
+      ? `${docDir}/${target}.md`
+      : `${target}.md`;
+  try {
+    await createFile(ctx.vaultRoot, newPath);
+    await useVaultStore.getState().loadTree(ctx.vaultRoot);
+    const content = await readFile(ctx.vaultRoot, newPath);
+    const title = target.split("/").pop() ?? target;
+    useDocStore.getState().openDoc(title, newPath);
+    useDocStore.getState().setActiveContent(content);
+    useUiStore.getState().addRecent(newPath);
+  } catch {
+    // creation failed — leave the editor unchanged
+  }
+}

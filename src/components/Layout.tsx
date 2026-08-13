@@ -5,12 +5,14 @@ import { EditorPane } from "./EditorPane";
 import { OutlinePane } from "./Outline";
 import { BacklinksPanel } from "./BacklinksPanel";
 import { GraphPanel } from "./GraphPanel";
-import { QuickOpen } from "./QuickOpen";
+import { CommandPalette } from "./CommandPalette";
 import { useSettingsStore } from "../stores/settingsStore";
+import { useWikiIndex } from "../hooks/useWikiIndex";
 import { EditorView } from "@codemirror/view";
 import type { EditorState } from "@codemirror/state";
 
 export function Layout() {
+  useWikiIndex();
   const [editorState, setEditorState] = useState<EditorState | null>(null);
   const showOutline = useSettingsStore((s) => s.showOutline);
   const showBacklinks = useSettingsStore((s) => s.showBacklinks);
@@ -75,7 +77,7 @@ export function Layout() {
           </>
         )}
       </Group>
-      <QuickOpen />
+      <CommandPalette />
     </div>
   );
 }

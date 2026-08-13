@@ -453,6 +453,23 @@ body {
   text-decoration: underline;
 }
 
+/* Wiki link [[...]] */
+.cm-wikilink {
+  color: var(--accent);
+  cursor: pointer;
+}
+.cm-wikilink:hover {
+  text-decoration: underline;
+}
+.cm-wikilink-unresolved {
+  color: #c62828;
+  border-bottom: 1px dashed #c62828;
+  text-decoration: none;
+}
+.cm-wikilink-unresolved:hover {
+  text-decoration: underline;
+}
+
 /* Image */
 .cm-image-wrap {
   display: inline-block;

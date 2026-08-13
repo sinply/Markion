@@ -2,6 +2,7 @@ import { WidgetType } from "@codemirror/view";
 import type { EditorView } from "@codemirror/view";
 import { renderMarkdown, renderMarkdownWithTableSource } from "./markdown";
 import { markdownContextFacet, imageToSrc, isRemoteSrc } from "./media";
+import { wikiLabel } from "./wikiIndex";
 
 export class CodeBlockWidget extends WidgetType {
   readonly language: string;
@@ -509,6 +510,40 @@ export class ImageWidget extends WidgetType {
     wrap.appendChild(img);
     appendSourceBadge(wrap, this.from, this.to);
     return wrap;
+  }
+
+  ignoreEvent(): boolean {
+    return false;
+  }
+}
+
+/** Rendered `[[wikilink]]`: shows the alias (or basename) as a clickable link.
+ *  Resolved links open on Ctrl+click; unresolved links create the note on
+ *  click. The raw target token is kept on the element for the click handler. */
+export class WikiLinkWidget extends WidgetType {
+  from = 0;
+  to = 0;
+  readonly label: string;
+
+  constructor(
+    readonly target: string,
+    readonly resolved: boolean,
+  ) {
+    super();
+    this.label = wikiLabel(target);
+  }
+
+  eq(other: WikiLinkWidget): boolean {
+    return other.target === this.target && other.resolved === this.resolved;
+  }
+
+  toDOM(): HTMLElement {
+    const a = document.createElement("span");
+    a.className = "cm-wikilink" + (this.resolved ? "" : " cm-wikilink-unresolved");
+    a.textContent = this.label;
+    a.dataset.wikiTarget = this.target;
+    a.title = this.resolved ? `Open ${this.target}` : `Create note: ${this.target}`;
+    return a;
   }
 
   ignoreEvent(): boolean {
