@@ -102,6 +102,31 @@ pub fn save_image(
 
 use crate::config;
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn create_file_makes_dirs_and_empty_file() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        create_file(root.clone(), "notes/new.md".to_string()).unwrap();
+        let p = dir.path().join("notes/new.md");
+        assert!(p.exists());
+        assert_eq!(std::fs::read_to_string(&p).unwrap(), "");
+    }
+
+    #[test]
+    fn create_file_does_not_overwrite() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        std::fs::write(dir.path().join("existing.md"), "keep me").unwrap();
+        create_file(root.clone(), "existing.md".to_string()).unwrap();
+        assert_eq!(std::fs::read_to_string(dir.path().join("existing.md")).unwrap(), "keep me");
+    }
+}
+
 #[tauri::command]
 pub fn find_backlinks(vault_root: String, target: String) -> Result<Vec<Backlink>, String> {
     backlinks::find_backlinks(Path::new(&vault_root), &target).map_err(|e| e.to_string())
@@ -112,6 +137,20 @@ pub fn scan_graph(
     vault_root: String,
 ) -> Result<(Vec<GraphNode>, Vec<GraphEdge>), String> {
     backlinks::scan_graph(Path::new(&vault_root)).map_err(|e| e.to_string())
+}
+
+/// Create an empty markdown file at `path` (relative to vault root). Parent
+/// directories are created as needed. Never overwrites an existing file.
+#[tauri::command]
+pub fn create_file(vault_root: String, path: String) -> Result<(), String> {
+    let full = Path::new(&vault_root).join(&path);
+    if full.exists() {
+        return Ok(()); // already there — treat as success
+    }
+    if let Some(parent) = full.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(full, "").map_err(|e| e.to_string())
 }
 
 #[tauri::command]

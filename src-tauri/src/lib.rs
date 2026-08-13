@@ -22,6 +22,7 @@ pub fn run() {
             commands::set_collapsed,
             commands::move_node,
             commands::save_image,
+            commands::create_file,
             commands::find_backlinks,
             commands::scan_graph,
             commands::read_config,

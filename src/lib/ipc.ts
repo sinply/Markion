@@ -34,6 +34,10 @@ export async function moveNode(
   await invoke<void>("move_node", { vaultRoot, fromFolder, fromName, toFolder, toName });
 }
 
+export async function createFile(vaultRoot: string, path: string): Promise<void> {
+  await invoke<void>("create_file", { vaultRoot, path });
+}
+
 export async function saveImage(
   vaultRoot: string, bytes: Uint8Array, ext: string, docRel: string,
   strategy: string, pathStyle: string, date: string,
