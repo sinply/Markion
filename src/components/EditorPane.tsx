@@ -18,6 +18,7 @@ export function EditorPane({
   const openDoc = useDocStore((s) => s.openDoc);
   const markDirty = useDocStore((s) => s.markDirty);
   const markClean = useDocStore((s) => s.markClean);
+  const markSaved = useDocStore((s) => s.markSaved);
   const activeContent = useDocStore((s) => s.activeContent);
   const activeContentDocId = useDocStore((s) => s.activeContentDocId);
   const setActiveContent = useDocStore((s) => s.setActiveContent);
@@ -76,6 +77,7 @@ export function EditorPane({
           const docPath = useDocStore.getState().openDocs.find((d) => d.id === activeDocId)?.path;
           if (docPath) {
             await writeFileAtomic(vaultRoot, docPath, doc);
+            markSaved(activeDocId, doc);
             markClean(activeDocId);
           }
         } catch {

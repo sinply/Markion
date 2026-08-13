@@ -51,6 +51,11 @@ interface UiState {
 
   shortcutsOpen: boolean;
   setShortcutsOpen: (b: boolean) => void;
+
+  /** External-change conflict: a dirty doc was modified on disk. The dialog
+   *  subscribes; resolving the conflict clears it. */
+  conflict: { path: string; diskContent: string } | null;
+  setConflict: (c: { path: string; diskContent: string } | null) => void;
 }
 
 export const useUiStore = create<UiState>((set, get) => ({
@@ -102,4 +107,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   setHelpOpen: (helpOpen) => set({ helpOpen }),
   shortcutsOpen: false,
   setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
+
+  conflict: null,
+  setConflict: (conflict) => set({ conflict }),
 }));

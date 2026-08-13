@@ -15,6 +15,10 @@ interface DocState {
   switchTo: (id: string) => void;
   markDirty: (id: string) => void;
   markClean: (id: string) => void;
+  /** Record the exact content last written to disk for a doc, so external-change
+   *  detection can tell our own autosave echo from a real external edit. */
+  markSaved: (id: string, content: string) => void;
+  savedContent: Record<string, string>;
   setActiveContent: (content: string) => void;
   activeContent: string;
   /** Which doc the activeContent belongs to (so switching tabs reloads the right file). */
@@ -25,6 +29,7 @@ export const useDocStore = create<DocState>((set, get) => ({
   openDocs: [],
   activeDocId: null,
   dirtyMap: {},
+  savedContent: {},
   activeContent: "",
   activeContentDocId: null,
 
@@ -70,6 +75,8 @@ export const useDocStore = create<DocState>((set, get) => ({
     set((s) => ({ dirtyMap: { ...s.dirtyMap, [id]: true } })),
   markClean: (id) =>
     set((s) => ({ dirtyMap: { ...s.dirtyMap, [id]: false } })),
+  markSaved: (id, content) =>
+    set((s) => ({ savedContent: { ...s.savedContent, [id]: content } })),
 
   setActiveContent: (content) =>
     set((s) => ({ activeContent: content, activeContentDocId: s.activeDocId })),

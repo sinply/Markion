@@ -193,6 +193,7 @@ async function saveActive(asNew: boolean) {
   const content = docStore.activeContent;
   try {
     await writeFileAtomic(root, targetRel, content);
+    docStore.markSaved(id, content);
     docStore.markClean(id);
     if (asNew) {
       docStore.openDoc(targetRel.split("/").pop() ?? targetRel, targetRel);

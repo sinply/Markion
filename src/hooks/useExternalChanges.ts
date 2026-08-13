@@ -2,14 +2,29 @@ import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useVaultStore } from "../stores/vaultStore";
 import { useDocStore } from "../stores/docStore";
+import { useUiStore } from "../stores/uiStore";
+import { getEditorView } from "../editor/registry";
 import { readFile } from "../lib/ipc";
+
+/** Pure decision for how to react to a disk change of the active doc. Exported
+ *  for tests. */
+export function decideExternalChange(opts: {
+  lastSaved: string | undefined;
+  editor: string | undefined;
+  disk: string;
+  dirty: boolean;
+}): "ignore-echo" | "ignore-same" | "conflict" | "reload" {
+  if (opts.lastSaved !== undefined && opts.disk === opts.lastSaved) return "ignore-echo";
+  if (opts.editor !== undefined && opts.editor === opts.disk) return "ignore-same";
+  return opts.dirty ? "conflict" : "reload";
+}
 
 /**
  * Listen for the backend `vault-changed` event (emitted by the file watcher)
  * and react:
  *  - always rebuild the document tree (new/deleted/renamed files)
- *  - if the active document's path is in the changed set and the doc is clean,
- *    reload its content from disk silently; if dirty, leave it (user's edits win)
+ *  - if the active document changed on disk, reload it when clean, or surface a
+ *    "keep mine / load disk" conflict when it has unsaved edits
  */
 export function useExternalChanges() {
   const vaultRoot = useVaultStore((s) => s.vaultRoot);
@@ -22,22 +37,43 @@ export function useExternalChanges() {
     const setup = async () => {
       unlisten = await listen<string[]>("vault-changed", async (event) => {
         const paths = event.payload ?? [];
+
         // 1. refresh the tree for any structural change
         await loadTree(vaultRoot).catch(() => {});
 
-        // 2. reload the active doc if it was changed externally and is clean
-        const { activeDocId, openDocs, dirtyMap, setActiveContent } =
-          useDocStore.getState();
-        if (!activeDocId) return;
-        const active = openDocs.find((d) => d.id === activeDocId);
-        if (!active) return;
-        if (dirtyMap[activeDocId]) return; // user has unsaved edits - keep them
-        if (!paths.includes(active.path)) return;
+        // 2. handle a change to the active document
+        const docStore = useDocStore.getState();
+        const active = docStore.openDocs.find((d) => d.id === docStore.activeDocId);
+        if (!active || !paths.includes(active.path)) return;
+
+        let disk: string;
         try {
-          const content = await readFile(vaultRoot, active.path);
-          setActiveContent(content);
+          disk = await readFile(vaultRoot, active.path);
         } catch {
-          // file may have been deleted - leave the editor as is
+          return; // file may have been deleted — leave the editor as is
+        }
+
+        const lastSaved = docStore.savedContent[active.id];
+        const editor = getEditorView()?.state.doc.toString();
+        const decision = decideExternalChange({
+          lastSaved,
+          editor,
+          disk,
+          dirty: !!docStore.dirtyMap[active.id],
+        });
+
+        if (decision === "ignore-echo" || decision === "ignore-same") return;
+
+        if (decision === "conflict") {
+          useUiStore.getState().setConflict({ path: active.path, diskContent: disk });
+        } else {
+          // Clean: reload the mounted editor directly (setActiveContent alone
+          // does not refresh a mounted CM6 view) and sync the store.
+          const view = getEditorView();
+          if (view) {
+            view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: disk } });
+          }
+          docStore.setActiveContent(disk);
         }
       });
     };
