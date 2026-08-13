@@ -9,7 +9,7 @@ pub struct Backlink {
 }
 
 /// The bare target name used for matching: the doc's filename without `.md`.
-fn target_key(doc_rel: &str) -> String {
+pub(crate) fn target_key(doc_rel: &str) -> String {
     let name = Path::new(doc_rel)
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
@@ -55,12 +55,7 @@ fn links_to(text: &str, key: &str) -> bool {
     false
 }
 
-fn walk(
-    root: &Path,
-    dir: &Path,
-    key: &str,
-    out: &mut Vec<Backlink>,
-) -> std::io::Result<()> {
+fn walk(root: &Path, dir: &Path, key: &str, out: &mut Vec<Backlink>) -> std::io::Result<()> {
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -99,7 +94,7 @@ pub struct GraphEdge {
 }
 
 /// Extract all `[[...]]` target stems from `text` (lowercased, alias stripped).
-fn link_targets(text: &str) -> Vec<String> {
+pub(crate) fn link_targets(text: &str) -> Vec<String> {
     let lower = text.to_lowercase();
     let mut out = Vec::new();
     let mut rest = lower.as_str();
@@ -230,7 +225,10 @@ mod tests {
 
     #[test]
     fn link_targets_extracts_stems() {
-        assert_eq!(link_targets("See [[design]] and [[notes/api]]"), vec!["design", "api"]);
+        assert_eq!(
+            link_targets("See [[design]] and [[notes/api]]"),
+            vec!["design", "api"]
+        );
         assert_eq!(link_targets("[[a|alias]] here"), vec!["a"]);
         assert_eq!(link_targets("no links"), Vec::<String>::new());
     }

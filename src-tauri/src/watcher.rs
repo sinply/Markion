@@ -35,7 +35,11 @@ pub fn start_watcher(
     let mut watcher = notify::recommended_watcher(move |res: Result<notify::Event, _>| {
         if let Ok(ev) = res {
             for p in &ev.paths {
-                let rel = p.strip_prefix(&root).unwrap_or(p).to_string_lossy().to_string();
+                let rel = p
+                    .strip_prefix(&root)
+                    .unwrap_or(p)
+                    .to_string_lossy()
+                    .to_string();
                 if rel.starts_with(".markion") {
                     // Ignore changes to the index file itself
                     return;
@@ -47,11 +51,11 @@ pub fn start_watcher(
             }
         }
     })
-    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+    .map_err(|e| std::io::Error::other(e.to_string()))?;
 
     watcher
         .watch(vault_root, RecursiveMode::Recursive)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
 
     let (tx_debounced, rx_debounced) = channel::<Vec<String>>();
     std::thread::spawn(move || {

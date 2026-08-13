@@ -1,6 +1,6 @@
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view";
 import { syntaxTree } from "@codemirror/language";
-import { RangeSetBuilder, EditorState, StateField } from "@codemirror/state";
+import { RangeSetBuilder, EditorState, StateField, Text } from "@codemirror/state";
 import type { SyntaxNode } from "@lezer/common";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget, MathInlineWidget, PreviewWidget, WikiLinkWidget } from "./widgets";
@@ -26,6 +26,8 @@ export const livePreviewField = StateField.define<DecorationSet>({
     // cursor switches to editable source immediately. (The old approach — the
     // ViewPlugin dispatching a setDecorations effect — never reached this field,
     // so code blocks / images stayed read-only widgets after the cursor moved.)
+    // `buildDecorations` itself is incremental: selection-only updates reuse
+    // the cached scan and only re-run the cheap decide pass.
     if (tr.docChanged || tr.selection) {
       return buildDecorations(tr.state);
     }
@@ -128,10 +130,98 @@ export function isExternalUrl(url: string): boolean {
   return /^https?:\/\//i.test(url);
 }
 
-/** Pure function: build decorations from the Lezer syntax tree. */
+/** Build the live-preview DecorationSet for `state`.
+ *
+ *  Performance: the expensive part (walking the Lezer tree + regex-scanning
+ *  the whole doc for math/wikilinks) is separated into `scanBlocks`, whose
+ *  result is cached per document (see `scanCache`). A selection-only change
+ *  reuses the cached scan and only re-runs the linear `decideEntries` pass;
+ *  moving the cursor within the same line reuses the previous DecorationSet
+ *  entirely.
+ */
 export function buildDecorations(state: EditorState): DecorationSet {
+  // Key the cache by the document Text object: EditorState is immutable, so a
+  // selection-only update creates a NEW state object but keeps the SAME Text;
+  // only a real doc change swaps the Text. That makes the key exactly match
+  // "did the scanned content change?".
+  const doc = state.doc;
+  let cache = scanCache.get(doc);
+  if (!cache) {
+    cache = { blocks: scanBlocks(state), lastActiveLine: -1, lastSet: null };
+    scanCache.set(doc, cache);
+  }
   const activeLine = activeLineOf(state);
-  const entries: DecoEntry[] = [];
+  if (cache.lastActiveLine === activeLine && cache.lastSet) {
+    return cache.lastSet;
+  }
+  const entries = decideEntries(state, cache.blocks);
+  const set = buildSet(entries);
+  cache.lastActiveLine = activeLine;
+  cache.lastSet = set;
+  return set;
+}
+
+// ---- Scan / decide split ----
+
+interface ScanCache {
+  blocks: Block[];
+  lastActiveLine: number;
+  lastSet: DecorationSet | null;
+}
+
+const scanCache = new WeakMap<Text, ScanCache>();
+
+type BlockKind =
+  | "style"       // styled span, optionally with hidden sub-marker ranges
+  | "marks"       // standalone hidden markers (ListMark, outer link brackets)
+  | "link"        // link text span with fixed-hidden brackets
+  | "image"       // image widget (skipped on active line)
+  | "code"        // fenced code widget (skipped on active line)
+  | "table"       // GFM table widget (skipped on active line)
+  | "task"        // task checkbox widget (skipped on active line)
+  | "mathBlock"   // $$...$$ widget (skipped on active line)
+  | "mathInline"  // $...$ widget (skipped on active line)
+  | "wiki"        // [[wikilink]] widget (skipped on active line)
+  | "frontmatter";
+
+interface Block {
+  kind: BlockKind;
+  from: number;
+  to: number;
+  /** Sub-ranges hidden with the active-line-aware mark treatment. */
+  markList?: { from: number; to: number }[];
+  /** Class applied to the whole [from,to] span (with styleAttr). */
+  styleClass?: string;
+  styleAttr?: string;
+  /** Brackets hidden unconditionally (link brackets). */
+  fixedMarkList?: { from: number; to: number }[];
+  // Widget payloads:
+  code?: string;
+  lang?: string;
+  tableRaw?: string;
+  checked?: boolean;
+  src?: string;
+  alt?: string;
+  tex?: string;
+  wikiTarget?: string;
+  wikiResolved?: boolean;
+}
+
+function collectMarks(node: SyntaxNode, name: string): { from: number; to: number }[] {
+  const out: { from: number; to: number }[] = [];
+  const cur = node.cursor();
+  if (cur.firstChild()) {
+    do {
+      if (cur.type.name === name) out.push({ from: cur.from, to: cur.to });
+    } while (cur.nextSibling());
+  }
+  return out;
+}
+
+/** Walk the Lezer tree + regex-scan the doc once, producing a flat block list
+ *  with no view-state (active line) baked in. */
+function scanBlocks(state: EditorState): Block[] {
+  const blocks: Block[] = [];
   const tree = syntaxTree(state);
 
   tree.iterate({
@@ -140,54 +230,34 @@ export function buildDecorations(state: EditorState): DecorationSet {
 
       // --- Inline: Emphasis + StrongEmphasis (hide markers, style content) ---
       if (type === "Emphasis" || type === "StrongEmphasis") {
-        const cur = node.node.cursor();
-        if (cur.firstChild()) {
-          do {
-            if (cur.type.name === "EmphasisMark") {
-              entries.push({ from: cur.from, to: cur.to, decoration: markHiddenAt(state, cur.from, cur.to, activeLine) });
-            }
-          } while (cur.nextSibling());
-        }
-        const style = type === "StrongEmphasis" ? "font-weight:700" : "font-style:italic";
-        entries.push({
+        blocks.push({
+          kind: "style",
           from: node.from, to: node.to,
-          decoration: Decoration.mark({ attributes: { class: "cm-emphasis", style } }),
+          styleClass: "cm-emphasis",
+          styleAttr: type === "StrongEmphasis" ? "font-weight:700" : "font-style:italic",
+          markList: collectMarks(node.node, "EmphasisMark"),
         });
         return false;
       }
 
       // --- Inline: code ---
       if (type === "InlineCode") {
-        // Push markers FIRST (shorter ranges) so the whole-span inline-code
-        // mark (same `from`) doesn't collide with them during RangeSet build.
-        const cur = node.node.cursor();
-        if (cur.firstChild()) {
-          do {
-            if (cur.type.name === "CodeMark") {
-              entries.push({ from: cur.from, to: cur.to, decoration: markHiddenAt(state, cur.from, cur.to, activeLine) });
-            }
-          } while (cur.nextSibling());
-        }
-        entries.push({
+        // Markers are separate block entries; decideEntries pushes them before
+        // the whole-span mark (same `from`) so the RangeSet build doesn't
+        // collide on equal ranges.
+        blocks.push({
+          kind: "style",
           from: node.from, to: node.to,
-          decoration: Decoration.mark({ attributes: { class: "cm-inline-code" } }),
+          styleClass: "cm-inline-code",
+          markList: collectMarks(node.node, "CodeMark"),
         });
         return false;
       }
 
       // --- Inline: images ---
       if (type === "Image") {
-        if (isOnActiveLine(state, node.from, node.to, activeLine)) {
-          return false; // keep source editable on the cursor line
-        }
         const { src, alt } = imageSrcAltFromNode(state, node.node);
-        const imageWidget = new ImageWidget(src, alt);
-        imageWidget.from = node.from;
-        imageWidget.to = node.to;
-        entries.push({
-          from: node.from, to: node.to,
-          decoration: Decoration.replace({ widget: imageWidget }),
-        });
+        blocks.push({ kind: "image", from: node.from, to: node.to, src, alt });
         return false;
       }
 
@@ -204,48 +274,37 @@ export function buildDecorations(state: EditorState): DecorationSet {
         // Image nested in a link: render the image, hide only the outer brackets.
         const imgChild = children.find((c) => c.name === "Image");
         if (imgChild) {
-          if (isOnActiveLine(state, imgChild.from, imgChild.to, activeLine)) {
-            return false; // keep source editable on the cursor line
-          }
           const { src, alt } = imageSrcAltFromNode(state, imgChild.node);
-          const linkImageWidget = new ImageWidget(src, alt);
-          linkImageWidget.from = imgChild.from;
-          linkImageWidget.to = imgChild.to;
-          entries.push({
-            from: imgChild.from, to: imgChild.to,
-            decoration: Decoration.replace({ widget: linkImageWidget }),
-          });
-          for (const c of children) {
-            if (c.name === "LinkMark" && (c.from < imgChild.from || c.to > imgChild.to)) {
-              entries.push({ from: c.from, to: c.to, decoration: markHiddenAt(state, c.from, c.to, activeLine) });
-            }
+          blocks.push({ kind: "image", from: imgChild.from, to: imgChild.to, src, alt });
+          const outer = children
+            .filter((c) => c.name === "LinkMark" && (c.from < imgChild.from || c.to > imgChild.to))
+            .map((c) => ({ from: c.from, to: c.to }));
+          if (outer.length > 0) {
+            blocks.push({ kind: "marks", from: node.from, to: node.to, markList: outer });
           }
           return false;
         }
 
-        for (const c of children) {
-          if (c.name === "LinkMark") {
-            entries.push({
-              from: c.from, to: c.to,
-              decoration: Decoration.mark({ attributes: { class: "cm-hidden cm-link-marker" } }),
-            });
-          }
-        }
         // Link text = content after the opening [ bracket up to the URL.
         // GFM parses links as: LinkMark[ [, LinkMark[ ], LinkMark[(, URL, LinkMark[)
         // with the visible text as a raw range between from+1 and the URL.
         const doc = state.doc.toString();
         const rest = doc.slice(node.from + 1, node.to);
         const urlIdx = rest.indexOf("](");
+        const fixedMarkList = children
+          .filter((c) => c.name === "LinkMark")
+          .map((c) => ({ from: c.from, to: c.to }));
         if (urlIdx >= 0) {
-          const textFrom = node.from + 1;
-          const textTo = node.from + 1 + urlIdx;
-          entries.push({
-            from: textFrom, to: textTo,
-            decoration: Decoration.mark({
-              attributes: { class: "cm-link", style: "color:#0366d6;text-decoration:underline;cursor:pointer" },
-            }),
+          blocks.push({
+            kind: "link",
+            from: node.from + 1,
+            to: node.from + 1 + urlIdx,
+            styleClass: "cm-link",
+            styleAttr: "color:#0366d6;text-decoration:underline;cursor:pointer",
+            fixedMarkList,
           });
+        } else {
+          blocks.push({ kind: "link", from: node.from, to: node.to, fixedMarkList });
         }
         return false;
       }
@@ -255,113 +314,74 @@ export function buildDecorations(state: EditorState): DecorationSet {
         const m = type.match(/(\d)$/);
         const level = m ? Math.min(parseInt(m[1], 10), 6) : 1;
         const sizes = ["1.8em", "1.5em", "1.3em", "1.15em", "1em", "0.9em"];
-        // Hide the # marks first (shorter ranges) to avoid same-from collision
-        const cur = node.node.cursor();
-        if (cur.firstChild()) {
-          do {
-            if (cur.type.name === "HeaderMark") {
-              entries.push({ from: cur.from, to: cur.to, decoration: markHiddenAt(state, cur.from, cur.to, activeLine) });
-            }
-          } while (cur.nextSibling());
-        }
-        entries.push({
+        blocks.push({
+          kind: "style",
           from: node.from, to: node.to,
-          decoration: Decoration.mark({
-            attributes: {
-              class: "cm-heading",
-              style: `font-size:${sizes[level - 1]};font-weight:600;`,
-            },
-          }),
+          styleClass: "cm-heading",
+          styleAttr: `font-size:${sizes[level - 1]};font-weight:600;`,
+          markList: collectMarks(node.node, "HeaderMark"),
         });
         return false;
       }
 
       // --- Blockquote: hide the `>` mark(s), then style the content ---
       if (type === "Blockquote") {
-        const cur = node.node.cursor();
-        if (cur.firstChild()) {
-          do {
-            if (cur.type.name === "QuoteMark") {
-              entries.push({ from: cur.from, to: cur.to, decoration: markHiddenAt(state, cur.from, cur.to, activeLine) });
-            }
-          } while (cur.nextSibling());
-        }
-        entries.push({
+        blocks.push({
+          kind: "style",
           from: node.from, to: node.to,
-          decoration: Decoration.mark({
-            attributes: {
-              class: "cm-blockquote",
-              style: "border-left:3px solid #dfe2e5;padding-left:12px;color:#6a737d;",
-            },
-          }),
+          styleClass: "cm-blockquote",
+          styleAttr: "border-left:3px solid #dfe2e5;padding-left:12px;color:#6a737d;",
+          markList: collectMarks(node.node, "QuoteMark"),
         });
         return false;
       }
 
       // --- List bullet/number marker ---
       if (type === "ListMark") {
-        entries.push({ from: node.from, to: node.to, decoration: markHiddenAt(state, node.from, node.to, activeLine) });
+        blocks.push({
+          kind: "marks",
+          from: node.from, to: node.to,
+          markList: [{ from: node.from, to: node.to }],
+        });
         return false;
       }
 
       // --- Block: FencedCode ---
       if (type === "FencedCode" || type === "CodeBlock") {
-        if (isOnActiveLine(state, node.from, node.to, activeLine)) {
-          return false; // keep source editable on the cursor line
-        }
         const text = state.doc.sliceString(node.from, node.to);
         const lines = text.split("\n");
         const infoLine = lines[0]?.replace(/^```/, "").trim() ?? "";
-        const codeLines = lines.slice(1, -1).join("\n");
-        const codeWidget = new CodeBlockWidget(codeLines, infoLine);
-        codeWidget.blockFrom = node.from;
-        codeWidget.blockTo = node.to;
-        entries.push({
+        blocks.push({
+          kind: "code",
           from: node.from, to: node.to,
-          decoration: Decoration.replace({ widget: codeWidget, block: true }),
+          code: lines.slice(1, -1).join("\n"),
+          lang: infoLine,
         });
         return false;
       }
 
       // --- Block: Table (GFM) ---
       if (type === "Table") {
-        if (isOnActiveLine(state, node.from, node.to, activeLine)) {
-          return false; // keep source editable on the cursor line
-        }
-        const raw = state.doc.sliceString(node.from, node.to);
-        const tableWidget = new TableWidget(raw);
-        tableWidget.blockFrom = node.from;
-        tableWidget.blockTo = node.to;
-        entries.push({
+        blocks.push({
+          kind: "table",
           from: node.from, to: node.to,
-          decoration: Decoration.replace({ widget: tableWidget, block: true }),
+          tableRaw: state.doc.sliceString(node.from, node.to),
         });
         return false;
       }
 
       // --- Block: Task / TaskMarker (GFM) ---
       if (type === "Task" || type === "TaskMarker") {
-        if (isOnActiveLine(state, node.from, node.to, activeLine)) {
-          return false; // keep source editable on the cursor line
-        }
-        const text = state.doc.sliceString(node.from, node.to);
         if (type === "TaskMarker") {
-          const checked = /^\[[xX]\]$/.test(text);
-          entries.push({
-            from: node.from, to: node.to,
-            decoration: Decoration.replace({ widget: new TaskCheckboxWidget(checked), block: true }),
-          });
+          const checked = /^\[[xX]\]$/.test(state.doc.sliceString(node.from, node.to));
+          blocks.push({ kind: "task", from: node.from, to: node.to, checked });
         } else {
           const cur = node.node.cursor();
           if (cur.firstChild()) {
             do {
               if (cur.type.name === "TaskMarker") {
-                const mt = state.doc.sliceString(cur.from, cur.to);
-                const checked = /^\[[xX]\]$/.test(mt);
-                entries.push({
-                  from: cur.from, to: cur.to,
-                  decoration: Decoration.replace({ widget: new TaskCheckboxWidget(checked), block: true }),
-                });
+                const checked = /^\[[xX]\]$/.test(state.doc.sliceString(cur.from, cur.to));
+                blocks.push({ kind: "task", from: cur.from, to: cur.to, checked });
               }
             } while (cur.nextSibling());
           }
@@ -371,56 +391,43 @@ export function buildDecorations(state: EditorState): DecorationSet {
     },
   });
 
-  // YAML frontmatter: in edit mode keep it as editable source, but give it a
-  // subtle background bar (not highlighted) so it reads as a distinct panel.
+  // YAML frontmatter: keep it as editable source, but give it a subtle
+  // background bar (not highlighted) so it reads as a distinct panel.
   const docText = state.doc.toString();
   const fmMatch = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(docText);
   if (fmMatch) {
-    entries.push({
-      from: 0,
-      to: fmMatch[0].length,
-      decoration: Decoration.mark({ attributes: { class: "cm-frontmatter-bar" } }),
-    });
+    blocks.push({ kind: "frontmatter", from: 0, to: fmMatch[0].length });
   }
 
   // --- Block math: $$...$$ (Lezer markdown has no math nodes; scan the doc) ---
   const mathRe = /\$\$([\s\S]+?)\$\$/g;
+  const blockMathRanges: { from: number; to: number }[] = [];
   let m: RegExpExecArray | null;
   while ((m = mathRe.exec(docText)) !== null) {
-    if (isOnActiveLine(state, m.index, m.index + m[0].length, activeLine)) {
-      continue; // keep source editable on the cursor line
-    }
-    const mathBlockWidget = new MathBlockWidget(m[1].trim());
-    mathBlockWidget.from = m.index;
-    mathBlockWidget.to = m.index + m[0].length;
-    entries.push({
-      from: m.index,
-      to: m.index + m[0].length,
-      decoration: Decoration.replace({ widget: mathBlockWidget, block: true }),
-    });
+    const from = m.index;
+    const to = m.index + m[0].length;
+    blockMathRanges.push({ from, to });
+    blocks.push({ kind: "mathBlock", from, to, tex: m[1].trim() });
   }
 
   // --- Inline math: $...$ (single dollar, not part of $$...$$) ---
   // A crude-but-robust scan: find `$` pairs on the same line, non-empty,
-  // not preceded/followed by another `$`.
+  // not preceded/followed by another `$`. Block-math ranges are skipped with a
+  // two-pointer walk (both the regex and the range list advance left-to-right),
+  // which keeps this O(matches + blocks) instead of O(matches * blocks).
   const inlineMathRe = /(?<![\$\\])\$([^\$\n]+?)\$(?!\$)/g;
   let im: RegExpExecArray | null;
+  let bmi = 0;
   while ((im = inlineMathRe.exec(docText)) !== null) {
-    // Skip if this range overlaps an already-added block math range
-    const overlapsBlock = entries.some(
-      (e) => im!.index < e.to && im!.index + im![0].length > e.from && e.decoration.spec?.widget,
-    );
-    if (overlapsBlock) continue;
-    if (isOnActiveLine(state, im.index, im.index + im[0].length, activeLine)) {
-      continue; // keep source editable on the cursor line
+    while (bmi < blockMathRanges.length && blockMathRanges[bmi].to <= im.index) bmi++;
+    if (bmi < blockMathRanges.length && im.index >= blockMathRanges[bmi].from && im.index < blockMathRanges[bmi].to) {
+      continue; // inside a block math range
     }
-    const mathInlineWidget = new MathInlineWidget(im[1].trim());
-    mathInlineWidget.from = im.index;
-    mathInlineWidget.to = im.index + im[0].length;
-    entries.push({
+    blocks.push({
+      kind: "mathInline",
       from: im.index,
       to: im.index + im[0].length,
-      decoration: Decoration.replace({ widget: mathInlineWidget }),
+      tex: im[1].trim(),
     });
   }
 
@@ -441,21 +448,145 @@ export function buildDecorations(state: EditorState): DecorationSet {
       }
     }
     if (inCode) continue;
-    if (isOnActiveLine(state, from, to, activeLine)) {
-      continue; // keep source editable on the cursor line
-    }
     const target = wm[1].trim();
-    const wikiWidget = new WikiLinkWidget(target, resolveWikiLink(target) !== null);
-    wikiWidget.from = from;
-    wikiWidget.to = to;
-    entries.push({
+    blocks.push({
+      kind: "wiki",
       from, to,
-      decoration: Decoration.replace({ widget: wikiWidget }),
+      wikiTarget: target,
+      wikiResolved: resolveWikiLink(target) !== null,
     });
   }
 
-  entries.sort((a, b) => a.from - b.from || a.to - b.to);
+  return blocks;
+}
 
+/** Turn scanned blocks into decorations, applying the active-line decisions. */
+function decideEntries(state: EditorState, blocks: Block[]): DecoEntry[] {
+  const activeLine = activeLineOf(state);
+  const entries: DecoEntry[] = [];
+
+  for (const b of blocks) {
+    switch (b.kind) {
+      case "style": {
+        if (b.markList) {
+          for (const mk of b.markList) {
+            entries.push({ from: mk.from, to: mk.to, decoration: markHiddenAt(state, mk.from, mk.to, activeLine) });
+          }
+        }
+        if (b.styleClass) {
+          const attrs: { class: string; style?: string } = { class: b.styleClass };
+          if (b.styleAttr) attrs.style = b.styleAttr;
+          entries.push({
+            from: b.from, to: b.to,
+            decoration: Decoration.mark({ attributes: attrs }),
+          });
+        }
+        break;
+      }
+
+      case "marks": {
+        for (const mk of b.markList ?? []) {
+          entries.push({ from: mk.from, to: mk.to, decoration: markHiddenAt(state, mk.from, mk.to, activeLine) });
+        }
+        break;
+      }
+
+      case "link": {
+        for (const mk of b.fixedMarkList ?? []) {
+          entries.push({
+            from: mk.from, to: mk.to,
+            decoration: Decoration.mark({ attributes: { class: "cm-hidden cm-link-marker" } }),
+          });
+        }
+        if (b.styleClass) {
+          const attrs: { class: string; style?: string } = { class: b.styleClass };
+          if (b.styleAttr) attrs.style = b.styleAttr;
+          entries.push({
+            from: b.from, to: b.to,
+            decoration: Decoration.mark({ attributes: attrs }),
+          });
+        }
+        break;
+      }
+
+      case "image": {
+        if (isOnActiveLine(state, b.from, b.to, activeLine)) break; // keep source editable
+        const w = new ImageWidget(b.src ?? "", b.alt ?? "");
+        w.from = b.from;
+        w.to = b.to;
+        entries.push({ from: b.from, to: b.to, decoration: Decoration.replace({ widget: w }) });
+        break;
+      }
+
+      case "code": {
+        if (isOnActiveLine(state, b.from, b.to, activeLine)) break; // keep source editable
+        const w = new CodeBlockWidget(b.code ?? "", b.lang ?? "");
+        w.blockFrom = b.from;
+        w.blockTo = b.to;
+        entries.push({ from: b.from, to: b.to, decoration: Decoration.replace({ widget: w, block: true }) });
+        break;
+      }
+
+      case "table": {
+        if (isOnActiveLine(state, b.from, b.to, activeLine)) break; // keep source editable
+        const w = new TableWidget(b.tableRaw ?? "");
+        w.blockFrom = b.from;
+        w.blockTo = b.to;
+        entries.push({ from: b.from, to: b.to, decoration: Decoration.replace({ widget: w, block: true }) });
+        break;
+      }
+
+      case "task": {
+        if (isOnActiveLine(state, b.from, b.to, activeLine)) break; // keep source editable
+        entries.push({
+          from: b.from, to: b.to,
+          decoration: Decoration.replace({ widget: new TaskCheckboxWidget(b.checked ?? false), block: true }),
+        });
+        break;
+      }
+
+      case "mathBlock": {
+        if (isOnActiveLine(state, b.from, b.to, activeLine)) break; // keep source editable
+        const w = new MathBlockWidget(b.tex ?? "");
+        w.from = b.from;
+        w.to = b.to;
+        entries.push({ from: b.from, to: b.to, decoration: Decoration.replace({ widget: w, block: true }) });
+        break;
+      }
+
+      case "mathInline": {
+        if (isOnActiveLine(state, b.from, b.to, activeLine)) break; // keep source editable
+        const w = new MathInlineWidget(b.tex ?? "");
+        w.from = b.from;
+        w.to = b.to;
+        entries.push({ from: b.from, to: b.to, decoration: Decoration.replace({ widget: w }) });
+        break;
+      }
+
+      case "wiki": {
+        if (isOnActiveLine(state, b.from, b.to, activeLine)) break; // keep source editable
+        const w = new WikiLinkWidget(b.wikiTarget ?? "", b.wikiResolved ?? false);
+        w.from = b.from;
+        w.to = b.to;
+        entries.push({ from: b.from, to: b.to, decoration: Decoration.replace({ widget: w }) });
+        break;
+      }
+
+      case "frontmatter": {
+        entries.push({
+          from: b.from, to: b.to,
+          decoration: Decoration.mark({ attributes: { class: "cm-frontmatter-bar" } }),
+        });
+        break;
+      }
+    }
+  }
+
+  entries.sort((a, b) => a.from - b.from || a.to - b.to);
+  return entries;
+}
+
+function buildSet(entries: DecoEntry[]): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   for (const e of entries) {
     builder.add(e.from, e.to, e.decoration);

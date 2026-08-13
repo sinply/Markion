@@ -89,9 +89,15 @@ mod tests {
         fs::create_dir_all(root.join("notes")).unwrap();
         fs::write(root.join("notes/a.md"), "").unwrap();
         let path = save_image(
-            b"pngbytes", "png", root, Path::new("notes/a.md"),
-            &AssetsStrategy::VaultAssets, PathStyle::Relative, "20260731",
-        ).unwrap();
+            b"pngbytes",
+            "png",
+            root,
+            Path::new("notes/a.md"),
+            &AssetsStrategy::VaultAssets,
+            PathStyle::Relative,
+            "20260731",
+        )
+        .unwrap();
         assert_eq!(path, "../assets/20260731-b234c9.png");
         assert!(root.join("assets/20260731-b234c9.png").exists());
     }
@@ -102,15 +108,27 @@ mod tests {
         let root = dir.path();
         let doc = Path::new("a.md");
         let first = save_image(
-            b"pngbytes", "png", root, doc,
-            &AssetsStrategy::VaultAssets, PathStyle::Relative, "20260731",
-        ).unwrap();
+            b"pngbytes",
+            "png",
+            root,
+            doc,
+            &AssetsStrategy::VaultAssets,
+            PathStyle::Relative,
+            "20260731",
+        )
+        .unwrap();
         let abs = root.join("assets/20260731-b234c9.png");
         fs::write(&abs, b"TAMPERED").unwrap();
         let second = save_image(
-            b"pngbytes", "png", root, doc,
-            &AssetsStrategy::VaultAssets, PathStyle::Relative, "20260731",
-        ).unwrap();
+            b"pngbytes",
+            "png",
+            root,
+            doc,
+            &AssetsStrategy::VaultAssets,
+            PathStyle::Relative,
+            "20260731",
+        )
+        .unwrap();
         assert_eq!(first, second);
         assert_eq!(fs::read(&abs).unwrap(), b"TAMPERED");
     }

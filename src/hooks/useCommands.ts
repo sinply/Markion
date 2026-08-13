@@ -79,14 +79,23 @@ export function useCommands() {
       redo(view);
     } else if (cmd === "selectAll") {
       view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } });
-    } else {
-      // copy / cut / paste via the browser clipboard
-      const ok = document.execCommand(cmd === "paste" ? "paste" : cmd);
-      if (!ok && cmd !== "paste") {
-        const sel = view.state.selection.main;
-        const text = view.state.sliceDoc(sel.from, sel.to);
-        void navigator.clipboard.writeText(text);
+    } else if (cmd === "copy" || cmd === "cut") {
+      // navigator.clipboard replaces the deprecated document.execCommand;
+      // cut also deletes the selection from the document.
+      const sel = view.state.selection.main;
+      const text = view.state.sliceDoc(sel.from, sel.to);
+      if (text) {
+        void navigator.clipboard.writeText(text).catch(() => {});
       }
+      if (cmd === "cut" && sel.from !== sel.to) {
+        view.dispatch({ changes: { from: sel.from, to: sel.to } });
+      }
+    } else if (cmd === "paste") {
+      void navigator.clipboard.readText().then((text) => {
+        if (!text) return;
+        const { from, to } = view.state.selection.main;
+        view.dispatch({ changes: { from, to, insert: text } });
+      }).catch(() => {});
     }
     view.focus();
   }, [ui.editTick, ui.editCmd]);
@@ -103,6 +112,9 @@ export function useCommands() {
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // Skip IME composition events (e.g. Chinese pinyin input): the key
+      // pressed is part of the composition, not a shortcut.
+      if (e.isComposing || e.keyCode === 229) return;
       if (!(e.ctrlKey || e.metaKey)) return;
       const k = e.key.toLowerCase();
       if (e.shiftKey || e.altKey) return;
@@ -133,6 +145,7 @@ export function useCommands() {
       }
     };
     const shiftHandler = (e: KeyboardEvent) => {
+      if (e.isComposing || e.keyCode === 229) return;
       if (!(e.ctrlKey || e.metaKey) || !e.shiftKey) return;
       const k = e.key.toLowerCase();
       if (k === "s") {

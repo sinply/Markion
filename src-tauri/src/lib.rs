@@ -3,6 +3,7 @@ pub mod commands;
 pub mod config;
 pub mod file_io;
 pub mod image;
+pub mod link_index;
 pub mod tree_index;
 pub mod watcher;
 
@@ -14,6 +15,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Mutex::new(None::<notify::RecommendedWatcher>))
+        .manage(Mutex::new(None::<link_index::LinkIndex>))
         .invoke_handler(tauri::generate_handler![
             commands::read_file,
             commands::write_file_atomic,

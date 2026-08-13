@@ -13,18 +13,17 @@ function wrap(view: EditorView, prefix: string, suffix: string, placeholder = "t
   });
 }
 
-/** Toggle a block prefix on each selected line (e.g. `# `, `> `, `- `). */
+/** Toggle a block prefix on each selected line (e.g. `# `, `> `, `- `).
+ *  Each line is judged independently: a line already carrying the prefix has
+ *  it removed, any other line gets it prepended. */
 function toggleLinePrefix(view: EditorView, prefix: string) {
   const { from, to } = view.state.selection.main;
-  const line = view.state.doc.lineAt(from);
-  const text = view.state.sliceDoc(line.from, to);
-  const hasPrefix = text.startsWith(prefix);
   const changes: { from: number; to: number; insert: string }[] = [];
   let cur = from;
   while (true) {
     const l = view.state.doc.lineAt(cur);
     const ltext = view.state.sliceDoc(l.from, l.to);
-    if (hasPrefix) {
+    if (ltext.startsWith(prefix)) {
       changes.push({ from: l.from, to: l.from + prefix.length, insert: "" });
     } else {
       changes.push({ from: l.from, to: l.from, insert: prefix });
@@ -35,23 +34,30 @@ function toggleLinePrefix(view: EditorView, prefix: string) {
   view.dispatch({ changes });
 }
 
-/** Apply a heading level (1..6) to the current line(s). */
+/** Set a heading level (1..6) on each selected line, toggling off when the
+ *  line already has exactly that level; other levels are replaced. */
 function setHeading(view: EditorView, level: number) {
   const { from, to } = view.state.selection.main;
-  const line = view.state.doc.lineAt(from);
   const prefix = "#".repeat(level) + " ";
-  const text = view.state.sliceDoc(line.from, to);
-  const existing = text.match(/^(#{1,6})\s+/);
   const changes: { from: number; to: number; insert: string }[] = [];
   let cur = from;
   while (true) {
     const l = view.state.doc.lineAt(cur);
     const ltext = view.state.sliceDoc(l.from, l.to);
-    changes.push({ from: l.from, to: l.from, insert: prefix });
+    const m = ltext.match(/^(#{1,6})\s+/);
+    if (m) {
+      // Replace whatever heading level is there (or remove it when equal).
+      changes.push({
+        from: l.from,
+        to: l.from + m[0].length,
+        insert: m[1].length === level ? "" : prefix,
+      });
+    } else {
+      changes.push({ from: l.from, to: l.from, insert: prefix });
+    }
     if (l.to >= to) break;
     cur = l.to + 1;
   }
-  void existing;
   view.dispatch({ changes });
 }
 
@@ -125,15 +131,37 @@ function insertImage(view: EditorView) {
 function toggleList(view: EditorView, kind: "quote" | "bullet" | "ordered") {
   if (kind === "quote") return toggleLinePrefix(view, "> ");
   if (kind === "bullet") return toggleLinePrefix(view, "- ");
-  // ordered: number each line
+  // ordered: toggle numbered prefixes. When every selected line already has a
+  // numbered prefix, remove them all; otherwise number only the unnumbered
+  // lines incrementally (numbered ones are left untouched).
   const { from, to } = view.state.selection.main;
   const changes: { from: number; to: number; insert: string }[] = [];
+  const numbered = (text: string) => /^\s*\d+\.\s+/.test(text);
+  const lineTexts: string[] = [];
+  let maxN = 0;
   let cur = from;
-  let n = 1;
   while (true) {
     const l = view.state.doc.lineAt(cur);
-    changes.push({ from: l.from, to: l.from, insert: `${n}. ` });
-    n++;
+    const t = view.state.sliceDoc(l.from, l.to);
+    lineTexts.push(t);
+    const m = t.match(/^\s*(\d+)\.\s+/);
+    if (m) maxN = Math.max(maxN, parseInt(m[1], 10));
+    if (l.to >= to) break;
+    cur = l.to + 1;
+  }
+  const removing = lineTexts.length > 0 && lineTexts.every(numbered);
+  cur = from;
+  let n = maxN + 1;
+  while (true) {
+    const l = view.state.doc.lineAt(cur);
+    const ltext = view.state.sliceDoc(l.from, l.to);
+    const m = ltext.match(/^(\s*)\d+\.\s+/);
+    if (removing) {
+      if (m) changes.push({ from: l.from, to: l.from + m[0].length, insert: "" });
+    } else if (!m) {
+      changes.push({ from: l.from, to: l.from, insert: `${n}. ` });
+      n++;
+    }
     if (l.to >= to) break;
     cur = l.to + 1;
   }

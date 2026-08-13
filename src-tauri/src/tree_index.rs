@@ -109,11 +109,7 @@ fn build_folder(root: &Path, rel_dir: &str, index: &IndexFile) -> TreeNode {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default()
     } else {
-        rel_dir
-            .rsplit('/')
-            .next()
-            .unwrap_or(rel_dir)
-            .to_string()
+        rel_dir.rsplit('/').next().unwrap_or(rel_dir).to_string()
     };
 
     TreeNode {
@@ -147,9 +143,8 @@ pub fn save_index(vault_root: &Path, index: &IndexFile) -> std::io::Result<()> {
     let dir = vault_root.join(".markion");
     std::fs::create_dir_all(&dir)?;
     let path = vault_root.join(INDEX_PATH);
-    let json = serde_json::to_string_pretty(index).map_err(|e| {
-        std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
-    })?;
+    let json = serde_json::to_string_pretty(index)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
     crate::file_io::write_file_atomic(&path, &json)
 }
 
