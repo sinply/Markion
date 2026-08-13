@@ -77,11 +77,11 @@ function NodeView({ node, style, dragHandle }: NodeRendererProps<RowData>) {
       <span style={{ marginRight: 4, display: "inline-flex", flexShrink: 0 }}>
         {isFolder ? (
           node.isOpen ? (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--accent)" fillOpacity="0.16" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="#2ea043" fillOpacity="0.15" stroke="#2ea043" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
             </svg>
           ) : (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--accent)" fillOpacity="0.16" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="#2ea043" fillOpacity="0.15" stroke="#2ea043" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
               <path d="M9 13l3 3 3-3" />
             </svg>

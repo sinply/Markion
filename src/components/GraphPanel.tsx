@@ -240,7 +240,7 @@ export function GraphPanel() {
                       cx={p.x}
                       cy={p.y}
                       r={active ? 9 : 6}
-                      fill="var(--accent)"
+                      fill="#2ea043"
                       opacity={active ? 1 : 0.75}
                     />
                     {active && (
