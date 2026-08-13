@@ -39,6 +39,7 @@ npm run tauri build      # Production build
 - **GitHub Release (exe) is created ONLY for significant, bug-free feature versions** — e.g. v0.6.0, v0.7.0, v0.8.0. Do NOT create a release for every small patch; too many releases is noise. Small fixes just bump the patch version and push code.
 - Only create a release when the build passes tests and the feature set is stable.
 - **Build the release exe with `npm run tauri build`, NEVER raw `cargo build --release`.** The Tauri CLI enables the `tauri/custom-protocol` feature, which embeds the frontend into the exe. Without it the exe is compiled as a dev build that loads `http://localhost:5173` and shows a **white screen** when run standalone (no dev server). Verify the exe loads `http://tauri.localhost` before attaching it to a release.
+- **After changing app icons** (`src-tauri/icons/*`): `tauri-build` does NOT watch the icons directory, so a plain rebuild reuses the old cached `.res` (stale icon embedded in the exe). Run `touch src-tauri/build.rs` before `npm run tauri build` to force the build script to re-embed the new icons. Windows Explorer also caches exe icons — after replacing icons, restart `explorer.exe` (or clear `%LOCALAPPDATA%\Microsoft\Windows\Explorer\iconcache_*.db`) to see the new icon.
 
 ## Architecture
 
