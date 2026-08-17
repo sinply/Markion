@@ -81,6 +81,15 @@ describe("code block syntax highlighting", () => {
     expect(html).toContain("hljs-number");
   });
 
+  it("highlights scala (registered extra language)", () => {
+    const html = highlightCode(
+      "object Main extends App {\n  val x: Int = 42\n  println(x)\n}",
+      "scala",
+    );
+    expect(html).toContain("hljs-keyword"); // object / val / extends
+    expect(html).toContain("hljs-type");    // App / Int
+  });
+
   it("escapes plain text for unknown languages", () => {
     const html = highlightCode("a < b && c > d", "notalang");
     expect(html).toBe("a &lt; b &amp;&amp; c &gt; d");

@@ -1,0 +1,22 @@
+feat: scala + 30 more language highlights; fix fenced code extraction
+
+Language support:
+- Register scala, groovy, clojure, haskell, elixir, erlang, ocaml, fsharp,
+  powershell, dart, julia, lisp, scheme, prolog, fortran, glsl, latex,
+  arduino, cmake, dockerfile, nginx, gradle, vim, tcl, nim, nix, crystal,
+  coffeescript, elm, haxe, gherkin on top of lowlight's common set and the
+  existing verilog/matlab/vhdl. Fenced blocks for these now highlight
+  instead of rendering as plain text.
+
+Fenced code extraction (livePreview):
+- Pull lang + body from the Lezer CodeInfo/CodeText nodes instead of
+  slicing fence lines by hand. The old approach broke on 4-backtick fences
+  (language kept a stray backtick), blank lines after the fence, and
+  unclosed fences (the last content line was eaten as a closing fence).
+- Track code ranges (fenced, indented, inline) and skip math/wikilink
+  regex matches inside them. Previously a $x$ or [[..]] inside a code
+  block generated a decoration overlapping the block widget, which made
+  the RangeSet build drop the whole code block (the "block never shows"
+  bug). Inline code is covered too.
+
+Tests: +8 code-fence cases, +1 scala highlight; 205 frontend tests pass.

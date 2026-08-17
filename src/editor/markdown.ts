@@ -1,14 +1,82 @@
 import MarkdownIt from "markdown-it";
 import { common, createLowlight } from "lowlight";
+// Extra languages beyond lowlight's `common` set — hardware/embedded notes
+// (Verilog, VHDL, MATLAB) plus widely-used languages (Scala, functional,
+// scripting, config) so fenced blocks highlight instead of falling back to
+// plain text.
 import verilog from "highlight.js/lib/languages/verilog";
 import matlab from "highlight.js/lib/languages/matlab";
 import vhdl from "highlight.js/lib/languages/vhdl";
+import scala from "highlight.js/lib/languages/scala";
+import groovy from "highlight.js/lib/languages/groovy";
+import clojure from "highlight.js/lib/languages/clojure";
+import haskell from "highlight.js/lib/languages/haskell";
+import elixir from "highlight.js/lib/languages/elixir";
+import erlang from "highlight.js/lib/languages/erlang";
+import ocaml from "highlight.js/lib/languages/ocaml";
+import fsharp from "highlight.js/lib/languages/fsharp";
+import powershell from "highlight.js/lib/languages/powershell";
+import dart from "highlight.js/lib/languages/dart";
+import julia from "highlight.js/lib/languages/julia";
+import lisp from "highlight.js/lib/languages/lisp";
+import scheme from "highlight.js/lib/languages/scheme";
+import prolog from "highlight.js/lib/languages/prolog";
+import fortran from "highlight.js/lib/languages/fortran";
+import glsl from "highlight.js/lib/languages/glsl";
+import latex from "highlight.js/lib/languages/latex";
+import arduino from "highlight.js/lib/languages/arduino";
+import cmake from "highlight.js/lib/languages/cmake";
+import dockerfile from "highlight.js/lib/languages/dockerfile";
+import nginx from "highlight.js/lib/languages/nginx";
+import gradle from "highlight.js/lib/languages/gradle";
+import vim from "highlight.js/lib/languages/vim";
+import tcl from "highlight.js/lib/languages/tcl";
+import nim from "highlight.js/lib/languages/nim";
+import nix from "highlight.js/lib/languages/nix";
+import crystal from "highlight.js/lib/languages/crystal";
+import coffeescript from "highlight.js/lib/languages/coffeescript";
+import elm from "highlight.js/lib/languages/elm";
+import haxe from "highlight.js/lib/languages/haxe";
+import gherkin from "highlight.js/lib/languages/gherkin";
 
 const lowlight = createLowlight(common);
 
-// These languages are missing from lowlight's `common` set but common in
-// hardware/embedded note-taking (Verilog, MATLAB, VHDL).
-lowlight.register({ verilog, matlab, vhdl });
+lowlight.register({
+  verilog,
+  matlab,
+  vhdl,
+  scala,
+  groovy,
+  clojure,
+  haskell,
+  elixir,
+  erlang,
+  ocaml,
+  fsharp,
+  powershell,
+  dart,
+  julia,
+  lisp,
+  scheme,
+  prolog,
+  fortran,
+  glsl,
+  latex,
+  arduino,
+  cmake,
+  dockerfile,
+  nginx,
+  gradle,
+  vim,
+  tcl,
+  nim,
+  nix,
+  crystal,
+  coffeescript,
+  elm,
+  haxe,
+  gherkin,
+});
 
 const md = new MarkdownIt({ html: false, linkify: true });
 md.enable(["table", "strikethrough"]);

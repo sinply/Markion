@@ -221,6 +221,14 @@ function collectMarks(node: SyntaxNode, name: string): { from: number; to: numbe
 function scanBlocks(state: EditorState): Block[] {
   const blocks: Block[] = [];
   const tree = syntaxTree(state);
+  // Ranges of every fenced/indented/inline code span. Regex-based scans below
+  // (math, wikilinks) must skip matches inside these, otherwise a `$x$` or
+  // `[[...]]` inside code would create a decoration overlapping the block
+  // widget and the RangeSet build would drop the whole block.
+  const codeRanges: { from: number; to: number }[] = [];
+
+  const insideCode = (pos: number): boolean =>
+    codeRanges.some((r) => pos >= r.from && pos < r.to);
 
   tree.iterate({
     enter(node) {
@@ -249,6 +257,8 @@ function scanBlocks(state: EditorState): Block[] {
           styleClass: "cm-inline-code",
           markList: collectMarks(node.node, "CodeMark"),
         });
+        // Regex scans (math / wikilinks) must also skip inline code.
+        codeRanges.push({ from: node.from, to: node.to });
         return false;
       }
 
@@ -351,17 +361,40 @@ function scanBlocks(state: EditorState): Block[] {
         return false;
       }
 
-      // --- Block: FencedCode ---
+      // --- Block: FencedCode / indented CodeBlock ---
       if (type === "FencedCode" || type === "CodeBlock") {
-        const text = state.doc.sliceString(node.from, node.to);
-        const lines = text.split("\n");
-        const infoLine = lines[0]?.replace(/^```/, "").trim() ?? "";
+        // Extract lang + body from the Lezer nodes instead of slicing fence
+        // lines by hand: that approach broke on 4-backtick fences (info line
+        // kept a stray backtick), blank lines after the fence, and unclosed
+        // fences (the last content line was eaten as a "closing" fence).
+        let lang = "";
+        let codeText: string | null = null;
+        const cur = node.node.cursor();
+        if (cur.firstChild()) {
+          do {
+            const child = cur.type.name;
+            if (child === "CodeInfo") {
+              lang = state.doc.sliceString(cur.from, cur.to).trim();
+            } else if (child === "CodeText") {
+              codeText = state.doc.sliceString(cur.from, cur.to);
+            }
+          } while (cur.nextSibling());
+        }
+        if (codeText === null) {
+          // Indented code block: no CodeText child, strip the node's text.
+          const text = state.doc.sliceString(node.from, node.to);
+          codeText = text
+            .replace(/^\n+/, "")
+            .replace(/\n+$/, "")
+            .replace(/\n {4}/g, "\n");
+        }
         blocks.push({
           kind: "code",
           from: node.from, to: node.to,
-          code: lines.slice(1, -1).join("\n"),
-          lang: infoLine,
+          code: codeText.replace(/^\n+/, "").replace(/\n+$/, ""),
+          lang,
         });
+        codeRanges.push({ from: node.from, to: node.to });
         return false;
       }
 
@@ -424,6 +457,7 @@ function scanBlocks(state: EditorState): Block[] {
   while ((m = mathRe.exec(docText)) !== null) {
     const from = m.index;
     const to = m.index + m[0].length;
+    if (insideCode(from)) continue; // `$$` inside a code block is code, not math
     blockMathRanges.push({ from, to });
     blocks.push({ kind: "mathBlock", from, to, tex: m[1].trim() });
   }
@@ -441,6 +475,7 @@ function scanBlocks(state: EditorState): Block[] {
     if (bmi < blockMathRanges.length && im.index >= blockMathRanges[bmi].from && im.index < blockMathRanges[bmi].to) {
       continue; // inside a block math range
     }
+    if (insideCode(im.index)) continue; // `$x$` inside code is code, not math
     blocks.push({
       kind: "mathInline",
       from: im.index,
@@ -455,17 +490,7 @@ function scanBlocks(state: EditorState): Block[] {
   while ((wm = wikiRe.exec(docText)) !== null) {
     const from = wm.index;
     const to = from + wm[0].length;
-    // Never render `[[` inside fenced or inline code — resolve the tree at the
-    // match start and skip if any ancestor is a code node.
-    let inCode = false;
-    for (let cur: SyntaxNode | null = syntaxTree(state).resolve(from, -1); cur; cur = cur.parent) {
-      const n = cur.type.name;
-      if (n === "FencedCode" || n === "CodeBlock" || n === "InlineCode") {
-        inCode = true;
-        break;
-      }
-    }
-    if (inCode) continue;
+    if (insideCode(from)) continue; // never render `[[` inside code blocks
     const target = wm[1].trim();
     blocks.push({
       kind: "wiki",
