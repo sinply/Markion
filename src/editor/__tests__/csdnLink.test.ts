@@ -90,6 +90,19 @@ describe("code block syntax highlighting", () => {
     expect(html).toContain("hljs-type");    // App / Int
   });
 
+  it("resolves common fence aliases (js, ts, py, sh)", () => {
+    expect(highlightCode("const a = 1;", "js")).toContain("hljs-");
+    expect(highlightCode("let a: number = 1;", "ts")).toContain("hljs-");
+    expect(highlightCode("def f():\n  return 1", "py")).toContain("hljs-");
+    expect(highlightCode("echo hi", "sh")).toContain("hljs-");
+  });
+
+  it("highlights less-common languages (ada, fortran, lisp)", () => {
+    expect(highlightCode("procedure P is\nbegin\n  null;\nend P;", "ada")).toContain("hljs-");
+    expect(highlightCode("program hello\nprint *, 'hi'\nend program hello", "fortran")).toContain("hljs-");
+    expect(highlightCode("(defun f (x) (+ x 1))", "lisp")).toContain("hljs-");
+  });
+
   it("escapes plain text for unknown languages", () => {
     const html = highlightCode("a < b && c > d", "notalang");
     expect(html).toBe("a &lt; b &amp;&amp; c &gt; d");
