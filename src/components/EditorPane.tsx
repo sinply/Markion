@@ -2,7 +2,9 @@ import { useRef, useCallback, useEffect, useMemo } from "react";
 import { useDocStore } from "../stores/docStore";
 import { useVaultStore } from "../stores/vaultStore";
 import { useSettingsStore } from "../stores/settingsStore";
+import { useUiStore } from "../stores/uiStore";
 import { readFile, writeFileAtomic } from "../lib/ipc";
+import { getEditorView } from "../editor/registry";
 import { MarkdownEditor, type EditorHandle } from "../editor/EditorView";
 import { Tabs } from "./Tabs";
 import type { EditorState } from "@codemirror/state";
@@ -88,11 +90,23 @@ export function EditorPane({
     [activeDocId, vaultRoot, markDirty, markClean],
   );
 
-  // Notify parent of heading changes whenever editor updates
-  const handleEditorMount = useCallback(() => {
-    // Read editor state periodically for outline (simplified: use a poll approach
-    // or hook into CM6 updates). For v1, we expose the view for the parent to query.
-  }, []);
+  // Jump to a search result: when the pendingJump targets the active doc and
+  // its content is loaded, move the cursor (and scroll) to line:column.
+  const pendingJump = useUiStore((s) => s.pendingJump);
+  const setPendingJump = useUiStore((s) => s.setPendingJump);
+  useEffect(() => {
+    if (!pendingJump || !activeDoc) return;
+    if (pendingJump.path !== activeDoc.path) return;
+    if (activeContentDocId !== activeDoc.id) return; // content not ready yet
+    const view = getEditorView();
+    if (!view) return;
+    const line = Math.min(Math.max(1, pendingJump.line), view.state.doc.lines);
+    const lineStart = view.state.doc.line(line).from;
+    const pos = Math.min(lineStart + Math.max(0, pendingJump.column - 1), view.state.doc.length);
+    view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
+    view.focus();
+    setPendingJump(null);
+  }, [pendingJump, activeDoc, activeContentDocId, setPendingJump]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>

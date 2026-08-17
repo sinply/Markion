@@ -393,8 +393,21 @@ function scanBlocks(state: EditorState): Block[] {
 
   // YAML frontmatter: keep it as editable source, but give it a subtle
   // background bar (not highlighted) so it reads as a distinct panel.
+  // Frontmatter can only ever sit at the very top of a note, so bound the
+  // regex to the first 100 lines: a doc that starts with `---` but never
+  // closes it can't make the lazy scan run to EOF.
   const docText = state.doc.toString();
-  const fmMatch = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(docText);
+  let head = docText;
+  {
+    let pos = 0;
+    for (let i = 0; i < 100; i++) {
+      const nl = docText.indexOf("\n", pos);
+      if (nl < 0) { pos = docText.length; break; }
+      pos = nl + 1;
+    }
+    if (pos < docText.length) head = docText.slice(0, pos);
+  }
+  const fmMatch = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(head);
   if (fmMatch) {
     blocks.push({ kind: "frontmatter", from: 0, to: fmMatch[0].length });
   }
@@ -695,18 +708,8 @@ export const livePreviewExtension = ViewPlugin.fromClass(LivePlugin, {
 export const LivePreviewPlugin = LivePlugin;
 
 async function openWikiLink(ctx: MarkdownContext, path: string): Promise<void> {
-  const { readFile } = await import("../lib/ipc");
-  const { useDocStore } = await import("../stores/docStore");
-  const { useUiStore } = await import("../stores/uiStore");
-  try {
-    const content = await readFile(ctx.vaultRoot, path);
-    const title = path.split("/").pop() ?? path;
-    useDocStore.getState().openDoc(title, path);
-    useDocStore.getState().setActiveContent(content);
-    useUiStore.getState().addRecent(path);
-  } catch {
-    // read failed — leave the editor as is
-  }
+  const { openNote } = await import("../lib/openNote");
+  await openNote(ctx.vaultRoot, path);
 }
 
 /** Create a missing `[[target]]` note and open it. A target with a `/` is used

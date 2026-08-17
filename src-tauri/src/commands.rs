@@ -182,6 +182,24 @@ pub fn scan_graph(
     Ok(idx.graph())
 }
 
+/// Full-text search across all `.md` files in the vault. `case_sensitive` and
+/// `max_hits` are optional and default to case-insensitive / 500 hits.
+#[tauri::command]
+pub fn search_vault(
+    vault_root: String,
+    query: String,
+    case_sensitive: Option<bool>,
+    max_hits: Option<usize>,
+) -> Result<Vec<crate::search::SearchHit>, String> {
+    crate::search::search_vault(
+        Path::new(&vault_root),
+        &query,
+        case_sensitive.unwrap_or(false),
+        max_hits.unwrap_or(crate::search::DEFAULT_MAX_HITS),
+    )
+    .map_err(|e| e.to_string())
+}
+
 /// Create an empty markdown file at `path` (relative to vault root). Parent
 /// directories are created as needed. Never overwrites an existing file.
 #[tauri::command]

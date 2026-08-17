@@ -1,8 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useVaultStore } from "../stores/vaultStore";
-import { useDocStore } from "../stores/docStore";
 import { useSettingsStore } from "../stores/settingsStore";
-import { readFile } from "../lib/ipc";
+import { openNote } from "../lib/openNote";
 import { buildCommands, createAndOpenNote, type Command } from "../lib/commands";
 import { useI18n } from "../lib/i18n";
 
@@ -51,8 +50,6 @@ export function filterPalette(
 export function CommandPalette() {
   const tree = useVaultStore((s) => s.tree);
   const vaultRoot = useVaultStore((s) => s.vaultRoot);
-  const openDoc = useDocStore((s) => s.openDoc);
-  const setContent = useDocStore((s) => s.setActiveContent);
   const language = useSettingsStore((s) => s.language);
   const t = useI18n();
   const [open, setOpen] = useState(false);
@@ -99,13 +96,7 @@ export function CommandPalette() {
       return;
     }
     if (!vaultRoot) return;
-    try {
-      const content = await readFile(vaultRoot, item.path);
-      openDoc(item.name, item.path);
-      setContent(content);
-    } catch {
-      // read failed — leave as is
-    }
+    await openNote(vaultRoot, item.path);
   };
 
   const select = (delta: number) => {

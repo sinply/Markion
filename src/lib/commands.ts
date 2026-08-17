@@ -95,6 +95,20 @@ export function buildCommands(t: Dict): Command[] {
     edit("paste", t.paste, "Ctrl+V"),
     edit("selectAll", t.selectAll, "Ctrl+A"),
     {
+      id: "edit:find",
+      title: t.find,
+      shortcut: t.findShortcut,
+      keywords: ["search", "查找"],
+      run: () => ui().requestEdit("find"),
+    },
+    {
+      id: "search:vault",
+      title: t.findInVault,
+      shortcut: t.findInVaultShortcut,
+      keywords: ["search", "full text", "全文", "查找"],
+      run: () => ui().setSearchOpen(true),
+    },
+    {
       id: "file:openFolder",
       title: t.openFolder,
       shortcut: "Ctrl+Shift+O",

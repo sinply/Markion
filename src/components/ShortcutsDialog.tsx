@@ -18,6 +18,9 @@ export function ShortcutsDialog() {
           ["Ctrl+C", "复制"], ["Ctrl+V", "粘贴"], ["Ctrl+A", "全选"],
           ["Ctrl+W", "关闭标签"], ["Ctrl+E", "编辑/预览切换"],
         ]},
+        { title: "搜索", items: [
+          ["Ctrl+F", "当前笔记内查找"], ["Ctrl+Shift+F", "全库搜索"],
+        ]},
         { title: "格式", items: [
           ["Ctrl+B", "粗体"], ["Ctrl+I", "斜体"], ["Ctrl+1/2/3", "标题 1/2/3"],
         ]},
@@ -34,6 +37,9 @@ export function ShortcutsDialog() {
           ["Ctrl+Z", "Undo"], ["Ctrl+Y", "Redo"], ["Ctrl+X", "Cut"],
           ["Ctrl+C", "Copy"], ["Ctrl+V", "Paste"], ["Ctrl+A", "Select all"],
           ["Ctrl+W", "Close tab"], ["Ctrl+E", "Toggle edit/preview"],
+        ]},
+        { title: "Search", items: [
+          ["Ctrl+F", "Find in note"], ["Ctrl+Shift+F", "Search vault"],
         ]},
         { title: "Format", items: [
           ["Ctrl+B", "Bold"], ["Ctrl+I", "Italic"], ["Ctrl+1/2/3", "Heading 1/2/3"],

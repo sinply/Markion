@@ -71,5 +71,7 @@ function enDictStub() {
     openFolder: "Open Folder…", openFile: "Open File…", save: "Save", saveAs: "Save As…",
     editMode: "Edit Mode", previewMode: "Preview Mode", preferences: "Preferences…",
     theme: "Theme", language: "Language",
+    find: "Find…", findShortcut: "Ctrl+F",
+    findInVault: "Find in Vault…", findInVaultShortcut: "Ctrl+Shift+F",
   };
 }

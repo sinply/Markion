@@ -4,6 +4,7 @@ import { useSettingsStore } from "../stores/settingsStore";
 import { useVaultStore } from "../stores/vaultStore";
 import type { MarkdownCommand } from "../editor/commands";
 import { useI18n, THEME_LABELS } from "../lib/i18n";
+import { openNote } from "../lib/openNote";
 import type { Theme } from "../lib/types";
 
 interface MenuItem {
@@ -136,7 +137,8 @@ export function MenuBar() {
         ...ui.recentFiles.slice(0, 5).map((p, i) => ({
           label: `  ${p}`,
           action: () => {
-            void openRecentPath(p);
+            const root = vaultStore.vaultRoot;
+            if (root) void openNote(root, p);
             close();
           },
         })),
@@ -149,6 +151,8 @@ export function MenuBar() {
       items: [
         { label: t.undo, shortcut: "Ctrl+Z", action: () => { ui.requestEdit("undo"); close(); } },
         { label: t.redo, shortcut: "Ctrl+Y", action: () => { ui.requestEdit("redo"); close(); }, separatorAfter: true },
+        { label: t.find, shortcut: t.findShortcut, action: () => { ui.requestEdit("find"); close(); } },
+        { label: t.findInVault, shortcut: t.findInVaultShortcut, action: () => { ui.setSearchOpen(true); close(); }, separatorAfter: true },
         { label: t.cut, shortcut: "Ctrl+X", action: () => { ui.requestEdit("cut"); close(); } },
         { label: t.copy, shortcut: "Ctrl+C", action: () => { ui.requestEdit("copy"); close(); } },
         { label: t.paste, shortcut: "Ctrl+V", action: () => { ui.requestEdit("paste"); close(); } },
@@ -240,20 +244,4 @@ function Submenu({ item, render }: { item: MenuItem; render: (i: MenuItem[]) => 
       )}
     </div>
   );
-}
-
-async function openRecentPath(path: string) {
-  const { useVaultStore } = await import("../stores/vaultStore");
-  const { useDocStore } = await import("../stores/docStore");
-  const { readFile } = await import("../lib/ipc");
-  const vaultRoot = useVaultStore.getState().vaultRoot;
-  if (!vaultRoot) return;
-  try {
-    const content = await readFile(vaultRoot, path);
-    const title = path.split("/").pop() ?? path;
-    useDocStore.getState().openDoc(title, path);
-    useDocStore.getState().setActiveContent(content);
-  } catch {
-    // ignore read errors
-  }
 }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useVaultStore } from "../stores/vaultStore";
-import { useDocStore } from "../stores/docStore";
-import { readFile, scanGraph, type GraphNode, type GraphEdge } from "../lib/ipc";
+import { scanGraph, type GraphNode, type GraphEdge } from "../lib/ipc";
+import { openNote } from "../lib/openNote";
 
 interface Pos {
   x: number;
@@ -96,10 +96,32 @@ export function layout(nodes: GraphNode[], edges: GraphEdge[]): Map<string, Pos>
   return pos;
 }
 
+/** Downsample when the vault is large: keep linked nodes first, then enough
+ *  isolated ones to fill the budget, and keep only edges between kept nodes.
+ *  Exported for tests. O(N + E) via a membership Set. */
+export function downsampleGraph(
+  allNodes: GraphNode[],
+  edges: GraphEdge[],
+  budget: number,
+): { nodes: GraphNode[]; edges: GraphEdge[] } {
+  const linked = new Set<string>();
+  edges.forEach((e) => {
+    linked.add(e.source);
+    linked.add(e.target);
+  });
+  const linkedNodes = allNodes.filter((n) => linked.has(n.id));
+  const rest = allNodes.filter((n) => !linked.has(n.id));
+  const remaining = Math.max(0, budget - linkedNodes.length);
+  const nodes = [...linkedNodes, ...rest.slice(0, remaining)];
+  const keep = new Set(nodes.map((n) => n.id));
+  return {
+    nodes,
+    edges: edges.filter((e) => keep.has(e.source) && keep.has(e.target)),
+  };
+}
+
 export function GraphPanel() {
   const vaultRoot = useVaultStore((s) => s.vaultRoot);
-  const openDoc = useDocStore((s) => s.openDoc);
-  const setActiveContent = useDocStore((s) => s.setActiveContent);
   const [data, setData] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
@@ -115,15 +137,7 @@ export function GraphPanel() {
       try {
         const [allNodes, edges] = await scanGraph(vaultRoot);
         if (cancelled) return;
-        // Downsample when the vault is large: keep linked nodes first, then
-        // enough isolated ones to fill the budget, so the graph stays readable.
-        const linked = new Set<string>();
-        edges.forEach((e) => { linked.add(e.source); linked.add(e.target); });
-        const linkedNodes = allNodes.filter((n) => linked.has(n.id));
-        const rest = allNodes.filter((n) => !linked.has(n.id));
-        const budget = Math.max(0, MAX_NODES - linkedNodes.length);
-        const nodes = [...linkedNodes, ...rest.slice(0, budget)];
-        setData({ nodes, edges: edges.filter((e) => nodes.some((n) => n.id === e.source) && nodes.some((n) => n.id === e.target)) });
+        setData(downsampleGraph(allNodes, edges, MAX_NODES));
       } catch (e) {
         if (!cancelled) setErr(String(e));
       }
@@ -138,14 +152,7 @@ export function GraphPanel() {
 
   const openNode = async (id: string) => {
     if (!vaultRoot) return;
-    try {
-      const content = await readFile(vaultRoot, id);
-      const title = id.split("/").pop() ?? id;
-      openDoc(title, id);
-      setActiveContent(content);
-    } catch {
-      // ignore
-    }
+    await openNote(vaultRoot, id);
   };
 
   const totalHint = data && data.nodes.length === MAX_NODES ? ` (showing ${MAX_NODES} of a large vault)` : "";

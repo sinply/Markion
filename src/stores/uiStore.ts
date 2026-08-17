@@ -29,8 +29,8 @@ interface UiState {
   requestSaveAs: () => void;
 
   editTick: number;
-  editCmd: "undo" | "redo" | "selectAll" | "copy" | "cut" | "paste";
-  requestEdit: (cmd: "undo" | "redo" | "selectAll" | "copy" | "cut" | "paste") => void;
+  editCmd: "undo" | "redo" | "selectAll" | "copy" | "cut" | "paste" | "find";
+  requestEdit: (cmd: "undo" | "redo" | "selectAll" | "copy" | "cut" | "paste" | "find") => void;
 
   mdTick: number;
   mdCmd: MarkdownCommand;
@@ -51,6 +51,15 @@ interface UiState {
 
   shortcutsOpen: boolean;
   setShortcutsOpen: (b: boolean) => void;
+
+  /** Vault-wide full-text search dialog (Ctrl+Shift+F). */
+  searchOpen: boolean;
+  setSearchOpen: (b: boolean) => void;
+
+  /** Cursor jump requested by the search dialog: { path, line, column }. The
+   *  editor consumes it once the target doc's content is active. */
+  pendingJump: { path: string; line: number; column: number } | null;
+  setPendingJump: (j: { path: string; line: number; column: number } | null) => void;
 
   /** External-change conflict: a dirty doc was modified on disk. The dialog
    *  subscribes; resolving the conflict clears it. */
@@ -107,6 +116,12 @@ export const useUiStore = create<UiState>((set, get) => ({
   setHelpOpen: (helpOpen) => set({ helpOpen }),
   shortcutsOpen: false,
   setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
+
+  searchOpen: false,
+  setSearchOpen: (searchOpen) => set({ searchOpen }),
+
+  pendingJump: null,
+  setPendingJump: (pendingJump) => set({ pendingJump }),
 
   conflict: null,
   setConflict: (conflict) => set({ conflict }),

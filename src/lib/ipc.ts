@@ -70,6 +70,28 @@ export async function scanGraph(vaultRoot: string): Promise<[GraphNode[], GraphE
   return invoke<[GraphNode[], GraphEdge[]]>("scan_graph", { vaultRoot });
 }
 
+export interface SearchHit {
+  path: string;
+  title: string;
+  line: number;
+  column: number;
+  snippet: string;
+}
+
+/** Full-text search over all `.md` files in the vault. */
+export async function searchVault(
+  vaultRoot: string,
+  query: string,
+  opts?: { caseSensitive?: boolean; maxHits?: number },
+): Promise<SearchHit[]> {
+  return invoke<SearchHit[]>("search_vault", {
+    vaultRoot,
+    query,
+    caseSensitive: opts?.caseSensitive ?? false,
+    maxHits: opts?.maxHits ?? 500,
+  });
+}
+
 export async function readConfig(vaultRoot: string): Promise<Settings> {
   return invoke<Settings>("read_config", { vaultRoot });
 }

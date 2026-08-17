@@ -4,9 +4,11 @@ import { useUiStore } from "../stores/uiStore";
 import { useVaultStore } from "../stores/vaultStore";
 import { useDocStore } from "../stores/docStore";
 import { useSettingsStore } from "../stores/settingsStore";
-import { readFile, writeFileAtomic } from "../lib/ipc";
+import { writeFileAtomic } from "../lib/ipc";
+import { openNote } from "../lib/openNote";
 import { getEditorView } from "../editor/registry";
-import { runMarkdownCommand } from "../editor/commands";
+import { runMarkdownCommand, type MarkdownCommand } from "../editor/commands";
+import { openSearchPanel } from "@codemirror/search";
 import { undo, redo } from "@codemirror/commands";
 
 /** Wire menu-bar / keyboard commands to app actions. */
@@ -43,17 +45,9 @@ export function useCommands() {
       const rel = picked.startsWith(root.replace(/\\/g, "/"))
         ? picked.replace(root.replace(/\\/g, "/") + "/", "").replace(/\\/g, "/")
         : picked.split(/[\\/]/).pop() ?? picked;
-      try {
-        const content = await readFile(root, rel);
-        const title = rel.split("/").pop() ?? rel;
-        useDocStore.getState().openDoc(title, rel);
-        useDocStore.getState().setActiveContent(content);
-        ui.addRecent(rel);
-      } catch {
-        // ignore
-      }
+      await openNote(root, rel);
     })();
-  }, [ui.openFileTick, ui.addRecent]);
+  }, [ui.openFileTick]);
 
   // Save
   useEffect(() => {
@@ -77,6 +71,8 @@ export function useCommands() {
       undo(view);
     } else if (cmd === "redo") {
       redo(view);
+    } else if (cmd === "find") {
+      openSearchPanel(view);
     } else if (cmd === "selectAll") {
       view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } });
     } else if (cmd === "copy" || cmd === "cut") {
@@ -109,7 +105,8 @@ export function useCommands() {
     view.focus();
   }, [ui.mdTick, ui.mdCmd]);
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts. Listeners are attached once and read fresh state via
+  // getState() so UI-store changes don't re-attach them on every tick.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       // Skip IME composition events (e.g. Chinese pinyin input): the key
@@ -123,25 +120,37 @@ export function useCommands() {
         void saveActive(false);
       } else if (k === "o") {
         e.preventDefault();
-        ui.requestOpenFile();
+        useUiStore.getState().requestOpenFile();
       } else if (k === "e") {
         e.preventDefault();
-        ui.setEditorMode(ui.editorMode === "live" ? "preview" : "live");
+        const { editorMode } = useUiStore.getState();
+        useUiStore.getState().setEditorMode(editorMode === "live" ? "preview" : "live");
       } else if (k === "b") {
         e.preventDefault();
-        ui.requestMarkdown("bold");
+        useUiStore.getState().requestMarkdown("bold");
       } else if (k === "i") {
         e.preventDefault();
-        ui.requestMarkdown("italic");
+        useUiStore.getState().requestMarkdown("italic");
       } else if (k === "1" || k === "2" || k === "3") {
         e.preventDefault();
         const cmd = k === "1" ? "heading1" : k === "2" ? "heading2" : "heading3";
-        ui.requestMarkdown(cmd as any);
+        useUiStore.getState().requestMarkdown(cmd as MarkdownCommand);
       } else if (k === "w") {
         e.preventDefault();
         // close the active tab
         const id = useDocStore.getState().activeDocId;
         if (id) useDocStore.getState().closeDoc(id);
+      } else if (k === "f") {
+        // Ctrl+F: focus the editor and open the CM6 search panel. When focus
+        // is already in the editor, its own keymap handled the key (and
+        // preventDefault'ed it) - respect that and do nothing.
+        if (e.defaultPrevented) return;
+        e.preventDefault();
+        const view = getEditorView();
+        if (view) {
+          void openSearchPanel(view);
+          view.focus();
+        }
       }
     };
     const shiftHandler = (e: KeyboardEvent) => {
@@ -153,16 +162,21 @@ export function useCommands() {
         void saveActive(true);
       } else if (k === "o") {
         e.preventDefault();
-        ui.requestOpenFolder();
+        useUiStore.getState().requestOpenFolder();
       } else if (k === "e") {
         e.preventDefault();
-        ui.setEditorMode(ui.editorMode === "live" ? "preview" : "live");
+        const { editorMode } = useUiStore.getState();
+        useUiStore.getState().setEditorMode(editorMode === "live" ? "preview" : "live");
+      } else if (k === "f") {
+        // Ctrl+Shift+F: vault-wide full-text search (toggle)
+        e.preventDefault();
+        useUiStore.getState().setSearchOpen(!useUiStore.getState().searchOpen);
       }
     };
     const helpHandler = (e: KeyboardEvent) => {
       if (e.key === "F1") {
         e.preventDefault();
-        ui.setHelpOpen(true);
+        useUiStore.getState().setHelpOpen(true);
       }
     };
     window.addEventListener("keydown", handler);
@@ -173,7 +187,7 @@ export function useCommands() {
       window.removeEventListener("keydown", shiftHandler);
       window.removeEventListener("keydown", helpHandler);
     };
-  }, [ui]);
+  }, []);
 
   return null;
 }

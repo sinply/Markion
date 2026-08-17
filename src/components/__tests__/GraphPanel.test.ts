@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { layout, VIEW_H, VIEW_W } from "../GraphPanel";
+import { layout, downsampleGraph, VIEW_H, VIEW_W } from "../GraphPanel";
 import type { GraphNode, GraphEdge } from "../../lib/ipc";
 
 function nodes(count: number): GraphNode[] {
@@ -43,5 +43,54 @@ describe("graph layout", () => {
       expect(Number.isFinite(p.x)).toBe(true);
       expect(Number.isFinite(p.y)).toBe(true);
     }
+  });
+});
+
+describe("downsampleGraph", () => {
+  it("keeps all linked nodes before filling the budget with isolated ones", () => {
+    const ns = nodes(10); // n0..n9
+    const edges: GraphEdge[] = [
+      { source: "n0", target: "n1" },
+      { source: "n1", target: "n2" },
+      { source: "n0", target: "n9" },
+    ];
+    const { nodes: kept, edges: keptEdges } = downsampleGraph(ns, edges, 5);
+    // Linked set = {n0,n1,n2,n9} (4 nodes); budget fills with 1 isolated node.
+    expect(kept).toHaveLength(5);
+    for (const id of ["n0", "n1", "n2", "n9"]) {
+      expect(kept.some((n) => n.id === id)).toBe(true);
+    }
+    expect(keptEdges).toEqual(edges); // all edges stay, endpoints kept
+  });
+
+  it("keeps all linked nodes and drops isolated ones when over budget", () => {
+    const ns = nodes(6); // n0..n5; n2, n3 are isolated
+    const edges: GraphEdge[] = [
+      { source: "n0", target: "n1" },
+      { source: "n4", target: "n5" },
+    ];
+    const { nodes: kept, edges: keptEdges } = downsampleGraph(ns, edges, 2);
+    // Linked nodes are always kept (n0,n1,n4,n5 = 4 > budget); the budget only
+    // limits how many isolated nodes (n2,n3) are filled in afterwards.
+    expect(kept).toHaveLength(4);
+    expect(keptEdges).toEqual(edges);
+    expect(kept.some((n) => n.id === "n2")).toBe(false);
+    expect(kept.some((n) => n.id === "n3")).toBe(false);
+  });
+
+  it("fills the remaining budget with isolated nodes", () => {
+    const ns = nodes(5); // n0 linked; n1..n4 isolated
+    const edges: GraphEdge[] = [{ source: "n0", target: "n0" }];
+    const { nodes: kept } = downsampleGraph(ns, edges, 3);
+    expect(kept).toHaveLength(3); // n0 + 2 isolated
+    expect(kept[0].id).toBe("n0");
+  });
+
+  it("keeps everything when the budget is large enough", () => {
+    const ns = nodes(3);
+    const edges: GraphEdge[] = [{ source: "n0", target: "n2" }];
+    const { nodes: kept, edges: keptEdges } = downsampleGraph(ns, edges, 100);
+    expect(kept).toHaveLength(3);
+    expect(keptEdges).toEqual(edges);
   });
 });

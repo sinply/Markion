@@ -4,12 +4,72 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { Table, TaskList, Strikethrough } from "@lezer/markdown";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
+import { search, searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { livePreviewExtension, livePreviewField, previewField } from "./livePreview";
 import { markdownContextFacet, imagePasteDropExtension, type MarkdownContext } from "./media";
 import { wikilinkCompletion } from "./wikilink";
 
 const themeCompartment = new Compartment();
 const livePreviewCompartment = new Compartment();
+
+/** Theme for the built-in find/replace panel and match highlights, so they
+ *  follow the app's CSS variables instead of CodeMirror's defaults. */
+const searchTheme = EditorView.theme({
+  "&": { "--search-highlight": "rgba(255, 213, 89, 0.45)" },
+  ".cm-panel.cm-search": {
+    padding: "6px 8px",
+    borderBottom: "1px solid var(--border)",
+    background: "var(--panel-bg)",
+    color: "var(--fg)",
+    fontSize: 13,
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: "6px",
+  },
+  ".cm-panel.cm-search label": {
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+    margin: 0,
+    fontSize: 12,
+  },
+  ".cm-panel.cm-search input": {
+    background: "var(--bg)",
+    color: "var(--fg)",
+    border: "1px solid var(--border)",
+    borderRadius: 4,
+    padding: "2px 6px",
+    fontSize: 13,
+    outline: "none",
+  },
+  ".cm-panel.cm-search input:focus": { borderColor: "var(--accent)" },
+  ".cm-panel.cm-search button": {
+    background: "var(--bg)",
+    color: "var(--fg)",
+    border: "1px solid var(--border)",
+    borderRadius: 4,
+    padding: "2px 8px",
+    fontSize: 12,
+    cursor: "pointer",
+  },
+  ".cm-panel.cm-search button:hover": { borderColor: "var(--accent)" },
+  ".cm-panel.cm-search [name=close]": {
+    position: "static",
+    marginLeft: "auto",
+  },
+  ".cm-searchMatch": {
+    background: "var(--search-highlight)",
+    outline: "1px solid rgba(255, 165, 0, 0.5)",
+    borderRadius: 2,
+  },
+  ".cm-searchMatch.cm-searchMatch-selected": {
+    background: "rgba(88, 166, 255, 0.6)",
+  },
+  ".cm-selectionMatch": {
+    background: "var(--search-highlight)",
+  },
+});
 
 export type EditorMode = "live" | "preview";
 
@@ -39,6 +99,10 @@ export function createEditorState(
       history(),
       keymap.of(historyKeymap),
       syntaxHighlighting(defaultHighlightStyle),
+      search({ top: true }),
+      keymap.of(searchKeymap),
+      highlightSelectionMatches(),
+      searchTheme,
       updateListener,
       themeCompartment.of(EditorView.theme({})),
       opts?.markdownContext ? markdownContextFacet.of(opts.markdownContext) : [],
