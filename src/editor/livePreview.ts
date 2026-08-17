@@ -193,8 +193,6 @@ interface Block {
   /** Class applied to the whole [from,to] span (with styleAttr). */
   styleClass?: string;
   styleAttr?: string;
-  /** Brackets hidden unconditionally (link brackets). */
-  fixedMarkList?: { from: number; to: number }[];
   // Widget payloads:
   code?: string;
   lang?: string;
@@ -291,20 +289,27 @@ function scanBlocks(state: EditorState): Block[] {
         const doc = state.doc.toString();
         const rest = doc.slice(node.from + 1, node.to);
         const urlIdx = rest.indexOf("](");
-        const fixedMarkList = children
+        // The syntax to hide when the cursor is away from this line: the
+        // brackets AND the URL itself, so previews read as a clean title link
+        // (Obsidian-style) instead of "title + raw URL". On the active line
+        // they reappear (semi-transparent) so the source is editable.
+        const markers: { from: number; to: number }[] = children
           .filter((c) => c.name === "LinkMark")
           .map((c) => ({ from: c.from, to: c.to }));
         if (urlIdx >= 0) {
+          const urlFrom = node.from + 1 + urlIdx + 2; // after "]("
+          const urlTo = node.to - 1; // before the closing ")"
+          if (urlTo > urlFrom) markers.push({ from: urlFrom, to: urlTo });
           blocks.push({
             kind: "link",
             from: node.from + 1,
             to: node.from + 1 + urlIdx,
             styleClass: "cm-link",
             styleAttr: "color:#0366d6;text-decoration:underline;cursor:pointer",
-            fixedMarkList,
+            markList: markers,
           });
         } else {
-          blocks.push({ kind: "link", from: node.from, to: node.to, fixedMarkList });
+          blocks.push({ kind: "link", from: node.from, to: node.to, markList: markers });
         }
         return false;
       }
@@ -505,10 +510,10 @@ function decideEntries(state: EditorState, blocks: Block[]): DecoEntry[] {
       }
 
       case "link": {
-        for (const mk of b.fixedMarkList ?? []) {
+        for (const mk of b.markList ?? []) {
           entries.push({
             from: mk.from, to: mk.to,
-            decoration: Decoration.mark({ attributes: { class: "cm-hidden cm-link-marker" } }),
+            decoration: markHiddenAt(state, mk.from, mk.to, activeLine),
           });
         }
         if (b.styleClass) {

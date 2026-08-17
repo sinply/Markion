@@ -75,9 +75,11 @@ describe("buildDecorations", () => {
     expect(hasWidget(decos)).toBe(true);
   });
 
-  it("hides link brackets and styles link text", () => {
-    const decos = buildDecorations(stateOf("[link](https://a.com)"));
-    expect(countByClass(decos, "cm-link-marker")).toBeGreaterThanOrEqual(2);
+  it("hides link brackets and URL, styles link text", () => {
+    // Cursor on the first line, away from the link line: brackets + URL are
+    // hidden, only the title text carries the link style.
+    const decos = buildDecorations(stateOf("intro\n[link](https://a.com)", 2));
+    expect(countByClass(decos, "cm-hidden")).toBeGreaterThanOrEqual(4); // [ ] ( + URL
     expect(countByClass(decos, "cm-link")).toBeGreaterThan(0);
   });
 

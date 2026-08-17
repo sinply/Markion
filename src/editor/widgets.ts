@@ -1,6 +1,6 @@
 import { WidgetType } from "@codemirror/view";
 import type { EditorView } from "@codemirror/view";
-import { renderMarkdown, renderMarkdownWithTableSource } from "./markdown";
+import { renderMarkdown, renderMarkdownWithTableSource, highlightCode } from "./markdown";
 import { markdownContextFacet, imageToSrc, isRemoteSrc } from "./media";
 import { wikiLabel } from "./wikiIndex";
 
@@ -44,7 +44,10 @@ export class CodeBlockWidget extends WidgetType {
     // reflect the property to the `contenteditable` attribute, and the test
     // selects on `[contenteditable]`.
     code.setAttribute("contenteditable", "true");
-    code.textContent = this.code;
+    // Syntax-highlight by fence language (hljs spans). Edits inside the
+    // contenteditable are committed via textContent, so highlighting is a pure
+    // presentation layer rebuilt on each widget refresh.
+    code.innerHTML = highlightCode(this.code, this.language);
     pre.appendChild(code);
 
     // Commit the edited code back to the document when the user leaves the block.

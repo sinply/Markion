@@ -43,16 +43,17 @@ describe("TaskCheckboxWidget", () => {
 });
 
 describe("CodeBlockWidget", () => {
-  it("renders the code as plain editable text (no hljs spans)", () => {
+  it("renders highlighted code in a contenteditable that commits plain text", () => {
     const w = new CodeBlockWidget("let x = 1;", "ts");
     const dom = w.toDOM(mockView());
     const code = dom.querySelector("code")!;
     expect(code).toBeTruthy();
-    // Plain text contenteditable now (syntax highlighting removed for
-    // contenteditable safety) — textContent must hold the source verbatim.
+    // Syntax highlighting by fence language (hljs spans).
+    expect(code.innerHTML).toContain("hljs-keyword");
+    // textContent stays the verbatim source — edits commit via textContent,
+    // so highlighting is purely presentational and never corrupts the doc.
     expect(code.textContent).toBe("let x = 1;");
     expect(code.getAttribute("contenteditable")).toBe("true");
-    expect(code.innerHTML).not.toContain("hljs-");
   });
 
   it("shows language badge", () => {
