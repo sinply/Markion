@@ -1,6 +1,6 @@
 import { WidgetType } from "@codemirror/view";
 import type { EditorView } from "@codemirror/view";
-import { renderMarkdown, renderMarkdownWithTableSource, highlightCode } from "./markdown";
+import { renderMarkdown, renderMarkdownWithTableSource, highlightCode, isMermaidLang } from "./markdown";
 import { markdownContextFacet, imageToSrc, isRemoteSrc } from "./media";
 import { wikiLabel } from "./wikiIndex";
 
@@ -23,8 +23,9 @@ export class CodeBlockWidget extends WidgetType {
   }
 
   toDOM(view: EditorView): HTMLElement {
-    // Mermaid diagrams: render as SVG instead of code
-    if (this.language === "mermaid") {
+    // Mermaid diagrams (```mermaid, ```gantt, ```sequenceDiagram, ...):
+    // render as SVG instead of code.
+    if (isMermaidLang(this.language)) {
       return renderMermaidElement(this.code);
     }
     this.view = view;
@@ -69,12 +70,13 @@ export class CodeBlockWidget extends WidgetType {
     return pre;
   }
 
-  // The widget owns a contenteditable: CM6 must ignore ALL events inside it
-  // (not just mouse events), otherwise key/input events fall through to CM6's
-  // input pipeline and get dispatched at the doc-end cursor instead of editing
-  // the block in place. The browser drives all editing inside the
-  // contenteditable; commit-on-blur writes the result back to the doc.
-  ignoreEvent(): boolean {
+  // Mermaid diagrams are NOT contenteditable: let CM6 handle mouse events so
+  // clicking a diagram moves the cursor onto the block, which flips live
+  // preview back to the editable source. Code blocks own a contenteditable,
+  // so CM6 must ignore ALL events inside them (see commit-on-blur above),
+  // otherwise key/input events fall through to the doc-end cursor.
+  ignoreEvent(e: Event): boolean {
+    if (isMermaidLang(this.language)) return false;
     return true;
   }
 }

@@ -26,9 +26,48 @@ for (const [path, mod] of Object.entries(langModules)) {
 const md = new MarkdownIt({ html: false, linkify: true });
 md.enable(["table", "strikethrough"]);
 // GFM task lists (`- [ ]`). `enabled: false` renders a disabled checkbox —
-// toggling is owned by the editor's live-preview widget, not the static
-// preview HTML.
+// preview mode is read-only; toggling lives in the editor's live-preview widget.
 md.use(taskLists, { enabled: false });
+
+/** Fence languages treated as Mermaid diagrams (Obsidian-compatible aliases).
+ *  All of these carry mermaid source even though the fence says `gantt`,
+ *  `sequenceDiagram`, etc. */
+export const MERMAID_LANGS = new Set([
+  "mermaid",
+  "flowchart",
+  "graph",
+  "sequence",
+  "sequencediagram",
+  "class",
+  "classdiagram",
+  "state",
+  "statediagram",
+  "statediagram-v2",
+  "er",
+  "erdiagram",
+  "journey",
+  "gantt",
+  "pie",
+  "quadrantchart",
+  "requirement",
+  "requirementdiagram",
+  "gitgraph",
+  "mindmap",
+  "timeline",
+  "sankey",
+  "xychart",
+  "block",
+  "c4",
+  "c4context",
+  "c4container",
+  "c4component",
+  "c4dynamic",
+  "c4deployment",
+]);
+
+export function isMermaidLang(lang: string): boolean {
+  return MERMAID_LANGS.has(lang.toLowerCase());
+}
 
 // Mermaid fences render as a pending container that the caller hydrates into
 // a diagram (see renderMermaidElement in widgets.ts). Keeping the code as the
@@ -37,9 +76,9 @@ const defaultFence = md.renderer.rules.fence!.bind(md.renderer.rules);
 md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const token = tokens[idx];
   const lang = (token.info ?? "").trim().toLowerCase();
-  if (lang === "mermaid") {
+  if (isMermaidLang(lang)) {
     const code = escapeHtml(token.content ?? "");
-    return `<div class="cm-mermaid-pending" data-lang="mermaid">${code}</div>`;
+    return `<div class="cm-mermaid-pending" data-lang="${escapeAttr(lang)}">${code}</div>`;
   }
   return defaultFence(tokens, idx, options, env, self);
 };

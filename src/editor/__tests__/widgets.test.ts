@@ -277,6 +277,33 @@ describe("CodeBlockWidget mermaid", () => {
     const dom = w.toDOM(mockView());
     expect(dom.className).toBe("cm-mermaid");
   });
+
+  it("renders gantt fences as diagrams too (Obsidian aliases)", () => {
+    const w = new CodeBlockWidget("gantt\ntitle Plan\nsection S\nA: 1, 2", "gantt");
+    const dom = w.toDOM(mockView());
+    expect(dom.className).toBe("cm-mermaid");
+    expect(dom.textContent).toContain("gantt");
+  });
+
+  it("renders sequenceDiagram as a diagram", () => {
+    const w = new CodeBlockWidget("A->>B: hi", "sequenceDiagram");
+    const dom = w.toDOM(mockView());
+    expect(dom.className).toBe("cm-mermaid");
+  });
+
+  it("keeps non-mermaid languages as editable code blocks", () => {
+    const w = new CodeBlockWidget("let x = 1;", "ts");
+    const dom = w.toDOM(mockView());
+    expect(dom.className).toBe("cm-codeblock");
+    expect(dom.querySelector("[contenteditable]")).toBeTruthy();
+  });
+
+  it("lets CM6 handle clicks on diagrams (so the cursor can enter), not on code", () => {
+    const gantt = new CodeBlockWidget("gantt\nx", "gantt");
+    expect(gantt.ignoreEvent(new MouseEvent("click"))).toBe(false);
+    const ts = new CodeBlockWidget("x", "ts");
+    expect(ts.ignoreEvent(new MouseEvent("click"))).toBe(true);
+  });
 });
 
 describe("MathBlockWidget", () => {

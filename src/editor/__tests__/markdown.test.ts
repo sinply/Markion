@@ -50,6 +50,14 @@ describe("renderMarkdown", () => {
     expect(html).not.toContain("<pre>");
   });
 
+  it("renders gantt / sequenceDiagram fences as mermaid too", () => {
+    const gantt = renderMarkdown("```gantt\ntitle Plan\nsection S\nA: 1, 2\n```\n");
+    expect(gantt).toContain("cm-mermaid-pending");
+    expect(gantt).toContain("title Plan");
+    const seq = renderMarkdown("```sequenceDiagram\nA->>B: hi\n```\n");
+    expect(seq).toContain("cm-mermaid-pending");
+  });
+
   it("keeps non-mermaid fences as code blocks", () => {
     const html = renderMarkdown("```ts\nlet x = 1;\n```\n");
     expect(html).toContain("<pre>");
