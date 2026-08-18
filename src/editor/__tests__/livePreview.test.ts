@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { Table, TaskList, Strikethrough } from "@lezer/markdown";
-import { buildDecorations, resolveLinkUrl, isExternalUrl } from "../livePreview";
+import { buildDecorations, resolveLinkUrl, isExternalUrl, parseCallout } from "../livePreview";
 import { ImageWidget } from "../widgets";
 
 function stateOf(doc: string, cursorPos?: number): EditorState {
@@ -213,5 +213,94 @@ describe("inline math", () => {
       iter.next();
     }
     expect(inline).toBe(false);
+  });
+});
+
+describe("parseCallout", () => {
+  it("detects a callout with its type and body (incl. title-line remainder)", () => {
+    const c = parseCallout("> [!note] Title\n> body line\n> second");
+    expect(c).toEqual({ type: "note", body: "Title\nbody line\nsecond" });
+  });
+
+  it("returns null for a plain blockquote", () => {
+    expect(parseCallout("> just a quote")).toBeNull();
+  });
+
+  it("returns null for an unknown callout type", () => {
+    expect(parseCallout("> [!custom-thing] x")).toBeNull();
+  });
+
+  it("matches case-insensitively", () => {
+    const c = parseCallout("> [!WARNING] careful");
+    expect(c?.type).toBe("warning");
+    expect(c?.body).toBe("careful");
+  });
+});
+
+describe("#tag highlight", () => {
+  it("marks #tags with the cm-tag class", () => {
+    const decos = buildDecorations(stateOfEnd("see #todo and #设计 here\n\nmore\n"));
+    expect(countByClass(decos, "cm-tag")).toBeGreaterThanOrEqual(2);
+  });
+
+  it("does not mark headings (# Title) as tags", () => {
+    const decos = buildDecorations(stateOfEnd("# Title\n\nbody\n"));
+    expect(countByClass(decos, "cm-tag")).toBe(0);
+  });
+
+  it("does not mark tags inside fenced code blocks", () => {
+    const decos = buildDecorations(stateOfEnd("```\n#notatag\n```\n\nok\n"));
+    expect(countByClass(decos, "cm-tag")).toBe(0);
+  });
+});
+
+describe("callout decoration", () => {
+  it("replaces a > [!note] blockquote with a CalloutWidget", () => {
+    const decos = buildDecorations(stateOfEnd("> [!tip] Try this\n> details\n\nbody\n"));
+    const iter = decos.iter();
+    let found = false;
+    while (iter.value) {
+      const w = iter.value.spec?.widget;
+      if (w && w.constructor.name === "CalloutWidget") {
+        found = true;
+        expect(w.type).toBe("tip");
+        expect(w.body).toContain("details");
+      }
+      iter.next();
+    }
+    expect(found).toBe(true);
+  });
+});
+
+describe("embed decoration", () => {
+  it("replaces ![[note]] with an EmbedWidget carrying target + heading", () => {
+    const decos = buildDecorations(stateOfEnd("see ![[other#Section]] below\n\nbody\n"));
+    const iter = decos.iter();
+    let found = false;
+    while (iter.value) {
+      const w = iter.value.spec?.widget;
+      if (w && w.constructor.name === "EmbedWidget") {
+        found = true;
+        expect(w.target).toBe("other");
+        expect(w.heading).toBe("Section");
+      }
+      iter.next();
+    }
+    expect(found).toBe(true);
+  });
+
+  it("keeps plain wikilinks as WikiLinkWidget (not embeds)", () => {
+    const decos = buildDecorations(stateOfEnd("link [[other]] here\n\nbody\n"));
+    const iter = decos.iter();
+    let embed = false;
+    let wiki = false;
+    while (iter.value) {
+      const w = iter.value.spec?.widget;
+      if (w?.constructor.name === "EmbedWidget") embed = true;
+      if (w?.constructor.name === "WikiLinkWidget") wiki = true;
+      iter.next();
+    }
+    expect(embed).toBe(false);
+    expect(wiki).toBe(true);
   });
 });

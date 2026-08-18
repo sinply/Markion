@@ -5,6 +5,7 @@ pub mod file_io;
 pub mod image;
 pub mod link_index;
 pub mod search;
+pub mod tags;
 pub mod tree_index;
 pub mod watcher;
 
@@ -26,9 +27,13 @@ pub fn run() {
             commands::move_node,
             commands::save_image,
             commands::create_file,
+            commands::create_folder,
+            commands::delete_path,
             commands::find_backlinks,
             commands::scan_graph,
             commands::search_vault,
+            commands::replace_in_vault,
+            commands::scan_tags,
             commands::read_config,
             commands::save_config,
             commands::start_vault_watch,

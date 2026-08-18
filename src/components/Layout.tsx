@@ -5,6 +5,7 @@ import { EditorPane } from "./EditorPane";
 import { OutlinePane } from "./Outline";
 import { BacklinksPanel } from "./BacklinksPanel";
 import { GraphPanel } from "./GraphPanel";
+import { TagsPanel } from "./TagsPanel";
 import { CommandPalette } from "./CommandPalette";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useWikiIndex } from "../hooks/useWikiIndex";
@@ -17,7 +18,8 @@ export function Layout() {
   const showOutline = useSettingsStore((s) => s.showOutline);
   const showBacklinks = useSettingsStore((s) => s.showBacklinks);
   const showGraph = useSettingsStore((s) => s.showGraph);
-  const rightHasContent = showOutline || showBacklinks || showGraph;
+  const showTags = useSettingsStore((s) => s.showTags);
+  const rightHasContent = showOutline || showBacklinks || showGraph || showTags;
 
   const handleJump = useCallback((from: number) => {
     const activeEl = document.querySelector(".cm-editor .cm-content") as HTMLElement | null;
@@ -70,6 +72,11 @@ export function Layout() {
                 {showGraph && (
                   <div style={{ borderTop: "1px solid var(--border)" }}>
                     <GraphPanel />
+                  </div>
+                )}
+                {showTags && (
+                  <div style={{ borderTop: "1px solid var(--border)" }}>
+                    <TagsPanel />
                   </div>
                 )}
               </div>

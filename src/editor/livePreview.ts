@@ -3,7 +3,7 @@ import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder, EditorState, StateField, Text } from "@codemirror/state";
 import type { SyntaxNode } from "@lezer/common";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget, MathInlineWidget, PreviewWidget, WikiLinkWidget } from "./widgets";
+import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget, MathInlineWidget, PreviewWidget, WikiLinkWidget, CalloutWidget, EmbedWidget } from "./widgets";
 import { markdownContextFacet, type MarkdownContext } from "./media";
 import { resolveWikiLink } from "./wikiIndex";
 
@@ -182,6 +182,8 @@ type BlockKind =
   | "mathBlock"   // $$...$$ widget (skipped on active line)
   | "mathInline"  // $...$ widget (skipped on active line)
   | "wiki"        // [[wikilink]] widget (skipped on active line)
+  | "embed"       // ![[note]] embed widget (skipped on active line)
+  | "callout"     // > [!type] callout card (skipped on active line)
   | "frontmatter";
 
 interface Block {
@@ -203,6 +205,10 @@ interface Block {
   tex?: string;
   wikiTarget?: string;
   wikiResolved?: boolean;
+  embedTarget?: string;
+  embedHeading?: string | null;
+  calloutType?: string;
+  calloutBody?: string;
 }
 
 function collectMarks(node: SyntaxNode, name: string): { from: number; to: number }[] {
@@ -214,6 +220,29 @@ function collectMarks(node: SyntaxNode, name: string): { from: number; to: numbe
     } while (cur.nextSibling());
   }
   return out;
+}
+
+const CALLOUT_TYPES = [
+  "note", "tip", "warning", "danger", "info", "success",
+  "question", "todo", "abstract", "summary", "important",
+  "caution", "failure", "bug", "example", "quote",
+];
+
+/** Detect `> [!type]` callout blockquotes. Returns the type and the body:
+ *  the remainder of the first line after `[!type]` plus the following lines,
+ *  with `> ` prefixes stripped. Exported for tests. */
+export function parseCallout(raw: string): { type: string; body: string } | null {
+  const lines = raw.split("\n");
+  if (lines.length === 0) return null;
+  const first = lines[0].replace(/^>\s?/, "");
+  const m = /^\[!([a-z-]+)\]\s*(.*)$/is.exec(first);
+  if (!m) return null;
+  const type = m[1].toLowerCase();
+  if (!CALLOUT_TYPES.includes(type)) return null;
+  const headRest = m[2] ?? "";
+  const rest = lines.slice(1).map((l) => l.replace(/^>\s?/, ""));
+  const body = [headRest, ...rest].join("\n").replace(/^\n+/, "").replace(/\n+$/, "");
+  return { type, body };
 }
 
 /** Walk the Lezer tree + regex-scan the doc once, producing a flat block list
@@ -341,6 +370,18 @@ function scanBlocks(state: EditorState): Block[] {
 
       // --- Blockquote: hide the `>` mark(s), then style the content ---
       if (type === "Blockquote") {
+        // Obsidian-style callout: `> [!note]` first line → render as a card.
+        const quoteText = state.doc.sliceString(node.from, node.to);
+        const callout = parseCallout(quoteText);
+        if (callout) {
+          blocks.push({
+            kind: "callout",
+            from: node.from, to: node.to,
+            calloutType: callout.type,
+            calloutBody: callout.body,
+          });
+          return false;
+        }
         blocks.push({
           kind: "style",
           from: node.from, to: node.to,
@@ -484,19 +525,48 @@ function scanBlocks(state: EditorState): Block[] {
     });
   }
 
-  // --- Inline: wikilinks [[name]] / [[path/name]] / [[name|alias]] ---
-  const wikiRe = /\[\[([^\]\n]+)\]\]/g;
+  // --- Inline: wikilinks [[name]] / [[path/name]] / [[name|alias]], and
+  // embeds ![[name]] / ![[name#heading]] ---
+  const wikiRe = /(!?)\[\[([^\]\n]+)\]\]/g;
   let wm: RegExpExecArray | null;
   while ((wm = wikiRe.exec(docText)) !== null) {
     const from = wm.index;
     const to = from + wm[0].length;
     if (insideCode(from)) continue; // never render `[[` inside code blocks
-    const target = wm[1].trim();
+    const raw = wm[2].trim();
+    if (wm[1] === "!") {
+      // Embed: `![[target]]` or `![[target#heading]]`.
+      const [filePart, headingPart] = raw.split("#");
+      blocks.push({
+        kind: "embed",
+        from, to,
+        embedTarget: (filePart ?? "").split("|")[0].trim(),
+        embedHeading: headingPart ? headingPart.trim() : null,
+      });
+    } else {
+      blocks.push({
+        kind: "wiki",
+        from, to,
+        wikiTarget: raw,
+        wikiResolved: resolveWikiLink(raw) !== null,
+      });
+    }
+  }
+
+  // --- Inline: #tags (Obsidian-style). Match `#word` not preceded by a
+  // word char, skipping code ranges. ATX heading markers (`# Title`) never
+  // match because a space follows `#`; `## #tag` still styles the tag.
+  const tagRe = /(^|[^\p{L}\p{N}_])#([\p{L}\p{N}_\-\/\u3400-\u9fff]+)/gu;
+  let tg: RegExpExecArray | null;
+  while ((tg = tagRe.exec(docText)) !== null) {
+    const from = tg.index + tg[1].length; // start at the `#`
+    const to = tg.index + tg[0].length;
+    if (insideCode(from)) continue;
     blocks.push({
-      kind: "wiki",
+      kind: "style",
       from, to,
-      wikiTarget: target,
-      wikiResolved: resolveWikiLink(target) !== null,
+      styleClass: "cm-tag",
+      styleAttr: "color:#005cc5;background:rgba(27,31,35,0.08);border-radius:4px;padding:0 4px;cursor:pointer;",
     });
   }
 
@@ -612,6 +682,22 @@ function decideEntries(state: EditorState, blocks: Block[]): DecoEntry[] {
         w.from = b.from;
         w.to = b.to;
         entries.push({ from: b.from, to: b.to, decoration: Decoration.replace({ widget: w }) });
+        break;
+      }
+
+      case "embed": {
+        if (isOnActiveLine(state, b.from, b.to, activeLine)) break; // keep source editable
+        // Inline (non-block) replacement: embeds can sit mid-line next to
+        // other text; a block:true replace would collide with sibling ranges.
+        const w = new EmbedWidget(b.embedTarget ?? "", b.embedHeading ?? null);
+        entries.push({ from: b.from, to: b.to, decoration: Decoration.replace({ widget: w }) });
+        break;
+      }
+
+      case "callout": {
+        if (isOnActiveLine(state, b.from, b.to, activeLine)) break; // keep source editable
+        const w = new CalloutWidget(b.calloutType ?? "note", b.calloutBody ?? "");
+        entries.push({ from: b.from, to: b.to, decoration: Decoration.replace({ widget: w, block: true }) });
         break;
       }
 

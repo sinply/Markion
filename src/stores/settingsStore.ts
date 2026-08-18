@@ -15,6 +15,7 @@ interface SettingsState extends Settings {
   setShowOutline: (v: boolean) => void;
   setShowBacklinks: (v: boolean) => void;
   setShowGraph: (v: boolean) => void;
+  setShowTags: (v: boolean) => void;
   setShowWordCount: (v: boolean) => void;
 }
 
@@ -34,7 +35,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   save: async (vaultRoot) => {
     try {
       const { saveConfig } = await import("../lib/ipc");
-      const { load, save, setTheme, setAssetsStrategy, setPathStyle, setShowHiddenFiles, setLivePreview, setLanguage, setFont, setShowOutline, setShowBacklinks, setShowGraph, setShowWordCount, ...settings } = get();
+      const { load, save, setTheme, setAssetsStrategy, setPathStyle, setShowHiddenFiles, setLivePreview, setLanguage, setFont, setShowOutline, setShowBacklinks, setShowGraph, setShowTags, setShowWordCount, ...settings } = get();
       await saveConfig(vaultRoot, settings as Settings);
     } catch {
       // IPC not available yet
@@ -51,5 +52,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setShowOutline: (showOutline) => set({ showOutline }),
   setShowBacklinks: (showBacklinks) => set({ showBacklinks }),
   setShowGraph: (showGraph) => set({ showGraph }),
+  setShowTags: (showTags) => set({ showTags }),
   setShowWordCount: (showWordCount) => set({ showWordCount }),
 }));

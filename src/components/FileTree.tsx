@@ -1,10 +1,12 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Tree } from "react-arborist";
 import type { NodeRendererProps } from "react-arborist";
 import { useVaultStore } from "../stores/vaultStore";
 import { useDocStore } from "../stores/docStore";
 import { useSettingsStore } from "../stores/settingsStore";
-import { readFile } from "../lib/ipc";
+import { createFile, createFolder, deletePath, readFile } from "../lib/ipc";
+import { useI18n } from "../lib/i18n";
+import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 
 interface RowData {
   id: string;
@@ -13,7 +15,7 @@ interface RowData {
   kind: "file" | "folder";
 }
 
-/** A file is hidden (dotfile) if its basename starts with `.` (except `.markion`? no — all dotfiles hidden by default). */
+/** A file is hidden (dotfile) if its basename starts with `.` (except `.markion`? no - all dotfiles hidden by default). */
 function isDot(name: string): boolean {
   return name.startsWith(".");
 }
@@ -35,6 +37,27 @@ function convertTree(
   };
 }
 
+/** Parent folder of a relative path ("" for top level). */
+function parentOf(path: string): string {
+  const i = path.lastIndexOf("/");
+  return i === -1 ? "" : path.slice(0, i);
+}
+
+/** Windows-invalid filename characters plus empty/dot names. */
+const INVALID_NAME_RE = /[\\/:*?"<>|]/;
+
+function validName(n: string): boolean {
+  const t = n.trim();
+  return t.length > 0 && !INVALID_NAME_RE.test(t) && t !== "." && t !== "..";
+}
+
+/** The node a context menu was opened on (null = vault-root empty area). */
+interface MenuTarget {
+  path: string;
+  name: string;
+  kind: "file" | "folder";
+}
+
 function NodeView({ node, style, dragHandle }: NodeRendererProps<RowData>) {
   const isFolder = node.data.kind === "folder";
   const hasIndex =
@@ -49,6 +72,9 @@ function NodeView({ node, style, dragHandle }: NodeRendererProps<RowData>) {
         cursor: isFolder ? "default" : "pointer",
       }}
       ref={dragHandle}
+      data-path={node.data.id}
+      data-name={node.data.name}
+      data-kind={node.data.kind}
       onDoubleClick={isFolder ? (e) => { e.stopPropagation(); node.toggle(); } : undefined}
       title={
         isFolder
@@ -129,9 +155,17 @@ export function FileTree() {
   const vaultRoot = useVaultStore((s) => s.vaultRoot);
   const applyReorder = useVaultStore((s) => s.applyReorder);
   const applyMove = useVaultStore((s) => s.applyMove);
+  const loadTree = useVaultStore((s) => s.loadTree);
   const openDoc = useDocStore((s) => s.openDoc);
   const setActiveContent = useDocStore((s) => s.setActiveContent);
+  const closeDocsUnder = useDocStore((s) => s.closeDocsUnder);
+  const renameDoc = useDocStore((s) => s.renameDoc);
   const showHidden = useSettingsStore((s) => s.showHiddenFiles);
+  const t = useI18n();
+
+  const [menu, setMenu] = useState<
+    { x: number; y: number; target: MenuTarget | null } | null
+  >(null);
 
   const handleActivate = useCallback(
     async (node: any) => {
@@ -168,6 +202,163 @@ export function FileTree() {
     [applyReorder, applyMove],
   );
 
+  // Right-click on a tree row (or the empty area = vault root): remember the
+  // node via data-* attributes (event delegation, no prop drilling into rows).
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const el = (e.target as HTMLElement).closest("[data-path]") as HTMLElement | null;
+    if (!el) {
+      setMenu({ x: e.clientX, y: e.clientY, target: null });
+      return;
+    }
+    const kind = el.dataset.kind === "folder" ? "folder" : "file";
+    setMenu({
+      x: e.clientX,
+      y: e.clientY,
+      target: { path: el.dataset.path ?? "", name: el.dataset.name ?? "", kind },
+    });
+  }, []);
+
+  // The folder new items are created inside: the target folder itself, or the
+  // parent folder when the menu was opened on a file / the empty area.
+  const containerFolder = (target: MenuTarget | null): string => {
+    if (!target || target.kind === "folder") return target ? target.path : "";
+    return parentOf(target.path);
+  };
+
+  const handleNewNote = useCallback(
+    async (target: MenuTarget | null) => {
+      if (!vaultRoot) return;
+      const raw = window.prompt(t.ctxNewNamePrompt);
+      if (raw === null) return;
+      const trimmed = raw.trim();
+      if (!validName(trimmed)) {
+        window.alert(t.ctxInvalidName);
+        return;
+      }
+      const fileName = /\.md$/i.test(trimmed) ? trimmed : `${trimmed}.md`;
+      const dir = containerFolder(target);
+      const rel = dir ? `${dir}/${fileName}` : fileName;
+      try {
+        await createFile(vaultRoot, rel);
+        await loadTree(vaultRoot);
+        const content = await readFile(vaultRoot, rel);
+        openDoc(fileName, rel);
+        setActiveContent(content);
+      } catch {
+        // creation failed - tree/editor unchanged
+      }
+    },
+    [vaultRoot, loadTree, openDoc, setActiveContent, t],
+  );
+
+  const handleNewFolder = useCallback(
+    async (target: MenuTarget | null) => {
+      if (!vaultRoot) return;
+      const raw = window.prompt(t.ctxNewNamePrompt);
+      if (raw === null) return;
+      const trimmed = raw.trim();
+      if (!validName(trimmed)) {
+        window.alert(t.ctxInvalidName);
+        return;
+      }
+      const dir = containerFolder(target);
+      const rel = dir ? `${dir}/${trimmed}` : trimmed;
+      try {
+        await createFolder(vaultRoot, rel);
+        await loadTree(vaultRoot);
+      } catch {
+        // creation failed - tree unchanged
+      }
+    },
+    [vaultRoot, loadTree, t],
+  );
+
+  const handleRename = useCallback(
+    async (target: MenuTarget) => {
+      if (!vaultRoot) return;
+      const { path, name, kind } = target;
+      const raw = window.prompt(t.ctxRenamePrompt, name);
+      if (raw === null) return;
+      const trimmed = raw.trim();
+      if (!validName(trimmed)) {
+        window.alert(t.ctxInvalidName);
+        return;
+      }
+      let newName = trimmed;
+      // Keep the .md extension when renaming a file unless the user typed one.
+      if (kind === "file" && /\.md$/i.test(name) && !/\.md$/i.test(trimmed)) {
+        newName = `${trimmed}.md`;
+      }
+      const folder = parentOf(path);
+      const newPath = folder ? `${folder}/${newName}` : newName;
+      if (newPath === path) return;
+      try {
+        await applyMove(folder, name, folder, newName);
+        if (kind === "file") {
+          renameDoc(path, newPath, newName);
+        } else {
+          // Folder rename: remap every open doc at/under the old folder path.
+          const prefix = `${path}/`;
+          for (const d of [...useDocStore.getState().openDocs]) {
+            if (d.path === path || d.path.startsWith(prefix)) {
+              const rel = newPath + d.path.slice(path.length);
+              renameDoc(d.path, rel, rel.split("/").pop() ?? rel);
+            }
+          }
+        }
+        await loadTree(vaultRoot);
+      } catch {
+        // rename failed - tree/tabs unchanged
+      }
+    },
+    [vaultRoot, applyMove, renameDoc, loadTree, t],
+  );
+
+  const handleDelete = useCallback(
+    async (target: MenuTarget) => {
+      if (!vaultRoot) return;
+      const { path, name, kind } = target;
+      const msg =
+        kind === "folder" ? t.ctxDeleteFolderPrompt(name) : t.ctxDeleteFilePrompt(name);
+      if (!window.confirm(msg)) return;
+      try {
+        await deletePath(vaultRoot, path);
+        // Close tabs for the deleted node (and everything under it) before
+        // the watcher event arrives, so no conflict dialog can appear.
+        closeDocsUnder(path);
+        await loadTree(vaultRoot);
+      } catch {
+        // delete failed (e.g. trash unavailable) - nothing removed
+      }
+    },
+    [vaultRoot, closeDocsUnder, loadTree, t],
+  );
+
+  const menuItems = useMemo<ContextMenuItem[]>(() => {
+    if (!menu) return [];
+    const items: ContextMenuItem[] = [{ id: "new-note", label: t.ctxNewNote }];
+    const isFolderish = !menu.target || menu.target.kind === "folder";
+    if (isFolderish) items.push({ id: "new-folder", label: t.ctxNewFolder });
+    if (menu.target) {
+      items.push({ id: "rename", label: t.ctxRename });
+      items.push({ id: "delete", label: t.ctxDelete, danger: true });
+    }
+    return items;
+  }, [menu, t]);
+
+  const handleMenuPick = useCallback(
+    (id: string) => {
+      const target = menu?.target ?? null;
+      setMenu(null);
+      if (id === "new-note") void handleNewNote(target);
+      else if (id === "new-folder") void handleNewFolder(target);
+      else if (id === "rename" && target) void handleRename(target);
+      else if (id === "delete" && target) void handleDelete(target);
+    },
+    [menu, handleNewNote, handleNewFolder, handleRename, handleDelete],
+  );
+
   // Default: all folders collapsed, showing only the top level
   const initialOpenState = useMemo(() => {
     const map: Record<string, boolean> = {};
@@ -194,21 +385,35 @@ export function FileTree() {
     .map((c) => convertTree(c, showHidden));
 
   return (
-    <div style={{ height: "100%", overflow: "auto" }}>
-      <div style={{ padding: "6px 8px", borderBottom: "1px solid var(--border)", fontSize: 12, color: "var(--fg-muted)" }}>
-        {tree.name || "Vault"}
-      </div>
-      <Tree<RowData>
-        data={rowData}
-        width="100%"
-        height={window.innerHeight - 40}
-        rowHeight={28}
-        initialOpenState={initialOpenState}
-        onMove={handleMove}
-        onActivate={handleActivate}
+    <>
+      <div
+        style={{ height: "100%", overflow: "auto" }}
+        onContextMenu={handleContextMenu}
       >
-        {NodeView}
-      </Tree>
-    </div>
+        <div style={{ padding: "6px 8px", borderBottom: "1px solid var(--border)", fontSize: 12, color: "var(--fg-muted)" }}>
+          {tree.name || "Vault"}
+        </div>
+        <Tree<RowData>
+          data={rowData}
+          width="100%"
+          height={window.innerHeight - 40}
+          rowHeight={28}
+          initialOpenState={initialOpenState}
+          onMove={handleMove}
+          onActivate={handleActivate}
+        >
+          {NodeView}
+        </Tree>
+      </div>
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={menuItems}
+          onPick={handleMenuPick}
+          onClose={() => setMenu(null)}
+        />
+      )}
+    </>
   );
 }

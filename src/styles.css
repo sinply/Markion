@@ -470,6 +470,74 @@ body {
   text-decoration: underline;
 }
 
+/* Table widget toolbar (add/remove row & column) */
+.cm-table-toolbar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+.cm-table-btn {
+  background: var(--panel-bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.cm-table-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Inline #tag highlight */
+.cm-tag:hover {
+  background: rgba(27, 31, 35, 0.16) !important;
+  text-decoration: underline;
+}
+
+/* Callout card (> [!note]) */
+.cm-callout {
+  margin: 8px 0;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  background: var(--panel-bg);
+  overflow: hidden;
+}
+.cm-callout-title {
+  padding: 6px 12px;
+  font-weight: 700;
+  font-size: 13px;
+  text-transform: capitalize;
+  border-bottom: 1px solid var(--border);
+}
+.cm-callout-body {
+  padding: 8px 12px;
+  font-size: 14px;
+}
+.cm-callout-note { border-left-color: #0969da; }
+.cm-callout-tip, .cm-callout-success, .cm-callout-abstract, .cm-callout-summary { border-left-color: #1a7f37; }
+.cm-callout-warning, .cm-callout-caution { border-left-color: #bf8700; }
+.cm-callout-danger, .cm-callout-failure, .cm-callout-bug { border-left-color: #cf222e; }
+.cm-callout-info, .cm-callout-question, .cm-callout-important, .cm-callout-todo { border-left-color: #8250df; }
+.cm-callout-example, .cm-callout-quote { border-left-color: #57606a; }
+
+/* Embedded note (![[note]]) */
+.cm-embed {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: var(--panel-bg);
+  font-size: 14px;
+}
+.cm-embed-loading {
+  color: var(--fg-muted);
+  font-style: italic;
+}
+
 /* Image */
 .cm-image-wrap {
   display: inline-block;

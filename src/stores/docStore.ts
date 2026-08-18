@@ -12,6 +12,12 @@ interface DocState {
   dirtyMap: Record<string, boolean>;
   openDoc: (title: string, path: string) => void;
   closeDoc: (id: string) => void;
+  /** Close every open doc whose path equals `path` or lives under it
+   *  (deleting a folder closes its contained docs too). */
+  closeDocsUnder: (path: string) => void;
+  /** Update the path/title of an open doc after a file rename. The doc id
+   *  (== path), tab title, and per-doc maps all move to the new key. */
+  renameDoc: (oldPath: string, newPath: string, newTitle: string) => void;
   switchTo: (id: string) => void;
   markDirty: (id: string) => void;
   markClean: (id: string) => void;
@@ -69,6 +75,60 @@ export const useDocStore = create<DocState>((set, get) => ({
 
   switchTo: (id) => {
     set({ activeDocId: id });
+  },
+
+  closeDocsUnder: (path) => {
+    // Prefix match on path segments so "notes" never matches "notes-2.md".
+    const under = (docPath: string) =>
+      docPath === path || docPath.startsWith(path.endsWith("/") ? path : path + "/");
+    const docs = get().openDocs.filter((d) => !under(d.path));
+    if (docs.length === get().openDocs.length) return;
+    // Reuse closeDoc semantics per doc by filtering once and fixing up the
+    // active doc / content pointers in a single set().
+    const s = get();
+    let newActive = s.activeDocId;
+    if (s.activeDocId && !docs.some((d) => d.id === s.activeDocId)) {
+      const idx = s.openDocs.findIndex((d) => d.id === s.activeDocId);
+      newActive = docs[Math.min(idx, docs.length - 1)]?.id ?? null;
+    }
+    const newDirty: Record<string, boolean> = {};
+    const newSaved: Record<string, string> = {};
+    for (const d of docs) {
+      if (s.dirtyMap[d.id] !== undefined) newDirty[d.id] = s.dirtyMap[d.id];
+      if (s.savedContent[d.id] !== undefined) newSaved[d.id] = s.savedContent[d.id];
+    }
+    set({
+      openDocs: docs,
+      activeDocId: newActive,
+      dirtyMap: newDirty,
+      savedContent: newSaved,
+      activeContent: newActive === s.activeContentDocId ? s.activeContent : "",
+      activeContentDocId: newActive === s.activeContentDocId ? s.activeContentDocId : null,
+    });
+  },
+
+  renameDoc: (oldPath, newPath, newTitle) => {
+    const s = get();
+    const doc = s.openDocs.find((d) => d.path === oldPath);
+    if (!doc) return;
+    const dirty = s.dirtyMap[oldPath];
+    const saved = s.savedContent[oldPath];
+    const dirtyMap = { ...s.dirtyMap };
+    const savedContent = { ...s.savedContent };
+    delete dirtyMap[oldPath];
+    delete savedContent[oldPath];
+    if (dirty !== undefined) dirtyMap[newPath] = dirty;
+    if (saved !== undefined) savedContent[newPath] = saved;
+    set({
+      openDocs: s.openDocs.map((d) =>
+        d.id === oldPath ? { id: newPath, path: newPath, title: newTitle } : d,
+      ),
+      activeDocId: s.activeDocId === oldPath ? newPath : s.activeDocId,
+      activeContentDocId:
+        s.activeContentDocId === oldPath ? newPath : s.activeContentDocId,
+      dirtyMap,
+      savedContent,
+    });
   },
 
   markDirty: (id) =>

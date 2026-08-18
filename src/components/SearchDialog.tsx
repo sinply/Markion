@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useVaultStore } from "../stores/vaultStore";
 import { useUiStore } from "../stores/uiStore";
 import { useDocStore } from "../stores/docStore";
-import { searchVault, type SearchHit } from "../lib/ipc";
+import { searchVault, replaceInVault, type SearchHit } from "../lib/ipc";
 import { openNote } from "../lib/openNote";
 import { useI18n } from "../lib/i18n";
 
@@ -29,6 +29,9 @@ export function SearchDialog() {
 
   const [query, setQuery] = useState("");
   const [caseSensitive, setCaseSensitive] = useState(false);
+  const [useRegex, setUseRegex] = useState(false);
+  const [replacement, setReplacement] = useState("");
+  const [replaceResult, setReplaceResult] = useState<string | null>(null);
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +53,7 @@ export function SearchDialog() {
     setError(null);
     const timer = setTimeout(async () => {
       try {
-        const result = await searchVault(vaultRoot, q, { caseSensitive });
+        const result = await searchVault(vaultRoot, q, { caseSensitive, useRegex });
         setHits(result);
         setSel(0);
       } catch (e) {
@@ -61,13 +64,16 @@ export function SearchDialog() {
       }
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [query, caseSensitive, vaultRoot, open]);
+  }, [query, caseSensitive, useRegex, vaultRoot, open]);
 
   // Reset when the dialog is (re)opened.
   useEffect(() => {
     if (open) {
       setQuery("");
       setCaseSensitive(false);
+      setUseRegex(false);
+      setReplacement("");
+      setReplaceResult(null);
       setHits([]);
       setError(null);
       setLoading(false);
@@ -96,6 +102,24 @@ export function SearchDialog() {
 
   const move = (delta: number) => {
     setSel((s) => Math.max(0, Math.min(flat.length - 1, s + delta)));
+  };
+
+  const doReplaceAll = async () => {
+    if (!vaultRoot) return;
+    const q = query.trim();
+    if (!q) return;
+    if (!window.confirm(t.replaceAllConfirm)) return;
+    setReplaceResult(null);
+    try {
+      const res = await replaceInVault(vaultRoot, q, replacement, { caseSensitive, useRegex });
+      setReplaceResult(t.replaceAllDone(res.filesChanged, res.replacements));
+      // Refresh results to reflect the post-replace state.
+      const result = await searchVault(vaultRoot, q, { caseSensitive, useRegex });
+      setHits(result);
+      setSel(0);
+    } catch (e) {
+      setReplaceResult(String(e));
+    }
   };
 
   return (
@@ -138,12 +162,53 @@ export function SearchDialog() {
           />
           {t.searchCaseSensitive}
         </label>
+        <label
+          style={{
+            display: "flex", alignItems: "center", gap: 4, padding: "0 12px",
+            fontSize: 12, color: "var(--fg-muted)", cursor: "pointer", userSelect: "none",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={useRegex}
+            onChange={(e) => setUseRegex(e.target.checked)}
+            style={{ cursor: "pointer" }}
+          />
+          {t.searchRegex}
+        </label>
         <button
           onClick={() => setOpen(false)}
           style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 18, color: "var(--fg-muted)", padding: "0 12px" }}
         >
           ×
         </button>
+      </div>
+      <div
+        style={{
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "6px 14px", borderBottom: "1px solid var(--border)",
+        }}
+      >
+        <input
+          value={replacement}
+          onChange={(e) => setReplacement(e.target.value)}
+          placeholder={t.replacePlaceholder}
+          style={{
+            flex: 1, padding: "6px 10px", fontSize: 13,
+            border: "1px solid var(--border)", borderRadius: 4,
+            background: "var(--bg)", color: "var(--fg)", outline: "none",
+          }}
+        />
+        <button
+          onClick={() => void doReplaceAll()}
+          disabled={query.trim() === ""}
+          style={{ padding: "6px 12px", fontSize: 13, cursor: "pointer" }}
+        >
+          {t.replaceAll}
+        </button>
+        {replaceResult && (
+          <span style={{ fontSize: 12, color: "var(--fg-muted)" }}>{replaceResult}</span>
+        )}
       </div>
       <div style={{ overflow: "auto", flex: 1, minHeight: 60 }}>
         {loading && (

@@ -173,6 +173,16 @@ export function SettingsDialog() {
           <label>
             <input
               type="checkbox"
+              checked={settings.showTags}
+              onChange={(e) => settings.setShowTags(e.target.checked)}
+            />
+            {" "}{t.showTags}
+          </label>
+        </div>
+        <div style={{ margin: "4px 0" }}>
+          <label>
+            <input
+              type="checkbox"
               checked={settings.showWordCount}
               onChange={(e) => settings.setShowWordCount(e.target.checked)}
             />

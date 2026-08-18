@@ -150,6 +150,50 @@ mod tests {
             "keep me"
         );
     }
+
+    #[test]
+    fn create_folder_makes_nested_dirs_and_is_idempotent() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        create_folder(root.clone(), "books/chapter-1".to_string()).unwrap();
+        assert!(dir.path().join("books/chapter-1").is_dir());
+        // Creating again succeeds (no "already exists" error).
+        create_folder(root, "books/chapter-1".to_string()).unwrap();
+        assert!(dir.path().join("books/chapter-1").is_dir());
+    }
+
+    #[test]
+    fn delete_path_missing_path_is_error() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        let err = delete_path(root, "nope.md".to_string()).unwrap_err();
+        assert!(err.contains("does not exist"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn delete_path_file_moves_to_trash() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        std::fs::write(dir.path().join("gone.md"), "bye").unwrap();
+        // Environments without a trash service (headless CI) cannot run this;
+        // skip rather than fail - the Windows/macOS desktop paths are the target.
+        match delete_path(root, "gone.md".to_string()) {
+            Ok(()) => assert!(!dir.path().join("gone.md").exists()),
+            Err(e) => eprintln!("skipped (no trash service): {e}"),
+        }
+    }
+
+    #[test]
+    fn delete_path_folder_moves_to_trash() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        std::fs::create_dir_all(dir.path().join("folder")).unwrap();
+        std::fs::write(dir.path().join("folder/inner.md"), "x").unwrap();
+        match delete_path(root, "folder".to_string()) {
+            Ok(()) => assert!(!dir.path().join("folder").exists()),
+            Err(e) => eprintln!("skipped (no trash service): {e}"),
+        }
+    }
 }
 
 #[tauri::command]
@@ -182,22 +226,52 @@ pub fn scan_graph(
     Ok(idx.graph())
 }
 
-/// Full-text search across all `.md` files in the vault. `case_sensitive` and
-/// `max_hits` are optional and default to case-insensitive / 500 hits.
+/// Full-text search across all `.md` files in the vault. `case_sensitive`,
+/// `use_regex`, and `max_hits` are optional; an invalid regex pattern returns
+/// an error surfaced to the frontend.
 #[tauri::command]
 pub fn search_vault(
     vault_root: String,
     query: String,
     case_sensitive: Option<bool>,
+    use_regex: Option<bool>,
     max_hits: Option<usize>,
 ) -> Result<Vec<crate::search::SearchHit>, String> {
     crate::search::search_vault(
         Path::new(&vault_root),
         &query,
         case_sensitive.unwrap_or(false),
+        use_regex.unwrap_or(false),
         max_hits.unwrap_or(crate::search::DEFAULT_MAX_HITS),
     )
     .map_err(|e| e.to_string())
+}
+
+/// Replace `query` with `replacement` across all `.md` files in the vault.
+/// Returns how many files changed and how many replacements were made.
+#[tauri::command]
+pub fn replace_in_vault(
+    vault_root: String,
+    query: String,
+    replacement: String,
+    case_sensitive: Option<bool>,
+    use_regex: Option<bool>,
+) -> Result<crate::search::ReplaceResult, String> {
+    crate::search::replace_in_vault(
+        Path::new(&vault_root),
+        &query,
+        &replacement,
+        case_sensitive.unwrap_or(false),
+        use_regex.unwrap_or(false),
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// Scan the vault for `#tag` occurrences (skipping fenced code, inline code,
+/// and wiki links). Returns one entry per (tag, file) pair.
+#[tauri::command]
+pub fn scan_tags(vault_root: String) -> Result<Vec<crate::tags::TagEntry>, String> {
+    crate::tags::scan_tags(Path::new(&vault_root)).map_err(|e| e.to_string())
 }
 
 /// Create an empty markdown file at `path` (relative to vault root). Parent
@@ -212,6 +286,25 @@ pub fn create_file(vault_root: String, path: String) -> Result<(), String> {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     std::fs::write(full, "").map_err(|e| e.to_string())
+}
+
+/// Create a folder at `path` (relative to vault root). Idempotent: creating
+/// an existing folder succeeds, mirroring `create_file` semantics.
+#[tauri::command]
+pub fn create_folder(vault_root: String, path: String) -> Result<(), String> {
+    let full = Path::new(&vault_root).join(&path);
+    std::fs::create_dir_all(full).map_err(|e| e.to_string())
+}
+
+/// Move a file or folder (relative to vault root) to the OS trash/recycle
+/// bin. Never hard-deletes: on failure the on-disk data is untouched.
+#[tauri::command]
+pub fn delete_path(vault_root: String, path: String) -> Result<(), String> {
+    let full = Path::new(&vault_root).join(&path);
+    if !full.exists() {
+        return Err(format!("path does not exist: {}", path));
+    }
+    trash::delete(&full).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

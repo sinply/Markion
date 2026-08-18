@@ -314,6 +314,64 @@ export class FrontmatterWidget extends WidgetType {
   }
 }
 
+interface ParsedTable {
+  header: string[];
+  align: string[];
+  rows: string[][];
+}
+
+/** Parse GFM table source into header / align / body rows. Cells keep their
+ *  raw inline source; escaped pipes (`\|`) are not split on. */
+export function parseTable(raw: string): ParsedTable | null {
+  const lines = raw
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith("|") || l.startsWith(":-") || l.startsWith("---"));
+  if (lines.length < 2) return null;
+  const splitRow = (line: string): string[] =>
+    line
+      .replace(/^\|/, "")
+      .replace(/\|$/, "")
+      .split(/(?<!\\)\|/g)
+      .map((c) => c.trim());
+  const header = splitRow(lines[0]);
+  const align = splitRow(lines[1]);
+  const rows = lines.slice(2).map(splitRow);
+  return { header, align, rows };
+}
+
+function serializeParsedTable(t: ParsedTable): string {
+  return [pipeRow(t.header), alignRow(t.align), ...t.rows.map((r) => pipeRow(r))].join("\n");
+}
+
+/** Row/column transforms for the table toolbar buttons. */
+export function transformTable(raw: string, op: "addRow" | "removeRow" | "addCol" | "removeCol"): string | null {
+  const t = parseTable(raw);
+  if (!t) return null;
+  const cols = t.header.length;
+  switch (op) {
+    case "addRow":
+      t.rows.push(Array(cols).fill(""));
+      break;
+    case "removeRow":
+      if (t.rows.length === 0) return null;
+      t.rows.pop();
+      break;
+    case "addCol":
+      t.header.push("");
+      t.align.push("---");
+      for (const r of t.rows) r.push("");
+      break;
+    case "removeCol":
+      if (cols <= 1) return null;
+      t.header.pop();
+      t.align.pop();
+      for (const r of t.rows) r.pop();
+      break;
+  }
+  return serializeParsedTable(t);
+}
+
 export class TableWidget extends WidgetType {
   view: EditorView | null = null;
   blockFrom = -1;
@@ -329,6 +387,36 @@ export class TableWidget extends WidgetType {
 
   toDOM(view: EditorView): HTMLElement {
     this.view = view;
+    const wrap = document.createElement("div");
+    wrap.className = "cm-table-wrap";
+
+    const toolbar = document.createElement("div");
+    toolbar.className = "cm-table-toolbar";
+    const btn = (label: string, op: "addRow" | "removeRow" | "addCol" | "removeCol") => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "cm-table-btn";
+      b.textContent = label;
+      b.addEventListener("mousedown", (e) => e.preventDefault()); // keep CM6 focus
+      b.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!this.view || this.blockFrom < 0 || this.blockTo < 0) return;
+        const next = transformTable(this.raw, op);
+        if (next && next !== this.raw) {
+          this.view.dispatch({
+            changes: { from: this.blockFrom, to: this.blockTo, insert: next },
+          });
+        }
+      });
+      return b;
+    };
+    toolbar.appendChild(btn("＋ row", "addRow"));
+    toolbar.appendChild(btn("− row", "removeRow"));
+    toolbar.appendChild(btn("＋ col", "addCol"));
+    toolbar.appendChild(btn("− col", "removeCol"));
+    wrap.appendChild(toolbar);
+
     const div = document.createElement("div");
     div.className = "cm-table";
     div.innerHTML = renderMarkdownWithTableSource(this.raw);
@@ -358,14 +446,15 @@ export class TableWidget extends WidgetType {
       },
       true,
     );
-    return div;
+    wrap.appendChild(div);
+    return wrap;
   }
 
-  // The widget owns contenteditable cells: CM6 must ignore ALL events inside
-  // it (not just mouse events), otherwise key/input events fall through to
-  // CM6's input pipeline and get dispatched at the doc-end cursor instead of
-  // editing the cell in place. The browser drives all editing; commit-on-blur
-  // writes the result back to the doc.
+  // The widget owns contenteditable cells and toolbar buttons: CM6 must ignore
+  // ALL events inside it (not just mouse events), otherwise key/input events
+  // fall through to CM6's input pipeline and get dispatched at the doc-end
+  // cursor instead of editing the cell in place. The browser drives all
+  // editing; commit-on-blur writes the result back to the doc.
   ignoreEvent(): boolean {
     return true;
   }
@@ -552,4 +641,104 @@ export class WikiLinkWidget extends WidgetType {
   ignoreEvent(): boolean {
     return false;
   }
+}
+
+/** Obsidian-style callout card (`> [!note] ...`). */
+export class CalloutWidget extends WidgetType {
+  constructor(readonly type: string, readonly body: string) {
+    super();
+  }
+
+  eq(other: CalloutWidget): boolean {
+    return other.type === this.type && other.body === this.body;
+  }
+
+  toDOM(): HTMLElement {
+    const div = document.createElement("div");
+    const cls = this.type.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+    div.className = `cm-callout cm-callout-${cls}`;
+    const title = document.createElement("div");
+    title.className = "cm-callout-title";
+    title.textContent = this.type;
+    div.appendChild(title);
+    const content = document.createElement("div");
+    content.className = "cm-callout-body";
+    content.innerHTML = renderMarkdown(this.body);
+    div.appendChild(content);
+    return div;
+  }
+
+  ignoreEvent(): boolean {
+    return false;
+  }
+}
+
+/** Embedded note (`![[target]]` or `![[target#heading]]`). Renders the target
+ *  file's content (or a single section) into a card. Only one level deep, so
+ *  embeds inside embeds stay as literal source — no recursion risk. */
+export class EmbedWidget extends WidgetType {
+  view: EditorView | null = null;
+
+  constructor(readonly target: string, readonly heading: string | null) {
+    super();
+  }
+
+  eq(other: EmbedWidget): boolean {
+    return other.target === this.target && other.heading === this.heading;
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    this.view = view;
+    const div = document.createElement("div");
+    div.className = "cm-embed cm-embed-loading";
+    div.textContent = `Loading ${this.target}…`;
+    void this.load(div);
+    return div;
+  }
+
+  private async load(div: HTMLElement): Promise<void> {
+    const ctx = this.view?.state.facet(markdownContextFacet)[0];
+    if (!ctx) return;
+    const { resolveWikiLink } = await import("./wikiIndex");
+    const resolved = resolveWikiLink(this.target);
+    div.textContent = "";
+    if (!resolved) {
+      div.textContent = `![[${this.target}]]`;
+      return;
+    }
+    try {
+      const { readFile } = await import("../lib/ipc");
+      const content = await readFile(ctx.vaultRoot, resolved);
+      let body = content;
+      if (this.heading) {
+        body = extractSection(content, this.heading);
+      }
+      div.className = "cm-embed";
+      div.innerHTML = renderMarkdown(body);
+    } catch {
+      div.textContent = `![[${this.target}]]`;
+    }
+  }
+
+  ignoreEvent(): boolean {
+    return false;
+  }
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** The text under `heading` up to the next same-or-higher-level heading
+ *  (leading blank lines stripped). Returns "" when the heading isn't found.
+ *  Exported for tests. */
+export function extractSection(content: string, heading: string): string {
+  const re = new RegExp(`^#{1,6}\\s+${escapeRegExp(heading)}\\s*$`, "m");
+  const m = re.exec(content);
+  if (!m) return "";
+  const level = (m[0].match(/^#+/) ?? [""])[0].length;
+  const rest = content.slice(m.index + m[0].length).replace(/^\n+/, "");
+  const nextRe = new RegExp(`^#{1,${level}}\\s+`, "m");
+  const n = nextRe.exec(rest);
+  return n ? rest.slice(0, n.index) : rest;
 }

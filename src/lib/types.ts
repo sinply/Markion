@@ -39,6 +39,7 @@ export interface Settings {
   showOutline: boolean;
   showBacklinks: boolean;
   showGraph: boolean;
+  showTags: boolean;
   showWordCount: boolean;
 }
 
@@ -53,5 +54,6 @@ export const DEFAULT_SETTINGS: Settings = {
   showOutline: true,
   showBacklinks: true,
   showGraph: true,
+  showTags: true,
   showWordCount: true,
 };

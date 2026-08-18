@@ -3,7 +3,7 @@ import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { Table, TaskList, Strikethrough } from "@lezer/markdown";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
+import { syntaxHighlighting, defaultHighlightStyle, foldGutter, foldKeymap } from "@codemirror/language";
 import { search, searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { livePreviewExtension, livePreviewField, previewField } from "./livePreview";
 import { markdownContextFacet, imagePasteDropExtension, type MarkdownContext } from "./media";
@@ -71,6 +71,16 @@ const searchTheme = EditorView.theme({
   },
 });
 
+/** Fold gutter styling that follows the app theme instead of CM6 defaults. */
+const foldTheme = EditorView.theme({
+  ".cm-foldGutter": { color: "var(--fg-muted)" },
+  ".cm-foldGutterElement": {
+    cursor: "pointer",
+    fontSize: 12,
+    lineHeight: "18px",
+  },
+});
+
 export type EditorMode = "live" | "preview";
 
 export function createEditorState(
@@ -94,8 +104,10 @@ export function createEditorState(
     doc,
     extensions: [
       lineNumbers(),
+      foldGutter(),
       markdown({ base: markdownLanguage, extensions: [Table, TaskList, Strikethrough] }),
       keymap.of(defaultKeymap),
+      keymap.of(foldKeymap),
       history(),
       keymap.of(historyKeymap),
       syntaxHighlighting(defaultHighlightStyle),
@@ -103,6 +115,7 @@ export function createEditorState(
       keymap.of(searchKeymap),
       highlightSelectionMatches(),
       searchTheme,
+      foldTheme,
       updateListener,
       themeCompartment.of(EditorView.theme({})),
       opts?.markdownContext ? markdownContextFacet.of(opts.markdownContext) : [],

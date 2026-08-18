@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { EditorState } from "@codemirror/state";
-import { TaskCheckboxWidget, CodeBlockWidget, TableWidget, ImageWidget, MathBlockWidget } from "../widgets";
+import { TaskCheckboxWidget, CodeBlockWidget, TableWidget, ImageWidget, MathBlockWidget, CalloutWidget, EmbedWidget, transformTable, extractSection } from "../widgets";
 import type { EditorView } from "@codemirror/view";
 import { markdownContextFacet, type MarkdownContext } from "../media";
 
@@ -64,10 +64,104 @@ describe("CodeBlockWidget", () => {
 });
 
 describe("TableWidget", () => {
-  it("renders markdown table to HTML", () => {
+  it("renders markdown table to HTML with a toolbar", () => {
     const w = new TableWidget("| a | b |\n| - | - |\n| 1 | 2 |\n");
     const dom = w.toDOM(mockView());
     expect(dom.innerHTML).toContain("<table>");
+    expect(dom.querySelector(".cm-table-toolbar")).toBeTruthy();
+    const buttons = dom.querySelectorAll(".cm-table-btn");
+    expect(buttons.length).toBe(4);
+  });
+});
+
+describe("transformTable (row/column operations)", () => {
+  const raw = "| a | b |\n| - | - |\n| 1 | 2 |\n";
+
+  it("addRow appends an empty row", () => {
+    const next = transformTable(raw, "addRow")!;
+    expect(next).toBe("| a | b |\n| - | - |\n| 1 | 2 |\n|  |  |");
+  });
+
+  it("removeRow drops the last body row", () => {
+    const next = transformTable(raw, "removeRow")!;
+    expect(next).toBe("| a | b |\n| - | - |");
+  });
+
+  it("removeRow is a no-op when there are no body rows", () => {
+    expect(transformTable("| a | b |\n| - | - |", "removeRow")).toBeNull();
+  });
+
+  it("addCol appends a column to header, align, and every row", () => {
+    const next = transformTable(raw, "addCol")!;
+    expect(next).toBe("| a | b |  |\n| - | - | --- |\n| 1 | 2 |  |");
+  });
+
+  it("removeCol drops the last column", () => {
+    const next = transformTable(raw, "removeCol")!;
+    expect(next).toBe("| a |\n| - |\n| 1 |");
+  });
+
+  it("removeCol is a no-op for a single-column table", () => {
+    expect(transformTable("| a |\n| - |\n| 1 |", "removeCol")).toBeNull();
+  });
+
+  it("preserves escaped pipes in cells", () => {
+    const tricky = "| a | b\\|c |\n| - | - |\n| 1 | 2 |";
+    const next = transformTable(tricky, "addRow")!;
+    expect(next).toContain("| b\\|c |");
+  });
+});
+
+describe("CalloutWidget", () => {
+  it("renders a card with type title and rendered body", () => {
+    const w = new CalloutWidget("note", "**bold** text");
+    const dom = w.toDOM();
+    expect(dom.className).toContain("cm-callout");
+    expect(dom.className).toContain("cm-callout-note");
+    expect(dom.querySelector(".cm-callout-title")?.textContent).toBe("note");
+    expect(dom.querySelector(".cm-callout-body")?.innerHTML).toContain("<strong>bold</strong>");
+  });
+
+  it("eq compares type and body", () => {
+    expect(new CalloutWidget("note", "x").eq(new CalloutWidget("note", "x"))).toBe(true);
+    expect(new CalloutWidget("note", "x").eq(new CalloutWidget("tip", "x"))).toBe(false);
+  });
+});
+
+describe("extractSection (embed headings)", () => {
+  it("returns the section under a heading up to the next same-level heading", () => {
+    const content = "# Top\nintro\n## Sub\nbody text\n## Next\nafter";
+    expect(extractSection(content, "Sub")).toBe("body text\n");
+  });
+
+  it("returns the whole remainder for the last heading", () => {
+    const content = "# A\none\n# B\ntwo\nthree";
+    expect(extractSection(content, "B")).toBe("two\nthree");
+  });
+
+  it("returns empty for a missing heading", () => {
+    expect(extractSection("# A\nx", "Nope")).toBe("");
+  });
+
+  it("stops at a higher-level heading too", () => {
+    const content = "## A\nx\n# Top\ny";
+    expect(extractSection(content, "A")).toBe("x\n");
+  });
+});
+
+describe("EmbedWidget", () => {
+  it("starts in a loading state", () => {
+    const w = new EmbedWidget("note", null);
+    const dom = w.toDOM(mockView());
+    expect(dom.className).toContain("cm-embed-loading");
+    expect(dom.textContent).toContain("Loading");
+  });
+
+  it("eq compares target and heading", () => {
+    expect(new EmbedWidget("a", null).eq(new EmbedWidget("a", null))).toBe(true);
+    expect(new EmbedWidget("a", "h").eq(new EmbedWidget("a", "h"))).toBe(true);
+    expect(new EmbedWidget("a", null).eq(new EmbedWidget("b", null))).toBe(false);
+    expect(new EmbedWidget("a", "h").eq(new EmbedWidget("a", null))).toBe(false);
   });
 });
 

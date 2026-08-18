@@ -66,4 +66,73 @@ describe("docStore", () => {
     expect(s.activeContent).toBe("");
     expect(s.activeContentDocId).toBeNull();
   });
+
+  describe("closeDocsUnder", () => {
+    beforeEach(() => {
+      useDocStore.getState().openDoc("a.md", "a.md");
+      useDocStore.getState().openDoc("n1.md", "notes/n1.md");
+      useDocStore.getState().openDoc("n2.md", "notes/deep/n2.md");
+      useDocStore.getState().openDoc("notes-2.md", "notes-2.md");
+    });
+
+    it("closes docs at and under the folder path", () => {
+      useDocStore.getState().closeDocsUnder("notes");
+      const paths = useDocStore.getState().openDocs.map((d) => d.path);
+      expect(paths).toEqual(["a.md", "notes-2.md"]);
+    });
+
+    it("does not prefix-match sibling folders (notes vs notes-2)", () => {
+      useDocStore.getState().closeDocsUnder("notes-2");
+      const paths = useDocStore.getState().openDocs.map((d) => d.path);
+      expect(paths).toContain("notes/n1.md");
+      expect(paths).toContain("notes/deep/n2.md");
+    });
+
+    it("activates a remaining doc when the active one is closed", () => {
+      useDocStore.getState().switchTo("notes/deep/n2.md");
+      useDocStore.getState().setActiveContent("content");
+      useDocStore.getState().closeDocsUnder("notes");
+      const s = useDocStore.getState();
+      expect(s.activeDocId).toBe("notes-2.md");
+      expect(s.activeContent).toBe("");
+      expect(s.activeContentDocId).toBeNull();
+    });
+
+    it("is a no-op when nothing matches", () => {
+      const before = useDocStore.getState().openDocs;
+      useDocStore.getState().closeDocsUnder("empty");
+      expect(useDocStore.getState().openDocs).toBe(before);
+    });
+  });
+
+  describe("renameDoc", () => {
+    it("moves path/title/id and remaps saved/dirty maps", () => {
+      useDocStore.getState().openDoc("old.md", "dir/old.md");
+      useDocStore.getState().markDirty("dir/old.md");
+      useDocStore.getState().markSaved("dir/old.md", "saved content");
+      useDocStore.getState().renameDoc("dir/old.md", "dir/new.md", "new.md");
+      const s = useDocStore.getState();
+      expect(s.openDocs).toHaveLength(1);
+      expect(s.openDocs[0]).toEqual({ id: "dir/new.md", path: "dir/new.md", title: "new.md" });
+      expect(s.activeDocId).toBe("dir/new.md");
+      expect(s.dirtyMap["dir/new.md"]).toBe(true);
+      expect(s.dirtyMap["dir/old.md"]).toBeUndefined();
+      expect(s.savedContent["dir/new.md"]).toBe("saved content");
+    });
+
+    it("keeps activeContentDocId pointing at the renamed doc", () => {
+      useDocStore.getState().openDoc("old.md", "old.md");
+      useDocStore.getState().setActiveContent("text");
+      useDocStore.getState().renameDoc("old.md", "new.md", "new.md");
+      const s = useDocStore.getState();
+      expect(s.activeContentDocId).toBe("new.md");
+      expect(s.activeContent).toBe("text");
+    });
+
+    it("does nothing when the doc is not open", () => {
+      useDocStore.getState().openDoc("a.md", "a.md");
+      useDocStore.getState().renameDoc("missing.md", "other.md", "other.md");
+      expect(useDocStore.getState().openDocs[0].path).toBe("a.md");
+    });
+  });
 });

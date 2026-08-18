@@ -54,11 +54,16 @@ vi.mock("../../stores/docStore", () => ({
     dirtyMap: {},
     openDoc: vi.fn(),
     setActiveContent: vi.fn(),
+    closeDocsUnder: vi.fn(),
+    renameDoc: vi.fn(),
   }),
 }));
 
 vi.mock("../../lib/ipc", () => ({
   readFile: vi.fn().mockResolvedValue(""),
+  createFile: vi.fn().mockResolvedValue(undefined),
+  createFolder: vi.fn().mockResolvedValue(undefined),
+  deletePath: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { FileTree } from "../FileTree";

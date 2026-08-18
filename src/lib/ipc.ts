@@ -38,6 +38,15 @@ export async function createFile(vaultRoot: string, path: string): Promise<void>
   await invoke<void>("create_file", { vaultRoot, path });
 }
 
+export async function createFolder(vaultRoot: string, path: string): Promise<void> {
+  await invoke<void>("create_folder", { vaultRoot, path });
+}
+
+/** Move a file or folder to the OS trash/recycle bin. */
+export async function deletePath(vaultRoot: string, path: string): Promise<void> {
+  await invoke<void>("delete_path", { vaultRoot, path });
+}
+
 export async function saveImage(
   vaultRoot: string, bytes: Uint8Array, ext: string, docRel: string,
   strategy: string, pathStyle: string, date: string,
@@ -82,14 +91,47 @@ export interface SearchHit {
 export async function searchVault(
   vaultRoot: string,
   query: string,
-  opts?: { caseSensitive?: boolean; maxHits?: number },
+  opts?: { caseSensitive?: boolean; useRegex?: boolean; maxHits?: number },
 ): Promise<SearchHit[]> {
   return invoke<SearchHit[]>("search_vault", {
     vaultRoot,
     query,
     caseSensitive: opts?.caseSensitive ?? false,
+    useRegex: opts?.useRegex ?? false,
     maxHits: opts?.maxHits ?? 500,
   });
+}
+
+export interface ReplaceResult {
+  filesChanged: number;
+  replacements: number;
+}
+
+/** Replace across all `.md` files in the vault; returns change counts. */
+export async function replaceInVault(
+  vaultRoot: string,
+  query: string,
+  replacement: string,
+  opts?: { caseSensitive?: boolean; useRegex?: boolean },
+): Promise<ReplaceResult> {
+  return invoke<ReplaceResult>("replace_in_vault", {
+    vaultRoot,
+    query,
+    replacement,
+    caseSensitive: opts?.caseSensitive ?? false,
+    useRegex: opts?.useRegex ?? false,
+  });
+}
+
+export interface TagEntry {
+  tag: string;
+  path: string;
+  title: string;
+}
+
+/** Scan the vault for `#tag` occurrences. */
+export async function scanTags(vaultRoot: string): Promise<TagEntry[]> {
+  return invoke<TagEntry[]>("scan_tags", { vaultRoot });
 }
 
 export async function readConfig(vaultRoot: string): Promise<Settings> {
