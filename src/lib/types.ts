@@ -32,6 +32,8 @@ export interface Settings {
   assetsStrategy: AssetsStrategy;
   pathStyle: PathStyle;
   theme: Theme;
+  /** Vault-relative folder holding note templates ("" = none). */
+  templateFolder: string;
   showHiddenFiles: boolean;
   livePreview: boolean;
   language: Language;
@@ -47,6 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
   assetsStrategy: "vault-assets",
   pathStyle: "relative",
   theme: "system",
+  templateFolder: "Templates",
   showHiddenFiles: false,
   livePreview: true,
   language: "zh",

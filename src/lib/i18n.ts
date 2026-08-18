@@ -44,6 +44,22 @@ const en = {
   openFile: "Open File…",
   save: "Save",
   saveAs: "Save As…",
+  exportHtml: "Export as HTML…",
+  exportMarkdown: "Export as Markdown…",
+  exportPdf: "Export as PDF…",
+  largeFileWarning: "This file is {sizeMB} MB — opening it may make the editor slow. Continue?",
+  deletedTitle: "File deleted on disk",
+  deletedBody: (path: string) =>
+    `"${path}" was deleted or moved outside the app. You have unsaved changes in the editor — save them somewhere else, or discard them.`,
+  deletedSaveAs: "Save As…",
+  deletedDiscard: "Discard Changes",
+  cancel: "Cancel",
+  templatesTitle: "Insert Template",
+  templatesEmpty: "No templates found - add .md files to the template folder (see Settings).",
+  templatesReadFailed: "Could not read the template.",
+  insertTemplate: "Insert Template…",
+  newDailyNote: "Open Today's Note",
+  settingsTemplateFolder: "Template folder (vault-relative)",
   preferences: "Preferences…",
   setDefaultVault: "Set as Default Vault",
   recent: "Recent",
@@ -76,6 +92,7 @@ const en = {
   link: "Link",
   image: "Image",
   editMode: "Edit Mode",
+  focusMode: "Focus Mode",
   previewMode: "Preview Mode",
   theme: "Theme",
   language: "Language",
@@ -212,6 +229,22 @@ const zh: typeof en = {
   openFile: "打开文件…",
   save: "保存",
   saveAs: "另存为…",
+  exportHtml: "导出为 HTML…",
+  exportMarkdown: "导出为 Markdown…",
+  exportPdf: "导出为 PDF…",
+  largeFileWarning: "此文件为 {sizeMB} MB,打开后编辑器可能变慢。仍然打开?",
+  deletedTitle: "文件已被外部删除",
+  deletedBody: (path: string) =>
+    `"${path}" 已被删除或移出应用。编辑器中有未保存的更改——请另存到其他位置,或丢弃这些更改。`,
+  deletedSaveAs: "另存为…",
+  deletedDiscard: "丢弃更改",
+  cancel: "取消",
+  templatesTitle: "插入模板",
+  templatesEmpty: "未找到模板--请在模板文件夹中添加 .md 文件(见设置)。",
+  templatesReadFailed: "模板读取失败。",
+  insertTemplate: "插入模板…",
+  newDailyNote: "打开今日笔记",
+  settingsTemplateFolder: "模板文件夹(vault 内相对路径)",
   preferences: "偏好设置…",
   setDefaultVault: "设为默认 Vault",
   recent: "最近打开",
@@ -244,6 +277,7 @@ const zh: typeof en = {
   link: "链接",
   image: "图片",
   editMode: "编辑模式",
+  focusMode: "聚焦模式",
   previewMode: "预览模式",
   theme: "主题",
   language: "语言",
@@ -371,6 +405,13 @@ const zh: typeof en = {
 };
 
 const dicts: Record<Language, typeof en> = { en, zh };
+
+/** Resolve the dictionary for the current language without a React hook
+ *  (usable from plain modules like openNote / export flows). */
+export function getDict(): typeof en {
+  const language = useSettingsStore.getState().language;
+  return dicts[language] ?? en;
+}
 
 export function useI18n() {
   const language = useSettingsStore((s) => s.language);

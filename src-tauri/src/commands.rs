@@ -307,6 +307,56 @@ pub fn delete_path(vault_root: String, path: String) -> Result<(), String> {
     trash::delete(&full).map_err(|e| e.to_string())
 }
 
+/// Rename/move a file or folder and rewrite every `[[oldstem]]` reference in
+/// the vault to the new name. Returns the number of files rewritten.
+#[tauri::command]
+pub fn rename_with_links(
+    vault_root: String,
+    old_path: String,
+    new_path: String,
+    index: tauri::State<'_, LinkIndexState>,
+) -> Result<usize, String> {
+    let mut guard = ensure_index(index.inner(), &vault_root)?;
+    let idx = guard.as_mut().unwrap();
+    if idx.is_empty() {
+        // Index unavailable (build failed earlier) — rebuild once so the
+        // referrer lookup is still O(referrers) instead of a full scan.
+        *idx = LinkIndex::build(Path::new(&vault_root)).map_err(|e| e.to_string())?;
+    }
+    idx.rename_with_links(Path::new(&vault_root), &old_path, &new_path)
+        .map_err(|e| e.to_string())
+}
+
+/// Write `content` to an arbitrary absolute path (used by export). Parent
+/// directories are created as needed. The path comes from the frontend's
+/// save dialog, so no vault-relative handling is applied.
+#[tauri::command]
+pub fn export_file(path: String, content: String) -> Result<(), String> {
+    let full = Path::new(&path);
+    if let Some(parent) = full.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    file_io::write_file_atomic(full, &content).map_err(|e| e.to_string())
+}
+
+/// Size in bytes of a vault-relative file (for the large-file open warning).
+#[tauri::command]
+pub fn file_size(vault_root: String, path: String) -> Result<u64, String> {
+    let full = Path::new(&vault_root).join(&path);
+    std::fs::metadata(&full)
+        .map(|m| m.len())
+        .map_err(|e| e.to_string())
+}
+
+/// Read a file from an absolute path and return its base64 contents (used to
+/// inline local images into exported HTML).
+#[tauri::command]
+pub fn read_file_base64(path: String) -> Result<String, String> {
+    use base64::Engine as _;
+    let bytes = std::fs::read(Path::new(&path)).map_err(|e| e.to_string())?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
+}
+
 #[tauri::command]
 pub fn read_config(vault_root: String) -> Result<config::Settings, String> {
     config::load_config(Path::new(&vault_root)).map_err(|e| e.to_string())

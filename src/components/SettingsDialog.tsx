@@ -65,6 +65,16 @@ export function SettingsDialog() {
       </div>
 
       <div style={{ margin: "8px 0" }}>
+        <label>{t.settingsTemplateFolder}{" "}</label>
+        <input
+          value={settings.templateFolder}
+          onChange={(e) => settings.setTemplateFolder(e.target.value)}
+          placeholder="Templates"
+          style={{ padding: "2px 6px", border: "1px solid var(--border)", borderRadius: 4, background: "var(--bg)", color: "var(--fg)" }}
+        />
+      </div>
+
+      <div style={{ margin: "8px 0" }}>
         <label>{t.assetsDir}{" "}</label>
         <select
           value={settings.assetsStrategy}

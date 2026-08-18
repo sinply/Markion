@@ -16,8 +16,9 @@ describe("renderMarkdown", () => {
 
   it("renders fenced code blocks", () => {
     const html = renderMarkdown("```js\nconst x = 1;\n```\n");
-    expect(html).toContain("<code");
-    expect(html).toContain("const x = 1");
+    expect(html).toContain('<code class="language-js"');
+    expect(html).toContain("hljs"); // syntax-highlighted
+    expect(html).toContain("const");
   });
 
   it("renders headings", () => {
@@ -61,6 +62,7 @@ describe("renderMarkdown", () => {
   it("keeps non-mermaid fences as code blocks", () => {
     const html = renderMarkdown("```ts\nlet x = 1;\n```\n");
     expect(html).toContain("<pre>");
-    expect(html).toContain("let x = 1");
+    expect(html).toContain("hljs");
+    expect(html).toContain("let");
   });
 });

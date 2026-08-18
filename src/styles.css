@@ -1,5 +1,9 @@
 /* Markion global styles — themeable via CSS variables (light / dark). */
 
+/* KaTeX stylesheet for rendered math widgets (bundled by Vite at build time;
+ * vitest stubs CSS, which is fine since tests assert on HTML, not layout). */
+@import "katex/dist/katex.min.css";
+
 :root {
   --app-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --bg: #ffffff;

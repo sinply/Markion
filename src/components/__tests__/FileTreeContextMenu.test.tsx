@@ -41,6 +41,7 @@ const spies = {
   createFile: vi.fn().mockResolvedValue(undefined),
   createFolder: vi.fn().mockResolvedValue(undefined),
   deletePath: vi.fn().mockResolvedValue(undefined),
+  renameWithLinks: vi.fn().mockResolvedValue(0),
 };
 
 vi.mock("../../stores/settingsStore", () => ({
@@ -78,6 +79,7 @@ vi.mock("../../lib/ipc", () => ({
   createFile: (...a: any[]) => spies.createFile(...a),
   createFolder: (...a: any[]) => spies.createFolder(...a),
   deletePath: (...a: any[]) => spies.deletePath(...a),
+  renameWithLinks: (...a: any[]) => spies.renameWithLinks(...a),
 }));
 
 import { FileTree } from "../FileTree";
@@ -185,14 +187,14 @@ describe("FileTree context menu", () => {
     expect(spies.loadTree).toHaveBeenCalledWith("/vault");
   });
 
-  it("Rename on a file applies move and remaps the open doc", { timeout: SLOW }, async () => {
+  it("Rename on a file renames on disk and remaps the open doc", { timeout: SLOW }, async () => {
     promptSpy.mockReturnValue("renamed"); // no .md typed -> auto-appended
     render(<FileTree />);
     openMenuOn("intro.md");
     fireEvent.click(screen.getByText("Rename…"));
     await waitFor(
       () =>
-        expect(spies.applyMove).toHaveBeenCalledWith("", "intro.md", "", "renamed.md"),
+        expect(spies.renameWithLinks).toHaveBeenCalledWith("/vault", "intro.md", "renamed.md"),
       WAIT,
     );
     expect(spies.renameDoc).toHaveBeenCalledWith("intro.md", "renamed.md", "renamed.md");
@@ -205,7 +207,7 @@ describe("FileTree context menu", () => {
     openMenuOn("intro.md");
     fireEvent.click(screen.getByText("Rename…"));
     expect(promptSpy).toHaveBeenCalledWith(expect.any(String), "intro.md");
-    expect(spies.applyMove).not.toHaveBeenCalled();
+    expect(spies.renameWithLinks).not.toHaveBeenCalled();
   });
 
   it("Rename on a folder remaps docs under the old prefix", { timeout: SLOW }, async () => {
@@ -213,7 +215,10 @@ describe("FileTree context menu", () => {
     render(<FileTree />);
     openMenuOn("notes");
     fireEvent.click(screen.getByText("Rename…"));
-    await waitFor(() => expect(spies.applyMove).toHaveBeenCalledWith("", "notes", "", "journal"), WAIT);
+    await waitFor(
+      () => expect(spies.renameWithLinks).toHaveBeenCalledWith("/vault", "notes", "journal"),
+      WAIT,
+    );
     // No open docs in this fixture: renameDoc must not fire.
     expect(spies.renameDoc).not.toHaveBeenCalled();
   });

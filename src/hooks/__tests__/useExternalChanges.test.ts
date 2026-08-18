@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { decideExternalChange } from "../useExternalChanges";
+import { decideExternalChange, decideDeleted } from "../useExternalChanges";
 
 describe("decideExternalChange", () => {
   it("ignores our own autosave echo (disk equals last-saved content)", () => {
@@ -25,5 +25,20 @@ describe("decideExternalChange", () => {
   it("conflicts even without a last-saved snapshot (dirty + different)", () => {
     expect(decideExternalChange({ lastSaved: undefined, editor: "mine", disk: "external", dirty: true }))
       .toBe("conflict");
+  });
+});
+
+describe("decideDeleted", () => {
+  it("shows the Save As dialog for a dirty doc with editor content", () => {
+    expect(decideDeleted(true, true)).toBe("dialog");
+  });
+
+  it("closes the tab for a clean doc", () => {
+    expect(decideDeleted(false, true)).toBe("close");
+    expect(decideDeleted(false, false)).toBe("close");
+  });
+
+  it("ignores when dirty but no editor view is available", () => {
+    expect(decideDeleted(true, false)).toBe("ignore");
   });
 });

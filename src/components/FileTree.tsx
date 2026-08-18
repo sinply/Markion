@@ -4,7 +4,7 @@ import type { NodeRendererProps } from "react-arborist";
 import { useVaultStore } from "../stores/vaultStore";
 import { useDocStore } from "../stores/docStore";
 import { useSettingsStore } from "../stores/settingsStore";
-import { createFile, createFolder, deletePath, readFile } from "../lib/ipc";
+import { createFile, createFolder, deletePath, readFile, renameWithLinks } from "../lib/ipc";
 import { useI18n } from "../lib/i18n";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 
@@ -294,7 +294,10 @@ export function FileTree() {
       const newPath = folder ? `${folder}/${newName}` : newName;
       if (newPath === path) return;
       try {
-        await applyMove(folder, name, folder, newName);
+        // Rename on disk AND rewrite every [[oldname]] reference in the vault
+        // to the new name (Obsidian-style). Returns the number of files whose
+        // links were updated.
+        await renameWithLinks(vaultRoot, path, newPath);
         if (kind === "file") {
           renameDoc(path, newPath, newName);
         } else {
@@ -312,7 +315,7 @@ export function FileTree() {
         // rename failed - tree/tabs unchanged
       }
     },
-    [vaultRoot, applyMove, renameDoc, loadTree, t],
+    [vaultRoot, renameDoc, loadTree, t],
   );
 
   const handleDelete = useCallback(

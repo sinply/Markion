@@ -133,6 +133,30 @@ export function buildCommands(t: Dict): Command[] {
       run: () => ui().requestSaveAs(),
     },
     {
+      id: "file:exportHtml",
+      title: t.exportHtml,
+      keywords: ["export", "html", "导出"],
+      run: () => {
+        void import("./exportNote").then((m) => m.exportActiveNote(true));
+      },
+    },
+    {
+      id: "file:exportMarkdown",
+      title: t.exportMarkdown,
+      keywords: ["export", "markdown", "md", "导出"],
+      run: () => {
+        void import("./exportNote").then((m) => m.exportActiveNote(false));
+      },
+    },
+    {
+      id: "file:exportPdf",
+      title: t.exportPdf,
+      keywords: ["export", "pdf", "print", "导出", "打印"],
+      run: () => {
+        void import("./exportNote").then((m) => m.exportActivePdf());
+      },
+    },
+    {
       id: "file:newNote",
       title: "New note",
       keywords: ["new", "create", "note"],
@@ -140,6 +164,23 @@ export function buildCommands(t: Dict): Command[] {
         const name = window.prompt("Note name");
         if (name && name.trim()) void createAndOpenNote(name.trim());
       },
+    },
+    {
+      id: "note:daily",
+      title: t.newDailyNote,
+      keywords: ["daily", "today", "journal", "每日", "日记"],
+      run: () => {
+        void import("../stores/vaultStore").then((m) => {
+          const root = m.useVaultStore.getState().vaultRoot;
+          if (root) void import("./templates").then((mod) => mod.openDailyNote(root));
+        });
+      },
+    },
+    {
+      id: "template:insert",
+      title: t.insertTemplate,
+      keywords: ["template", "insert", "模板", "插入"],
+      run: () => ui().setTemplatesOpen(true),
     },
     {
       id: "view:edit",
@@ -150,8 +191,14 @@ export function buildCommands(t: Dict): Command[] {
     {
       id: "view:preview",
       title: t.previewMode,
-      shortcut: "Ctrl+Shift+E",
-      run: () => ui().setEditorMode("preview"),
+      shortcut: "Ctrl+Shift+E",      run: () => ui().setEditorMode("preview"),
+    },
+    {
+      id: "view:focus",
+      title: t.focusMode,
+      shortcut: "Ctrl+Shift+L",
+      keywords: ["focus", "typewriter", "聚焦", "打字机"],
+      run: () => ui().setFocusMode(!ui().focusMode),
     },
     {
       id: "view:settings",

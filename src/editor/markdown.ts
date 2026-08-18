@@ -80,7 +80,10 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
     const code = escapeHtml(token.content ?? "");
     return `<div class="cm-mermaid-pending" data-lang="${escapeAttr(lang)}">${code}</div>`;
   }
-  return defaultFence(tokens, idx, options, env, self);
+  // Syntax-highlight non-mermaid fences (used by full-doc preview and HTML
+  // export; live-preview code widgets highlight via the same helper).
+  const highlighted = highlightCode(token.content ?? "", lang);
+  return `<pre><code class="language-${escapeAttr(lang)}">${highlighted}</code></pre>`;
 };
 
 /** Render full markdown to HTML. Used by block widgets. */

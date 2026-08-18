@@ -1,4 +1,4 @@
-use crate::backlinks::{self, Backlink, GraphEdge, GraphNode};
+﻿use crate::backlinks::{self, Backlink, GraphEdge, GraphNode};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -78,11 +78,16 @@ impl LinkIndex {
     }
 
     /// Files linking to `target_rel` (matched by stem, case-insensitive).
+    /// De-duplicated: a file mentioning the same target twice still counts once.
     pub fn backlinks(&self, target_rel: &str) -> Vec<Backlink> {
         let key = backlinks::target_key(target_rel);
         let mut out: Vec<Backlink> = Vec::new();
         if let Some(refs) = self.reverse.get(&key) {
+            let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
             for rel in refs {
+                if !seen.insert(rel.as_str()) {
+                    continue;
+                }
                 let title = Path::new(rel)
                     .file_stem()
                     .map(|s| s.to_string_lossy().to_string())
@@ -145,6 +150,71 @@ impl LinkIndex {
         self.forward.is_empty()
     }
 
+    /// Rename/move `old_rel` to `new_rel` and rewrite `[[oldstem]]` links in
+    /// every file that references it (via the index). Folder renames (stem
+    /// unchanged) need no content rewrite — stem-based links keep resolving.
+    /// Returns the number of files whose content was rewritten.
+    pub fn rename_with_links(
+        &mut self,
+        vault_root: &Path,
+        old_rel: &str,
+        new_rel: &str,
+    ) -> std::io::Result<usize> {
+        let old_full = vault_root.join(old_rel);
+        let new_full = vault_root.join(new_rel);
+        if !old_full.exists() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("source does not exist: {old_rel}"),
+            ));
+        }
+        if new_full.exists() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                format!("target already exists: {new_rel}"),
+            ));
+        }
+        if let Some(parent) = new_full.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::rename(&old_full, &new_full)?;
+
+        let old_stem = file_stem_original(old_rel);
+        let new_stem = file_stem_original(new_rel);
+        let mut updated = 0;
+
+        if !old_stem.eq_ignore_ascii_case(&new_stem) {
+            // Query the (pre-rename) index for referrers, then rewrite them.
+            let referrers: Vec<String> = self
+                .backlinks(old_rel)
+                .into_iter()
+                .map(|b| b.path)
+                .collect();
+            for ref_path in &referrers {
+                if ref_path == old_rel {
+                    continue; // the renamed file itself
+                }
+                let full = vault_root.join(ref_path);
+                let Ok(text) = std::fs::read_to_string(&full) else {
+                    continue;
+                };
+                let rewritten = rewrite_links(&text, &old_stem, &new_stem);
+                if rewritten != text {
+                    crate::file_io::write_file_atomic(&full, &rewritten)?;
+                    updated += 1;
+                }
+            }
+            let mut paths = vec![old_rel.to_string(), new_rel.to_string()];
+            paths.extend(referrers);
+            self.update(vault_root, &paths);
+        } else {
+            // Stem unchanged (folder rename or case-only): the stem->path map
+            // must move; link text stays valid.
+            self.update(vault_root, &[old_rel.to_string(), new_rel.to_string()]);
+        }
+        Ok(updated)
+    }
+
     // ---- internals ----
 
     /// (Re)parse `rel` and sync it into all three maps.
@@ -173,10 +243,10 @@ impl LinkIndex {
         let stems = backlinks::link_targets(&text);
         self.forward.insert(norm.clone(), stems.clone());
         for stem in stems {
-            self.reverse
-                .entry(stem.clone())
-                .or_default()
-                .push(norm.clone());
+            let list = self.reverse.entry(stem.clone()).or_default();
+            if !list.contains(&norm) {
+                list.push(norm.clone());
+            }
         }
         // Stem -> path mapping: first occurrence wins (keeps existing mapping
         // unless it pointed at this file already).
@@ -251,6 +321,82 @@ fn file_stem(rel: &str) -> String {
         .file_stem()
         .map(|s| s.to_string_lossy().to_lowercase())
         .unwrap_or_default()
+}
+
+/// Filename stem preserving original case (used as the replacement text when
+/// rewriting links after a rename).
+fn file_stem_original(rel: &str) -> String {
+    Path::new(rel)
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default()
+}
+
+/// Rewrite every `[[...]]` link whose target stem matches `old_stem`
+/// (case-insensitive) to use `new_stem`, preserving path prefixes and aliases:
+/// `[[path/a|alias]]` -> `[[path/b|alias]]`. Fenced code blocks are skipped
+/// (links inside them are literal code, not references).
+pub(crate) fn rewrite_links(text: &str, old_stem: &str, new_stem: &str) -> String {
+    if old_stem.is_empty() || old_stem.eq_ignore_ascii_case(new_stem) {
+        return text.to_string();
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut in_fence = false;
+    for line in text.split_inclusive('\n') {
+        if line.trim_start().starts_with("```") {
+            in_fence = !in_fence;
+            out.push_str(line);
+            continue;
+        }
+        if in_fence {
+            out.push_str(line);
+            continue;
+        }
+        out.push_str(&rewrite_line(line, old_stem, new_stem));
+    }
+    out
+}
+
+/// Rewrite `[[...]]` links on a single non-fence line.
+fn rewrite_line(line: &str, old_stem: &str, new_stem: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut rest = line;
+    while let Some(start) = rest.find("[[") {
+        out.push_str(&rest[..start + 2]);
+        rest = &rest[start + 2..];
+        let Some(end) = rest.find("]]") else {
+            out.push_str(rest);
+            break;
+        };
+        let token = &rest[..end];
+        let (target_part, alias) = match token.split_once('|') {
+            Some((t, a)) => (t, Some(a)),
+            None => (token, None),
+        };
+        let (prefix, stem) = match target_part.rsplit_once('/') {
+            Some((p, s)) => (Some(p), s),
+            None => (None, target_part),
+        };
+        if stem.trim().eq_ignore_ascii_case(old_stem) {
+            let mut rebuilt = String::new();
+            if let Some(p) = prefix {
+                rebuilt.push_str(p);
+                rebuilt.push('/');
+            }
+            rebuilt.push_str(new_stem);
+            if let Some(a) = alias {
+                rebuilt.push('|');
+                rebuilt.push_str(a);
+            }
+            out.push_str(&rebuilt);
+        } else {
+            out.push_str(token);
+        }
+        out.push_str("]]");
+        rest = &rest[end + 2..];
+    }
+    out.push_str(rest);
+    out
 }
 
 fn collect_md_files(root: &Path, dir: &Path, out: &mut Vec<String>) -> std::io::Result<()> {
@@ -451,5 +597,126 @@ mod tests {
             .collect();
         assert_eq!(targets.len(), 1);
         assert!(targets[0] == "sub/design.md" || targets[0] == "design.md");
+    }
+
+    // ---- rewrite_links ----
+
+    #[test]
+    fn rewrite_replaces_bare_stems() {
+        assert_eq!(rewrite_links("See [[b]] here", "b", "c"), "See [[c]] here");
+    }
+
+    #[test]
+    fn rewrite_matches_case_insensitively_and_keeps_new_case() {
+        assert_eq!(rewrite_links("See [[B]] here", "b", "c"), "See [[c]] here");
+        assert_eq!(rewrite_links("See [[b]] here", "B", "C"), "See [[C]] here");
+    }
+
+    #[test]
+    fn rewrite_preserves_path_prefix_and_alias() {
+        assert_eq!(
+            rewrite_links("[[notes/b|the b]] and [[notes/b]]", "b", "c"),
+            "[[notes/c|the b]] and [[notes/c]]"
+        );
+    }
+
+    #[test]
+    fn rewrite_skips_unrelated_stems() {
+        assert_eq!(
+            rewrite_links("[[ab]] [[b2]] [[ x ]]", "b", "c"),
+            "[[ab]] [[b2]] [[ x ]]"
+        );
+    }
+
+    #[test]
+    fn rewrite_skips_fenced_code_blocks() {
+        let src = "See [[b]]\n\n```\n[[b]]\n```\n\n[[b]]\n";
+        assert_eq!(
+            rewrite_links(src, "b", "c"),
+            "See [[c]]\n\n```\n[[b]]\n```\n\n[[c]]\n"
+        );
+    }
+
+    #[test]
+    fn rewrite_does_nothing_when_stems_match() {
+        assert_eq!(rewrite_links("[[b]]", "b", "B"), "[[b]]");
+        assert_eq!(rewrite_links("[[b]]", "", "c"), "[[b]]");
+    }
+
+    // ---- rename_with_links ----
+
+    #[test]
+    fn rename_rewrites_all_referrers_and_updates_index() {
+        let dir = tempdir().unwrap();
+        write_vault(
+            dir.path(),
+            &[
+                ("a.md", "See [[b]] and [[notes/b|alias]]."),
+                ("notes/c.md", "Also [[B]] here."),
+                ("b.md", "the note"),
+                ("d.md", "no links"),
+            ],
+        );
+        let mut idx = LinkIndex::build(dir.path()).unwrap();
+
+        let updated = idx
+            .rename_with_links(dir.path(), "b.md", "renamed.md")
+            .unwrap();
+        assert_eq!(updated, 2);
+
+        let a = fs::read_to_string(dir.path().join("a.md")).unwrap();
+        assert!(a.contains("[[renamed]]"));
+        assert!(a.contains("[[notes/renamed|alias]]"));
+        let c = fs::read_to_string(dir.path().join("notes/c.md")).unwrap();
+        assert!(c.contains("[[renamed]]"));
+
+        // Index reflects the rename: renamed.md is a node, b.md is gone,
+        // referrers now link to the new stem.
+        assert!(dir.path().join("renamed.md").exists());
+        assert!(!dir.path().join("b.md").exists());
+        let bl = idx.backlinks("renamed.md");
+        assert_eq!(bl.len(), 2);
+        let (nodes, _) = idx.graph();
+        let ids: Vec<&String> = nodes.iter().map(|n| &n.id).collect();
+        assert!(ids.contains(&&"renamed.md".to_string()));
+        assert!(!ids.contains(&&"b.md".to_string()));
+    }
+
+    #[test]
+    fn rename_folder_keeps_link_text_and_moves_index() {
+        let dir = tempdir().unwrap();
+        write_vault(
+            dir.path(),
+            &[
+                ("a.md", "See [[x]]."),
+                ("notes/x.md", "hi"),
+                ("notes/y.md", "hey"),
+            ],
+        );
+        let mut idx = LinkIndex::build(dir.path()).unwrap();
+
+        let updated = idx.rename_with_links(dir.path(), "notes", "docs").unwrap();
+        assert_eq!(updated, 0); // stem unchanged — no content rewrite
+
+        let a = fs::read_to_string(dir.path().join("a.md")).unwrap();
+        assert!(a.contains("[[x]]")); // still resolves to docs/x.md
+        assert!(dir.path().join("docs/x.md").exists());
+        let bl = idx.backlinks("docs/x.md");
+        assert_eq!(bl.len(), 1);
+        assert_eq!(bl[0].path, "a.md");
+    }
+
+    #[test]
+    fn rename_errors_when_target_exists() {
+        let dir = tempdir().unwrap();
+        write_vault(dir.path(), &[("a.md", "x"), ("b.md", "y")]);
+        let mut idx = LinkIndex::build(dir.path()).unwrap();
+        let err = idx
+            .rename_with_links(dir.path(), "a.md", "b.md")
+            .unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::AlreadyExists);
+        // Nothing changed on disk.
+        assert!(dir.path().join("a.md").exists());
+        assert_eq!(fs::read_to_string(dir.path().join("a.md")).unwrap(), "x");
     }
 }

@@ -5,6 +5,7 @@ import { useVaultStore } from "../stores/vaultStore";
 import type { MarkdownCommand } from "../editor/commands";
 import { useI18n, THEME_LABELS } from "../lib/i18n";
 import { openNote } from "../lib/openNote";
+import { exportActiveNote } from "../lib/exportNote";
 import type { Theme } from "../lib/types";
 
 interface MenuItem {
@@ -32,6 +33,7 @@ export function MenuBar() {
   const theme = settings.theme;
   const language = settings.language;
   const mode = ui.editorMode;
+  const focusMode = ui.focusMode;
 
   const close = () => setOpen(null);
 
@@ -131,6 +133,15 @@ export function MenuBar() {
         { label: t.openFile, shortcut: "Ctrl+O", action: () => { ui.requestOpenFile(); close(); } },
         { label: t.save, shortcut: "Ctrl+S", action: () => { ui.requestSave(); close(); } },
         { label: t.saveAs, shortcut: "Ctrl+Shift+S", action: () => { ui.requestSaveAs(); close(); }, separatorAfter: true },
+        { label: t.exportHtml, action: () => { void exportActiveNote(true); close(); } },
+        { label: t.exportMarkdown, action: () => { void exportActiveNote(false); close(); } },
+        { label: t.exportPdf, action: () => { void import("../lib/exportNote").then((m) => m.exportActivePdf()); close(); }, separatorAfter: true },
+        { label: t.newDailyNote, action: () => {
+            const root = vaultStore.vaultRoot;
+            if (root) void import("../lib/templates").then((m) => m.openDailyNote(root));
+            close();
+          } },
+        { label: t.insertTemplate, action: () => { ui.setTemplatesOpen(true); close(); }, separatorAfter: true },
         { label: t.setDefaultVault, action: () => { vaultStore.setAsDefault(); close(); }, separatorAfter: true },
         { label: t.preferences, action: () => { ui.setSettingsOpen(true); close(); }, separatorAfter: true },
         { label: t.recent, action: () => close(), separatorAfter: true },
@@ -175,6 +186,12 @@ export function MenuBar() {
           checked: mode === "preview",
           action: () => { ui.setEditorMode("preview"); close(); },
           separatorAfter: true,
+        },
+        {
+          label: t.focusMode,
+          shortcut: "Ctrl+Shift+L",
+          checked: focusMode,
+          action: () => { ui.setFocusMode(!focusMode); close(); },
         },
         { label: t.theme, submenu: themeSubmenu },
         { label: t.language, submenu: languageSubmenu },

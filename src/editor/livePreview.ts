@@ -130,6 +130,40 @@ export function isExternalUrl(url: string): boolean {
   return /^https?:\/\//i.test(url);
 }
 
+/** Resolve an internal markdown link URL (`./x.md`, `../x.md`, `/x.md`) to a
+ *  vault-relative path, or null when it isn't a local note link. */
+export function resolveInternalPath(docRel: string, url: string): string | null {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(url);
+  } catch {
+    decoded = url;
+  }
+  // Drop fragment / query parts.
+  decoded = decoded.split("#")[0].split("?")[0];
+  // Anything with a URL scheme (https:, mailto:, file:…) is not a note link.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(decoded)) return null;
+  const normalized = decoded.replace(/\\/g, "/");
+  if (!/\.(md|markdown)$/i.test(normalized)) return null;
+  // Absolute OS paths (e.g. C:\...) are outside the vault — ignore.
+  if (/^[a-zA-Z]:\//.test(normalized)) return null;
+  // Leading `/` means vault-root-relative in markdown convention.
+  if (normalized.startsWith("/")) return normalizeRel(normalized.replace(/^\/+/, ""));
+  const docDir = docRel.includes("/") ? docRel.slice(0, docRel.lastIndexOf("/")) : "";
+  return normalizeRel(docDir ? `${docDir}/${normalized}` : normalized);
+}
+
+/** Collapse `.`/`..` segments in a posix-style relative path. */
+function normalizeRel(rel: string): string {
+  const out: string[] = [];
+  for (const seg of rel.split("/")) {
+    if (seg === "" || seg === ".") continue;
+    if (seg === "..") out.pop();
+    else out.push(seg);
+  }
+  return out.join("/");
+}
+
 /** Build the live-preview DecorationSet for `state`.
  *
  *  Performance: the expensive part (walking the Lezer tree + regex-scanning
@@ -760,6 +794,18 @@ export const livePreviewExtension = ViewPlugin.fromClass(LivePlugin, {
           void openUrl(url);
           return true;
         }
+        // Internal markdown links ([text](./other.md)) open the target note.
+        if (url) {
+          const ctx = view.state.facet(markdownContextFacet)[0];
+          if (ctx) {
+            const rel = resolveInternalPath(ctx.docRel, url);
+            if (rel) {
+              event.preventDefault();
+              void import("../lib/openNote").then((m) => m.openNote(ctx.vaultRoot, rel));
+              return true;
+            }
+          }
+        }
       }
 
       // Wiki links: Ctrl+click a resolved link opens the target note; clicking
@@ -812,9 +858,8 @@ async function openWikiLink(ctx: MarkdownContext, path: string): Promise<void> {
  *  as-is (vault-root-relative); a bare name is created next to the current doc
  *  (Obsidian default). */
 async function createAndOpenWikiNote(ctx: MarkdownContext, raw: string): Promise<void> {
-  const { createFile, readFile } = await import("../lib/ipc");
-  const { useDocStore } = await import("../stores/docStore");
-  const { useUiStore } = await import("../stores/uiStore");
+  const { createFile } = await import("../lib/ipc");
+  const { openNote } = await import("../lib/openNote");
   const { useVaultStore } = await import("../stores/vaultStore");
   const target = raw.split("|")[0].trim();
   if (!target) return;
@@ -829,11 +874,7 @@ async function createAndOpenWikiNote(ctx: MarkdownContext, raw: string): Promise
   try {
     await createFile(ctx.vaultRoot, newPath);
     await useVaultStore.getState().loadTree(ctx.vaultRoot);
-    const content = await readFile(ctx.vaultRoot, newPath);
-    const title = target.split("/").pop() ?? target;
-    useDocStore.getState().openDoc(title, newPath);
-    useDocStore.getState().setActiveContent(content);
-    useUiStore.getState().addRecent(newPath);
+    await openNote(ctx.vaultRoot, newPath);
   } catch {
     // creation failed — leave the editor unchanged
   }

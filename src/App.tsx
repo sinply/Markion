@@ -10,7 +10,9 @@ import { HelpDialog } from "./components/HelpDialog";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { ShortcutsDialog } from "./components/ShortcutsDialog";
 import { ConflictDialog } from "./components/ConflictDialog";
+import { DeletedDialog } from "./components/DeletedDialog";
 import { SearchDialog } from "./components/SearchDialog";
+import { TemplatesDialog } from "./components/TemplatesDialog";
 import { useTheme } from "./hooks/useTheme";
 import { useFont } from "./hooks/useFont";
 import { useCommands } from "./hooks/useCommands";
@@ -114,7 +116,9 @@ export default function App() {
       <HelpDialog />
       <ShortcutsDialog />
       <ConflictDialog />
+      <DeletedDialog />
       <SearchDialog />
+      <TemplatesDialog />
     </>
   );
 }

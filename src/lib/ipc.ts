@@ -47,6 +47,16 @@ export async function deletePath(vaultRoot: string, path: string): Promise<void>
   await invoke<void>("delete_path", { vaultRoot, path });
 }
 
+/** Rename/move a file or folder and rewrite every `[[oldstem]]` reference in
+ *  the vault. Returns the number of files whose content was rewritten. */
+export async function renameWithLinks(
+  vaultRoot: string,
+  oldPath: string,
+  newPath: string,
+): Promise<number> {
+  return invoke<number>("rename_with_links", { vaultRoot, oldPath, newPath });
+}
+
 export async function saveImage(
   vaultRoot: string, bytes: Uint8Array, ext: string, docRel: string,
   strategy: string, pathStyle: string, date: string,
@@ -144,4 +154,19 @@ export async function saveConfig(vaultRoot: string, settings: Settings): Promise
 
 export async function startVaultWatch(vaultRoot: string): Promise<void> {
   await invoke<void>("start_vault_watch", { vaultRoot });
+}
+
+/** Write `content` to an arbitrary absolute path (export flow). */
+export async function exportFile(path: string, content: string): Promise<void> {
+  await invoke<void>("export_file", { path, content });
+}
+
+/** Read an absolute path and return its base64 contents (export image inlining). */
+export async function readFileBase64(path: string): Promise<string> {
+  return invoke<string>("read_file_base64", { path });
+}
+
+/** Size in bytes of a vault-relative file. */
+export async function fileSize(vaultRoot: string, path: string): Promise<number> {
+  return invoke<number>("file_size", { vaultRoot, path });
 }

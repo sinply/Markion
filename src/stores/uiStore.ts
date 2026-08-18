@@ -56,6 +56,14 @@ interface UiState {
   searchOpen: boolean;
   setSearchOpen: (b: boolean) => void;
 
+  /** Template picker dialog (insert a template at the cursor). */
+  templatesOpen: boolean;
+  setTemplatesOpen: (b: boolean) => void;
+
+  /** Focus mode: active-line highlight + typewriter centering (session-only). */
+  focusMode: boolean;
+  setFocusMode: (b: boolean) => void;
+
   /** Cursor jump requested by the search dialog: { path, line, column }. The
    *  editor consumes it once the target doc's content is active. */
   pendingJump: { path: string; line: number; column: number } | null;
@@ -65,6 +73,11 @@ interface UiState {
    *  subscribes; resolving the conflict clears it. */
   conflict: { path: string; diskContent: string } | null;
   setConflict: (c: { path: string; diskContent: string } | null) => void;
+
+  /** A dirty doc was deleted on disk. The dialog offers Save As… / discard.
+   *  `content` is the unsaved editor content so Save As has something to write. */
+  deletedDoc: { path: string; title: string; content: string } | null;
+  setDeletedDoc: (d: { path: string; title: string; content: string } | null) => void;
 }
 
 export const useUiStore = create<UiState>((set, get) => ({
@@ -120,9 +133,18 @@ export const useUiStore = create<UiState>((set, get) => ({
   searchOpen: false,
   setSearchOpen: (searchOpen) => set({ searchOpen }),
 
+  templatesOpen: false,
+  setTemplatesOpen: (templatesOpen) => set({ templatesOpen }),
+
+  focusMode: false,
+  setFocusMode: (focusMode) => set({ focusMode }),
+
   pendingJump: null,
   setPendingJump: (pendingJump) => set({ pendingJump }),
 
   conflict: null,
   setConflict: (conflict) => set({ conflict }),
+
+  deletedDoc: null,
+  setDeletedDoc: (deletedDoc) => set({ deletedDoc }),
 }));

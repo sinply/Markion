@@ -19,6 +19,14 @@ export function decideExternalChange(opts: {
   return opts.dirty ? "conflict" : "reload";
 }
 
+/** Pure decision for a deleted active doc: dirty editors get the Save As…
+ *  dialog, clean ones just close (their content already matched disk). */
+export function decideDeleted(dirty: boolean, hasEditor: boolean): "dialog" | "close" | "ignore" {
+  if (dirty && hasEditor) return "dialog";
+  if (!dirty) return "close";
+  return "ignore";
+}
+
 /**
  * Listen for the backend `vault-changed` event (emitted by the file watcher)
  * and react:
@@ -50,7 +58,23 @@ export function useExternalChanges() {
         try {
           disk = await readFile(vaultRoot, active.path);
         } catch {
-          return; // file may have been deleted — leave the editor as is
+          // The active file was deleted (or is unreadable) on disk.
+          const view = getEditorView();
+          const editor = view?.state.doc.toString();
+          const dirty = !!useDocStore.getState().dirtyMap[active.id];
+          const decision = decideDeleted(dirty, editor !== undefined);
+          if (decision === "dialog" && editor !== undefined) {
+            // Unsaved edits: offer Save As… / discard.
+            useUiStore.getState().setDeletedDoc({
+              path: active.path,
+              title: active.title,
+              content: editor,
+            });
+          } else if (decision === "close") {
+            // Clean: the tab's content matches what was on disk — just close it.
+            useDocStore.getState().closeDoc(active.id);
+          }
+          return;
         }
 
         const lastSaved = docStore.savedContent[active.id];

@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useImperativeHandle, forwardRef } from "react";
 import { EditorView } from "@codemirror/view";
 import type { EditorState } from "@codemirror/state";
-import { createEditorState, setLivePreview, setEditorMode } from "./codemirror";
+import { createEditorState, setLivePreview, setEditorMode, setFocusMode } from "./codemirror";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useUiStore } from "../stores/uiStore";
 import { setEditorView } from "./registry";
@@ -31,6 +31,7 @@ export const MarkdownEditor = forwardRef<EditorHandle, EditorViewProps>(
     const livePreview = useSettingsStore((s) => s.livePreview);
     const mode = useUiStore((s) => s.editorMode);
     const setEditorModeUi = useUiStore((s) => s.setEditorMode);
+    const focusMode = useUiStore((s) => s.focusMode);
 
     useEffect(() => {
       if (!containerRef.current) return;
@@ -69,6 +70,11 @@ export const MarkdownEditor = forwardRef<EditorHandle, EditorViewProps>(
         }
       }
     }, [mode, livePreview]);
+
+    // Focus mode (active-line highlight + typewriter centering).
+    useEffect(() => {
+      if (viewRef.current) setFocusMode(viewRef.current, focusMode);
+    }, [focusMode]);
 
     useImperativeHandle(ref, () => ({
       getDoc: () => viewRef.current?.state.doc.toString() ?? "",

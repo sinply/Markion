@@ -13,6 +13,8 @@ pub struct Settings {
     pub path_style: String,
     /// "system" | "light" | "dark"
     pub theme: String,
+    /// Vault-relative folder holding note templates ("" = none).
+    pub template_folder: String,
     pub show_hidden_files: bool,
     pub live_preview: bool,
     /// "zh" | "en"
@@ -22,6 +24,7 @@ pub struct Settings {
     pub show_outline: bool,
     pub show_backlinks: bool,
     pub show_graph: bool,
+    pub show_tags: bool,
     pub show_word_count: bool,
 }
 
@@ -31,6 +34,7 @@ impl Default for Settings {
             assets_strategy: "vault-assets".to_string(),
             path_style: "relative".to_string(),
             theme: "system".to_string(),
+            template_folder: "Templates".to_string(),
             show_hidden_files: false,
             live_preview: true,
             language: "zh".to_string(),
@@ -38,6 +42,7 @@ impl Default for Settings {
             show_outline: true,
             show_backlinks: true,
             show_graph: true,
+            show_tags: true,
             show_word_count: true,
         }
     }
