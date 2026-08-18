@@ -651,9 +651,13 @@ function decideEntries(state: EditorState, blocks: Block[]): DecoEntry[] {
 
       case "task": {
         if (isOnActiveLine(state, b.from, b.to, activeLine)) break; // keep source editable
+        const w = new TaskCheckboxWidget(b.checked ?? false);
+        // Source range of the `[ ]`/`[x]` marker, so the widget can toggle it.
+        w.from = b.from;
+        w.to = b.to;
         entries.push({
           from: b.from, to: b.to,
-          decoration: Decoration.replace({ widget: new TaskCheckboxWidget(b.checked ?? false), block: true }),
+          decoration: Decoration.replace({ widget: w, block: true }),
         });
         break;
       }
@@ -742,33 +746,9 @@ export const livePreviewExtension = ViewPlugin.fromClass(LivePlugin, {
     click(event, view) {
       const target = event.target as HTMLElement;
 
-      // Task checkbox toggle
-      if (target.tagName === "INPUT") {
-        const label = target.closest(".cm-task-toggle");
-        if (!label) return false;
-        const pos = view.posAtDOM(target);
-        const tree = syntaxTree(view.state);
-        const node = tree.resolve(pos, -1);
-        if (!node || (node.type.name !== "Task" && node.type.name !== "TaskMarker")) return false;
-        let markerNode = node;
-        if (node.type.name === "Task") {
-          const cur = node.node.cursor();
-          if (cur.firstChild()) {
-            do {
-              if (cur.type.name === "TaskMarker") {
-                markerNode = cur.node;
-                break;
-              }
-            } while (cur.nextSibling());
-          }
-        }
-        const text = view.state.doc.sliceString(markerNode.from, markerNode.to);
-        const newText = /^\[[xX]\]$/.test(text) ? "[ ]" : "[x]";
-        view.dispatch({
-          changes: { from: markerNode.from, to: markerNode.to, insert: newText },
-        });
-        return true;
-      }
+      // NOTE: task checkbox toggling lives inside TaskCheckboxWidget now (it
+      // dispatches the `[ ]`<->`[x]` change itself); this handler must not
+      // also toggle, or a click would flip the marker twice.
 
       // Open external links (also when clicking an image nested inside a link)
       const clickable = target.closest(".cm-image, .cm-link");

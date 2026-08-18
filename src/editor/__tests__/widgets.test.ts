@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { TaskCheckboxWidget, CodeBlockWidget, TableWidget, ImageWidget, MathBlockWidget, CalloutWidget, EmbedWidget, PreviewWidget, transformTable, extractSection } from "../widgets";
 import type { EditorView } from "@codemirror/view";
@@ -22,7 +22,8 @@ describe("TaskCheckboxWidget", () => {
     const input = dom.querySelector("input[type=checkbox]") as HTMLInputElement;
     expect(input).toBeTruthy();
     expect(input.checked).toBe(false);
-    expect(input.disabled).toBe(true);
+    // Interactive: toggling is done by the widget, not the browser default.
+    expect(input.disabled).toBe(false);
   });
 
   it("renders checked input for true", () => {
@@ -39,6 +40,37 @@ describe("TaskCheckboxWidget", () => {
 
   it("eq returns false for different checked state", () => {
     expect(new TaskCheckboxWidget(true).eq(new TaskCheckboxWidget(false))).toBe(false);
+  });
+
+  it("clicking an unchecked box dispatches [x] at the marker range", () => {
+    const dispatch = vi.fn();
+    const view = { state: EditorState.create({}), dispatch } as unknown as EditorView;
+    const w = new TaskCheckboxWidget(false);
+    w.from = 5;
+    w.to = 8; // `[ ]` is 3 chars
+    const input = w.toDOM(view).querySelector("input")!;
+    input.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(dispatch).toHaveBeenCalledWith({ changes: { from: 5, to: 8, insert: "[x]" } });
+  });
+
+  it("clicking a checked box dispatches [ ]", () => {
+    const dispatch = vi.fn();
+    const view = { state: EditorState.create({}), dispatch } as unknown as EditorView;
+    const w = new TaskCheckboxWidget(true);
+    w.from = 5;
+    w.to = 8;
+    const input = w.toDOM(view).querySelector("input")!;
+    input.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(dispatch).toHaveBeenCalledWith({ changes: { from: 5, to: 8, insert: "[ ]" } });
+  });
+
+  it("does not dispatch when the marker range is unknown", () => {
+    const dispatch = vi.fn();
+    const view = { state: EditorState.create({}), dispatch } as unknown as EditorView;
+    const w = new TaskCheckboxWidget(false);
+    const input = w.toDOM(view).querySelector("input")!;
+    input.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(dispatch).not.toHaveBeenCalled();
   });
 });
 

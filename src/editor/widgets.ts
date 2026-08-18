@@ -545,6 +545,10 @@ function alignRow(align: string[]): string {
 }
 
 export class TaskCheckboxWidget extends WidgetType {
+  view: EditorView | null = null;
+  from = -1;
+  to = -1;
+
   constructor(readonly checked: boolean) {
     super();
   }
@@ -553,16 +557,43 @@ export class TaskCheckboxWidget extends WidgetType {
     return other.checked === this.checked;
   }
 
-  toDOM(_view: EditorView): HTMLElement {
+  toDOM(view: EditorView): HTMLElement {
+    this.view = view;
     const label = document.createElement("label");
     label.className = "cm-task-toggle";
 
     const input = document.createElement("input");
     input.type = "checkbox";
     input.checked = this.checked;
-    input.disabled = true; // clicks handled by CM6 event handler
+    // NOT disabled: the checkbox is interactive. Clicks/space toggle the
+    // source marker in the document directly; CM6 is told to ignore mouse
+    // events inside the widget so its own input pipeline never interferes.
+    input.addEventListener("click", (e) => {
+      // The default (native checked toggle) would only change this widget's
+      // visual state; the real state lives in the `[ ]`/`[x]` source, which
+      // we update and let the widget rebuild from.
+      e.preventDefault();
+      e.stopPropagation();
+      this.toggle();
+    });
+    input.addEventListener("change", () => {
+      // Keyboard (space) path: the native toggle already flipped `checked`;
+      // write the new state back to the source marker.
+      if (this.view && this.from >= 0 && this.to >= 0) {
+        this.view.dispatch({
+          changes: { from: this.from, to: this.to, insert: input.checked ? "[x]" : "[ ]" },
+        });
+      }
+    });
     label.appendChild(input);
     return label;
+  }
+
+  private toggle(): void {
+    if (!this.view || this.from < 0 || this.to < 0) return;
+    this.view.dispatch({
+      changes: { from: this.from, to: this.to, insert: this.checked ? "[ ]" : "[x]" },
+    });
   }
 
   ignoreEvent(e: Event): boolean {
