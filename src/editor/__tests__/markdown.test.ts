@@ -30,4 +30,29 @@ describe("renderMarkdown", () => {
     const html = renderMarkdown("hello world\n");
     expect(html).toContain("<p>hello world</p>");
   });
+
+  it("renders task lists with a disabled checkbox", () => {
+    const html = renderMarkdown("- [ ] todo item\n- [x] done item\n");
+    expect(html).toContain("task-list-item");
+    expect(html).toContain('type="checkbox"');
+    // Preview is read-only: the checkbox must be disabled (toggling lives in
+    // the live-preview widget).
+    expect(html).toContain("disabled");
+    expect(html).toContain("todo item");
+    expect(html).toContain("done item");
+  });
+
+  it("renders mermaid fences as a pending container for hydration", () => {
+    const html = renderMarkdown("```mermaid\ngraph TD\n  A-->B\n```\n");
+    expect(html).toContain("cm-mermaid-pending");
+    expect(html).toContain("graph TD");
+    // The code is kept as text content (escaped), not lost.
+    expect(html).not.toContain("<pre>");
+  });
+
+  it("keeps non-mermaid fences as code blocks", () => {
+    const html = renderMarkdown("```ts\nlet x = 1;\n```\n");
+    expect(html).toContain("<pre>");
+    expect(html).toContain("let x = 1");
+  });
 });

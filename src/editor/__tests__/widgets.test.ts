@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { EditorState } from "@codemirror/state";
-import { TaskCheckboxWidget, CodeBlockWidget, TableWidget, ImageWidget, MathBlockWidget, CalloutWidget, EmbedWidget, transformTable, extractSection } from "../widgets";
+import { TaskCheckboxWidget, CodeBlockWidget, TableWidget, ImageWidget, MathBlockWidget, CalloutWidget, EmbedWidget, PreviewWidget, transformTable, extractSection } from "../widgets";
 import type { EditorView } from "@codemirror/view";
 import { markdownContextFacet, type MarkdownContext } from "../media";
 
@@ -162,6 +162,27 @@ describe("EmbedWidget", () => {
     expect(new EmbedWidget("a", "h").eq(new EmbedWidget("a", "h"))).toBe(true);
     expect(new EmbedWidget("a", null).eq(new EmbedWidget("b", null))).toBe(false);
     expect(new EmbedWidget("a", "h").eq(new EmbedWidget("a", null))).toBe(false);
+  });
+});
+
+describe("PreviewWidget (full-document preview mode)", () => {
+  it("renders task lists as checkboxes like the live editor", () => {
+    const w = new PreviewWidget("- [ ] pending\n- [x] done\n");
+    const dom = w.toDOM(mockView());
+    const boxes = dom.querySelectorAll<HTMLInputElement>(".cm-preview-body input[type=checkbox]");
+    expect(boxes.length).toBe(2);
+    expect(boxes[0].checked).toBe(false);
+    expect(boxes[1].checked).toBe(true);
+    expect(boxes[0].disabled).toBe(true);
+  });
+
+  it("hydrates mermaid fences into diagram containers", () => {
+    const w = new PreviewWidget("```mermaid\ngraph TD\n  A-->B\n```\n");
+    const dom = w.toDOM(mockView());
+    const mermaid = dom.querySelector<HTMLElement>(".cm-mermaid");
+    expect(mermaid).toBeTruthy();
+    // Fallback shows the source until mermaid (lazy import) renders.
+    expect(mermaid?.textContent).toContain("graph TD");
   });
 });
 

@@ -722,6 +722,19 @@ body {
 .cm-preview table { border-collapse: collapse; }
 .cm-preview td, .cm-preview th { border: 1px solid var(--border); padding: 6px 10px; }
 .cm-preview blockquote { border-left: 3px solid var(--quote-border); margin-left: 0; padding-left: 12px; color: var(--quote-fg); }
+/* GFM task lists in preview mode (markdown-it-task-lists renders a disabled
+   checkbox; toggling stays with the editor's live-preview widget) */
+.cm-preview .task-list-item {
+  list-style: none;
+  margin-left: -20px;
+}
+.cm-preview .task-list-item-checkbox {
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
+  vertical-align: middle;
+  accent-color: var(--accent);
+}
 
 /* --- Theme-aware form controls (QuickOpen input, Settings selects/buttons) --- */
 input[type="text"], input[type="search"], input:not([type]), select, textarea {

@@ -1,4 +1,5 @@
 import MarkdownIt from "markdown-it";
+import taskLists from "markdown-it-task-lists";
 import { createLowlight } from "lowlight";
 import type { LanguageFn } from "highlight.js";
 
@@ -24,6 +25,24 @@ for (const [path, mod] of Object.entries(langModules)) {
 
 const md = new MarkdownIt({ html: false, linkify: true });
 md.enable(["table", "strikethrough"]);
+// GFM task lists (`- [ ]`). `enabled: false` renders a disabled checkbox —
+// toggling is owned by the editor's live-preview widget, not the static
+// preview HTML.
+md.use(taskLists, { enabled: false });
+
+// Mermaid fences render as a pending container that the caller hydrates into
+// a diagram (see renderMermaidElement in widgets.ts). Keeping the code as the
+// element's textContent avoids HTML-escaping round-trips.
+const defaultFence = md.renderer.rules.fence!.bind(md.renderer.rules);
+md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+  const token = tokens[idx];
+  const lang = (token.info ?? "").trim().toLowerCase();
+  if (lang === "mermaid") {
+    const code = escapeHtml(token.content ?? "");
+    return `<div class="cm-mermaid-pending" data-lang="mermaid">${code}</div>`;
+  }
+  return defaultFence(tokens, idx, options, env, self);
+};
 
 /** Render full markdown to HTML. Used by block widgets. */
 export function renderMarkdown(src: string): string {

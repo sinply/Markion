@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { EditorView } from "@codemirror/view";
+import { ensureSyntaxTree } from "@codemirror/language";
 import { createEditorState } from "../codemirror";
 
 const sample = `# Heading 1
@@ -26,7 +27,11 @@ describe("mounted EditorView renders widgets into DOM", () => {
   it("renders code block, table, task, heading into DOM", () => {
     const parent = document.createElement("div");
     document.body.appendChild(parent);
-    const view = new EditorView({ state: createEditorState(sample, () => {}), parent });
+    const state = createEditorState(sample, () => {});
+    // CM6 parses markdown lazily; wait for the full tree so the widget pass
+    // can't race the parser (flaky on loaded machines).
+    ensureSyntaxTree(state, state.doc.length, 5000);
+    const view = new EditorView({ state, parent });
     // Let CM6 paint: force a read of the content DOM to flush widget rendering
     void view.contentDOM.offsetWidth;
 

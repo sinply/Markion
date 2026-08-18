@@ -25,7 +25,7 @@ export class CodeBlockWidget extends WidgetType {
   toDOM(view: EditorView): HTMLElement {
     // Mermaid diagrams: render as SVG instead of code
     if (this.language === "mermaid") {
-      return renderMermaid(this.code);
+      return renderMermaidElement(this.code);
     }
     this.view = view;
     const pre = document.createElement("pre");
@@ -79,8 +79,10 @@ export class CodeBlockWidget extends WidgetType {
   }
 }
 
-/** Render a Mermaid diagram into a container. Lazy-loads mermaid. */
-function renderMermaid(code: string): HTMLElement {
+/** Render a Mermaid diagram into a container. Lazy-loads mermaid. Shared by
+ *  the live-preview CodeBlockWidget and the full-document PreviewWidget so
+ *  both editor modes render diagrams identically. */
+export function renderMermaidElement(code: string): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "cm-mermaid";
   wrap.textContent = code; // fallback shown until mermaid loads
@@ -221,6 +223,12 @@ export class PreviewWidget extends WidgetType {
     const bodyEl = document.createElement("div");
     bodyEl.className = "cm-preview-body";
     bodyEl.innerHTML = renderMarkdown(body);
+    // Hydrate mermaid fences (markdown-it emits a pending container) so
+    // preview mode shows diagrams exactly like live-preview mode.
+    bodyEl.querySelectorAll<HTMLElement>(".cm-mermaid-pending").forEach((el) => {
+      const code = el.textContent ?? "";
+      el.replaceWith(renderMermaidElement(code));
+    });
     // Resolve local image srcs (rewrite relative paths via the context facet).
     const ctx = view.state.facet(markdownContextFacet)[0];
     if (ctx) {

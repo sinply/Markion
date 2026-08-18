@@ -1,7 +1,7 @@
 {
   "name": "markion",
   "private": true,
-  "version": "0.11.0",
+  "version": "0.11.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -29,6 +29,7 @@
     "katex": "^0.18.3",
     "lowlight": "^3.3.0",
     "markdown-it": "^15.0.0",
+    "markdown-it-task-lists": "^2.1.1",
     "mermaid": "^11.16.1",
     "react": "^18.3.1",
     "react-arborist": "^3.16.0",

@@ -1,14 +1,19 @@
 import { describe, it, expect } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import { ensureSyntaxTree } from "@codemirror/language";
 import { Table, TaskList, Strikethrough } from "@lezer/markdown";
 import { extractHeadings } from "../Outline";
 
 function stateOf(doc: string): EditorState {
-  return EditorState.create({
+  const state = EditorState.create({
     doc,
     extensions: [markdown({ base: markdownLanguage, extensions: [Table, TaskList, Strikethrough] })],
   });
+  // CM6 parses markdown lazily in the background; block until the full tree is
+  // ready so heading extraction never races the parser on slow machines.
+  ensureSyntaxTree(state, doc.length, 5000);
+  return state;
 }
 
 describe("extractHeadings", () => {
