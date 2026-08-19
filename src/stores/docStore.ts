@@ -19,6 +19,8 @@ interface DocState {
    *  (== path), tab title, and per-doc maps all move to the new key. */
   renameDoc: (oldPath: string, newPath: string, newTitle: string) => void;
   switchTo: (id: string) => void;
+  /** Move the tab `fromId` to the position of `toId` (drag-to-reorder). */
+  reorderDocs: (fromId: string, toId: string) => void;
   markDirty: (id: string) => void;
   markClean: (id: string) => void;
   /** Record the exact content last written to disk for a doc, so external-change
@@ -75,6 +77,17 @@ export const useDocStore = create<DocState>((set, get) => ({
 
   switchTo: (id) => {
     set({ activeDocId: id });
+  },
+
+  reorderDocs: (fromId, toId) => {
+    const docs = get().openDocs;
+    const from = docs.findIndex((d) => d.id === fromId);
+    const to = docs.findIndex((d) => d.id === toId);
+    if (from < 0 || to < 0 || from === to) return;
+    const next = [...docs];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    set({ openDocs: next });
   },
 
   closeDocsUnder: (path) => {

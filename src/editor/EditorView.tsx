@@ -1,10 +1,29 @@
-import React, { useRef, useEffect, useImperativeHandle, forwardRef } from "react";
+import React, { useRef, useEffect, useImperativeHandle, forwardRef, useState } from "react";
 import { EditorView } from "@codemirror/view";
 import type { EditorState } from "@codemirror/state";
+import { selectAll } from "@codemirror/commands";
 import { createEditorState, setLivePreview, setEditorMode, setFocusMode } from "./codemirror";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useUiStore } from "../stores/uiStore";
+import { useI18n } from "../lib/i18n";
 import { setEditorView } from "./registry";
+import { ContextMenu } from "../components/ContextMenu";
+
+/** Run a context-menu edit action. selectAll is a real CM6 command; cut/copy/
+ *  paste go through the browser clipboard (execCommand) after focusing the
+ *  view, which routes through CM6's input pipeline. */
+function runEditCommand(view: EditorView, id: string): void {
+  view.focus();
+  if (id === "selectAll") {
+    selectAll(view);
+    return;
+  }
+  try {
+    document.execCommand(id);
+  } catch {
+    // clipboard unavailable (e.g. jsdom) - ignore
+  }
+}
 
 export interface EditorHandle {
   getDoc(): string;
@@ -32,6 +51,9 @@ export const MarkdownEditor = forwardRef<EditorHandle, EditorViewProps>(
     const mode = useUiStore((s) => s.editorMode);
     const setEditorModeUi = useUiStore((s) => s.setEditorMode);
     const focusMode = useUiStore((s) => s.focusMode);
+    const t = useI18n();
+    const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+    const [menuView, setMenuView] = useState<EditorView | null>(null);
 
     useEffect(() => {
       if (!containerRef.current) return;
@@ -42,6 +64,10 @@ export const MarkdownEditor = forwardRef<EditorHandle, EditorViewProps>(
         onStateChange: (s) => onStateChangeRef.current?.(s),
         markdownContext:
           vaultRoot && docRel ? { vaultRoot, docRel } : undefined,
+        onEditorContextMenu: (x, y, view) => {
+          setMenu({ x, y });
+          setMenuView(view);
+        },
       });
       const view = new EditorView({ state, parent: containerRef.current });
       viewRef.current = view;
@@ -111,6 +137,23 @@ export const MarkdownEditor = forwardRef<EditorHandle, EditorViewProps>(
             👁️ Preview
           </button>
         </div>
+        {menu && menuView && (
+          <ContextMenu
+            x={menu.x}
+            y={menu.y}
+            items={[
+              { id: "cut", label: t.cut },
+              { id: "copy", label: t.copy },
+              { id: "paste", label: t.paste },
+              { id: "selectAll", label: t.selectAll },
+            ]}
+            onPick={(id) => {
+              runEditCommand(menuView, id);
+              setMenu(null);
+            }}
+            onClose={() => setMenu(null)}
+          />
+        )}
       </div>
     );
   },

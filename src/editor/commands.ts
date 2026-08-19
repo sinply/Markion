@@ -1,5 +1,7 @@
 import { EditorView } from "@codemirror/view";
 import { EditorSelection } from "@codemirror/state";
+import { markdownContextFacet } from "./media";
+import { formatTableSource } from "./widgets";
 
 /** Wrap the selection (or word at cursor) with prefix/suffix. */
 function wrap(view: EditorView, prefix: string, suffix: string, placeholder = "text") {
@@ -184,7 +186,52 @@ export type MarkdownCommand =
   | "bullet"
   | "ordered"
   | "link"
-  | "image";
+  | "image"
+  | "toc"
+  | "tableFormat";
+
+/** Insert a table of contents at the cursor: one `- [[doc#heading]]` line per
+ *  heading, indented by level, so entries are clickable (anchor jump). */
+function insertToc(view: EditorView) {
+  const { from } = view.state.selection.main;
+  const doc = view.state.doc.toString();
+  const rel = view.state.facet(markdownContextFacet)[0]?.docRel ?? "";
+  const docStem = (rel.split("/").pop() ?? "note").replace(/\.md$/i, "");
+  const lines: string[] = [];
+  let inFence = false;
+  for (const line of doc.split("\n")) {
+    if (/^\s*(```|~~~)/.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    const m = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+    if (!m) continue;
+    const level = m[1].length;
+    const text = m[2].trim();
+    if (text) lines.push(`${"  ".repeat(level - 1)}- [[${docStem}#${text}]]`);
+  }
+  const body = lines.length > 0 ? lines.join("\n") : "- (no headings)";
+  const inserted = `\n## Contents\n\n${body}\n`;
+  view.dispatch({ changes: { from, insert: inserted } });
+}
+
+/** Normalize the table under the cursor (re-pipe + re-space all rows). */
+function formatTable(view: EditorView) {
+  const { from } = view.state.selection.main;
+  const doc = view.state.doc;
+  const isTableLine = (t: string) => /^\s*\|/.test(t) || /^\s*:?-{3,}/.test(t);
+  let startLine = doc.lineAt(from).number;
+  while (startLine > 1 && isTableLine(doc.line(startLine - 1).text)) startLine--;
+  let endLine = doc.lineAt(from).number;
+  while (endLine < doc.lines && isTableLine(doc.line(endLine + 1).text)) endLine++;
+  const start = doc.line(startLine).from;
+  const end = doc.line(endLine).to;
+  const formatted = formatTableSource(doc.sliceString(start, end));
+  if (formatted && formatted !== doc.sliceString(start, end)) {
+    view.dispatch({ changes: { from: start, to: end, insert: formatted } });
+  }
+}
 
 export function runMarkdownCommand(view: EditorView, cmd: MarkdownCommand) {
   switch (cmd) {
@@ -204,5 +251,7 @@ export function runMarkdownCommand(view: EditorView, cmd: MarkdownCommand) {
     case "ordered": return toggleList(view, "ordered");
     case "link": return insertLink(view);
     case "image": return insertImage(view);
+    case "toc": return insertToc(view);
+    case "tableFormat": return formatTable(view);
   }
 }

@@ -202,12 +202,33 @@ export const imagePasteDropExtension = EditorView.domEventHandlers({
   },
 
   drop(event, view) {
-    const files = Array.from(event.dataTransfer?.files ?? []).filter(isImageFile);
+    const files = Array.from(event.dataTransfer?.files ?? []);
+    const images = files.filter(isImageFile);
+    if (images.length > 0) {
+      event.preventDefault();
+      const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
+        ?? view.state.selection.main.head;
+      void insertImages(view, images, pos, pos);
+      return true;
+    }
+    // Non-image files: insert links (Obsidian-style). `.md` becomes a
+    // `[[wikilink]]`; anything else a `[name](name)` markdown link (relative
+    // to the current doc, since the browser hides absolute paths).
     if (files.length === 0) return false;
     event.preventDefault();
     const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
       ?? view.state.selection.main.head;
-    void insertImages(view, files, pos, pos);
+    const insert = files
+      .map((f) =>
+        /\.md$/i.test(f.name)
+          ? `[[${f.name.replace(/\.md$/i, "")}]]`
+          : `[${f.name}](${f.name})`,
+      )
+      .join(" ");
+    view.dispatch({
+      changes: { from: pos, to: pos, insert },
+      selection: { anchor: pos + insert.length },
+    });
     return true;
   },
 });

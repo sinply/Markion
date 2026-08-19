@@ -6,6 +6,9 @@
  * case-insensitive, `path/name` matches on the last path segment.
  */
 const stemToPath = new Map<string, string>();
+/** lowercase stem -> original-case stem (for autocomplete display/insert,
+ *  so `MyNote.md` completes as `MyNote`, not `mynote`). */
+const originalStems = new Map<string, string>();
 const pathSet = new Set<string>();
 
 export interface WikiFile {
@@ -16,20 +19,28 @@ export interface WikiFile {
 /** Rebuild the index from the current vault's markdown file list. */
 export function setWikiIndex(files: WikiFile[]): void {
   stemToPath.clear();
+  originalStems.clear();
   pathSet.clear();
   for (const f of files) {
     if (!/\.md$/i.test(f.name)) continue;
-    const stem = f.name.replace(/\.md$/i, "").toLowerCase();
+    const stem = f.name.replace(/\.md$/i, "");
+    const key = stem.toLowerCase();
     // First occurrence wins, matching Obsidian's "nearest wins" feel; the
     // graph/backlinks use the same stem -> first path mapping.
-    if (!stemToPath.has(stem)) stemToPath.set(stem, f.path);
+    if (!stemToPath.has(key)) {
+      stemToPath.set(key, f.path);
+      originalStems.set(key, stem);
+    }
     pathSet.add(f.path);
   }
 }
 
-/** All known stems (lowercased) for autocomplete, with their display paths. */
+/** All known stems (original case) for autocomplete, with their display paths. */
 export function wikiStems(): { stem: string; path: string }[] {
-  return Array.from(stemToPath.entries()).map(([stem, path]) => ({ stem, path }));
+  return Array.from(stemToPath.entries()).map(([key, path]) => ({
+    stem: originalStems.get(key) ?? key,
+    path,
+  }));
 }
 
 /** True if the exact relative path is a known markdown file. */

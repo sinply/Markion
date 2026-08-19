@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { useDocStore } from "../stores/docStore";
+import { useUiStore } from "../stores/uiStore";
 
 export function Tabs() {
   const openDocs = useDocStore((s) => s.openDocs);
@@ -6,14 +8,30 @@ export function Tabs() {
   const dirtyMap = useDocStore((s) => s.dirtyMap);
   const switchTo = useDocStore((s) => s.switchTo);
   const closeDoc = useDocStore((s) => s.closeDoc);
+  const reorderDocs = useDocStore((s) => s.reorderDocs);
+  const addRecentlyClosed = useUiStore((s) => s.addRecentlyClosed);
+  const [dragId, setDragId] = useState<string | null>(null);
 
   if (openDocs.length === 0) return null;
+
+  const closeTab = (id: string) => {
+    const doc = openDocs.find((d) => d.id === id);
+    if (doc) addRecentlyClosed({ title: doc.title, path: doc.path });
+    closeDoc(id);
+  };
 
   return (
     <div style={{ display: "flex", borderBottom: "1px solid var(--border)", overflow: "auto", flexShrink: 0 }}>
       {openDocs.map((doc) => (
         <div
           key={doc.id}
+          draggable
+          onDragStart={() => setDragId(doc.id)}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={() => {
+            if (dragId && dragId !== doc.id) reorderDocs(dragId, doc.id);
+            setDragId(null);
+          }}
           onClick={() => switchTo(doc.id)}
           style={{
             padding: "6px 10px",
@@ -23,12 +41,13 @@ export function Tabs() {
             whiteSpace: "nowrap",
             fontSize: 13,
             userSelect: "none",
+            opacity: dragId === doc.id ? 0.5 : 1,
           }}
         >
           {dirtyMap[doc.id] && <span style={{ color: "#d73a49" }}>{"● "}</span>}
           {doc.title}
           <button
-            onClick={(e) => { e.stopPropagation(); closeDoc(doc.id); }}
+            onClick={(e) => { e.stopPropagation(); closeTab(doc.id); }}
             style={{ marginLeft: 6, border: "none", background: "none", cursor: "pointer", fontSize: 14, color: "var(--fg-muted)" }}
           >
             {"×"}

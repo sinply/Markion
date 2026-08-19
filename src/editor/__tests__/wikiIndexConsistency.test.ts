@@ -50,10 +50,14 @@ describe("wikiIndex <-> backlinks.rs consistency", () => {
     expect(resolveWikiLink("B")).not.toBeNull();
   });
 
-  // mirrors backlinks.rs: link_targets_extracts_stems
-  it("wikiStems lists every indexed stem once", () => {
+  // mirrors backlinks.rs: link_targets_extracts_stems — the TS side keeps the
+  // ORIGINAL case for autocomplete display (MyNote, not mynote); matching
+  // itself stays case-insensitive (resolveWikiLink below).
+  it("wikiStems lists every indexed stem once, preserving original case", () => {
     const stems = wikiStems().map((s) => s.stem).sort();
-    expect(stems).toEqual(["a", "b", "design", "other"]);
+    expect(stems).toEqual(["A", "B", "design", "other"]);
+    expect(wikiStems().find((s) => s.path === "a.md")?.stem).toBe("A");
+    expect(wikiStems().find((s) => s.path === "b.md")?.stem).toBe("B");
   });
 
   it("resolveWikiLink('path') still returns the full indexed path", () => {

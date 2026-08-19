@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Panel, Group, Separator } from "react-resizable-panels";
+import { Panel, Group, Separator, type Layout as PanelLayout } from "react-resizable-panels";
 import { FileTree } from "./FileTree";
 import { EditorPane } from "./EditorPane";
 import { OutlinePane } from "./Outline";
@@ -12,6 +12,54 @@ import { useWikiIndex } from "../hooks/useWikiIndex";
 import { EditorView } from "@codemirror/view";
 import type { EditorState } from "@codemirror/state";
 
+const LAYOUT_KEY = "markion.layout";
+const LEFT_KEY = "markion.leftCollapsed";
+const RIGHT_KEY = "markion.rightCollapsed";
+
+function loadJson<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+function loadBool(key: string): boolean {
+  return localStorage.getItem(key) === "1";
+}
+
+function save(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // storage unavailable - layout just won't persist
+  }
+}
+
+/** Small chevron button used to collapse/expand side panels. */
+function chevron(label: string, title: string, onClick: () => void, style?: React.CSSProperties) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      style={{
+        background: "none",
+        border: "1px solid var(--border)",
+        borderRadius: 4,
+        color: "var(--fg-muted)",
+        cursor: "pointer",
+        fontSize: 11,
+        lineHeight: 1,
+        padding: "3px 6px",
+        ...style,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
 export function Layout() {
   useWikiIndex();
   const [editorState, setEditorState] = useState<EditorState | null>(null);
@@ -20,6 +68,12 @@ export function Layout() {
   const showGraph = useSettingsStore((s) => s.showGraph);
   const showTags = useSettingsStore((s) => s.showTags);
   const rightHasContent = showOutline || showBacklinks || showGraph || showTags;
+
+  // Panel sizes persist across sessions (workspaces-lite) via the group layout.
+  const [layout, setLayout] = useState<PanelLayout | null>(() => loadJson<PanelLayout>(LAYOUT_KEY));
+  // Side panel collapsed state (also persisted).
+  const [leftCollapsed, setLeftCollapsed] = useState(() => loadBool(LEFT_KEY));
+  const [rightCollapsed, setRightCollapsed] = useState(() => loadBool(RIGHT_KEY));
 
   const handleJump = useCallback((from: number) => {
     const activeEl = document.querySelector(".cm-editor .cm-content") as HTMLElement | null;
@@ -39,26 +93,58 @@ export function Layout() {
         const target = scroller.scrollTop + (coords.top - scrollerRect.top) - scroller.clientHeight / 2;
         scroller.scrollTop = Math.max(0, target);
       } catch {
-        // ignore — best-effort scroll
+        // ignore - best-effort scroll
       }
     }, 20);
   }, []);
 
+  const toggleLeft = (collapsed: boolean) => {
+    setLeftCollapsed(collapsed);
+    save(LEFT_KEY, collapsed ? "1" : "0");
+  };
+  const toggleRight = (collapsed: boolean) => {
+    setRightCollapsed(collapsed);
+    save(RIGHT_KEY, collapsed ? "1" : "0");
+  };
+
   return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      <Group orientation="horizontal" style={{ flex: 1 }} id="main">
-        <Panel id="tree" defaultSize="20" minSize="12" maxSize="35">
-          <FileTree />
-        </Panel>
-        <Separator id="sep-tree" style={{ width: 3, background: "var(--border)" }} />
-        <Panel id="editor" defaultSize="55" minSize="30">
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", position: "relative" }}>
+      <Group
+        orientation="horizontal"
+        style={{ flex: 1 }}
+        id="main"
+        defaultLayout={layout ?? undefined}
+        onLayoutChanged={(l) => {
+          setLayout(l);
+          save(LAYOUT_KEY, JSON.stringify(l));
+        }}
+      >
+        {!leftCollapsed && (
+          <>
+            <Panel id="tree" defaultSize="20" minSize="12" maxSize="35">
+              <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+                <div style={{ padding: "4px 8px", display: "flex", justifyContent: "flex-end" }}>
+                  {chevron("«", "Collapse sidebar", () => toggleLeft(true))}
+                </div>
+                <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+                  <FileTree />
+                </div>
+              </div>
+            </Panel>
+            <Separator id="sep-tree" style={{ width: 3, background: "var(--border)" }} />
+          </>
+        )}
+        <Panel id="editor" defaultSize={leftCollapsed ? "100" : "55"} minSize="30">
           <EditorPane onHeadingsChange={setEditorState} />
         </Panel>
-        {rightHasContent && (
+        {rightHasContent && !rightCollapsed && (
           <>
             <Separator id="sep-outline" style={{ width: 3, background: "var(--border)" }} />
             <Panel id="outline" defaultSize="25" minSize="10" maxSize="35">
               <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+                <div style={{ padding: "4px 8px", display: "flex", justifyContent: "flex-end" }}>
+                  {chevron("»", "Collapse side panel", () => toggleRight(true))}
+                </div>
                 {showOutline && (
                   <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
                     <OutlinePane state={editorState} onJump={handleJump} />
@@ -84,6 +170,21 @@ export function Layout() {
           </>
         )}
       </Group>
+      {leftCollapsed &&
+        chevron("»", "Expand sidebar", () => toggleLeft(false), {
+          position: "absolute",
+          left: 4,
+          top: 30,
+          zIndex: 5,
+        })}
+      {rightHasContent &&
+        rightCollapsed &&
+        chevron("«", "Expand side panel", () => toggleRight(false), {
+          position: "absolute",
+          right: 4,
+          top: 30,
+          zIndex: 5,
+        })}
       <CommandPalette />
     </div>
   );

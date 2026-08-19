@@ -88,6 +88,8 @@ export function buildCommands(t: Dict): Command[] {
     md("task", t.taskList),
     md("link", t.link),
     md("image", t.image),
+    md("toc", t.toc),
+    md("tableFormat", t.tableFormat),
     edit("undo", t.undo, "Ctrl+Z"),
     edit("redo", t.redo, "Ctrl+Y"),
     edit("cut", t.cut, "Ctrl+X"),
@@ -173,6 +175,35 @@ export function buildCommands(t: Dict): Command[] {
         void import("../stores/vaultStore").then((m) => {
           const root = m.useVaultStore.getState().vaultRoot;
           if (root) void import("./templates").then((mod) => mod.openDailyNote(root));
+        });
+      },
+    },
+    {
+      id: "file:reopenClosed",
+      title: t.reopenClosed,
+      shortcut: "Ctrl+Shift+T",
+      keywords: ["reopen", "closed", "tab", "恢复", "关闭", "标签"],
+      run: () => {
+        const top = ui().takeRecentlyClosed();
+        if (!top) return;
+        void import("../stores/vaultStore").then((m) => {
+          const root = m.useVaultStore.getState().vaultRoot;
+          if (root) void import("./openNote").then((mod) => mod.openNote(root, top.path));
+        });
+      },
+    },
+    {
+      id: "view:fullscreen",
+      title: t.fullscreen,
+      keywords: ["fullscreen", "zen", "禅", "全屏"],
+      run: () => {
+        void import("@tauri-apps/api/window").then(async ({ getCurrentWindow }) => {
+          try {
+            const win = getCurrentWindow();
+            await win.setFullscreen(!(await win.isFullscreen()));
+          } catch {
+            // window API unavailable (web build) - ignore
+          }
         });
       },
     },

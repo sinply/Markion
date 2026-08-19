@@ -40,6 +40,16 @@ export class CodeBlockWidget extends WidgetType {
       pre.appendChild(tag);
     }
 
+    // Copy button (top-right corner of the block).
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "cm-codeblock-copy";
+    copyBtn.textContent = "⧉";
+    copyBtn.title = "Copy code";
+    copyBtn.addEventListener("click", () => {
+      void navigator.clipboard?.writeText(this.code).catch(() => {});
+    });
+    pre.appendChild(copyBtn);
+
     const code = document.createElement("code");
     code.className = "cm-codeblock-editable";
     // setAttribute rather than `code.contentEditable = "true"`: jsdom doesn't
@@ -50,6 +60,15 @@ export class CodeBlockWidget extends WidgetType {
     // contenteditable are committed via textContent, so highlighting is a pure
     // presentation layer rebuilt on each widget refresh.
     code.innerHTML = highlightCode(this.code, this.language);
+
+    // Line numbers alongside the code.
+    const lineCount = this.code.split("\n").length;
+    const lines = document.createElement("div");
+    lines.className = "cm-codeblock-lines";
+    lines.setAttribute("aria-hidden", "true");
+    lines.textContent = Array.from({ length: lineCount }, (_, i) => String(i + 1)).join("\n");
+
+    pre.appendChild(lines);
     pre.appendChild(code);
 
     // Commit the edited code back to the document when the user leaves the block.
@@ -242,6 +261,21 @@ export class PreviewWidget extends WidgetType {
         }
       });
     }
+    // Preview mode mirrors the editor's conveniences: click an image to zoom,
+    // and every code block gets a copy button.
+    bodyEl.querySelectorAll("img").forEach((img) => {
+      img.addEventListener("click", () => openLightbox(img.currentSrc || img.src));
+    });
+    bodyEl.querySelectorAll("pre").forEach((pre) => {
+      const btn = document.createElement("button");
+      btn.className = "cm-codeblock-copy";
+      btn.textContent = "⧉";
+      btn.title = "Copy code";
+      btn.addEventListener("click", () => {
+        void navigator.clipboard?.writeText(pre.textContent ?? "").catch(() => {});
+      });
+      pre.appendChild(btn);
+    });
     div.appendChild(bodyEl);
     return div;
   }
@@ -340,6 +374,13 @@ export function parseTable(raw: string): ParsedTable | null {
 
 function serializeParsedTable(t: ParsedTable): string {
   return [pipeRow(t.header), alignRow(t.align), ...t.rows.map((r) => pipeRow(r))].join("\n");
+}
+
+/** Rebuild a table's source with normalized pipes/spacing. */
+export function formatTableSource(raw: string): string | null {
+  const t = parseTable(raw);
+  if (!t) return null;
+  return serializeParsedTable(t);
 }
 
 /** Row/column transforms for the table toolbar buttons. */
@@ -628,6 +669,13 @@ export class ImageWidget extends WidgetType {
       wrap.replaceChild(placeholder, img);
     });
 
+    // Click to view the image full-size (lightbox overlay). stopPropagation so
+    // CM6 doesn't also move the cursor into the image token.
+    img.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openLightbox(img.currentSrc || img.src);
+    });
+
     wrap.appendChild(img);
     appendSourceBadge(wrap, this.from, this.to);
     return wrap;
@@ -636,6 +684,24 @@ export class ImageWidget extends WidgetType {
   ignoreEvent(): boolean {
     return false;
   }
+}
+
+/** Fullscreen lightbox overlay for clicking an image. Click anywhere to close. */
+export function openLightbox(src: string): void {
+  const overlay = document.createElement("div");
+  overlay.className = "cm-lightbox";
+  const img = document.createElement("img");
+  img.className = "cm-lightbox-img";
+  img.src = src;
+  img.alt = "";
+  overlay.appendChild(img);
+  const close = () => overlay.remove();
+  overlay.addEventListener("click", close);
+  overlay.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") close();
+  });
+  document.body.appendChild(overlay);
+  img.focus();
 }
 
 /** Rendered `[[wikilink]]`: shows the alias (or basename) as a clickable link.

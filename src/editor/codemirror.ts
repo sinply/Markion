@@ -109,6 +109,8 @@ export function createEditorState(
     livePreview?: boolean;
     onStateChange?: (state: EditorState) => void;
     markdownContext?: MarkdownContext;
+    /** Called on right-click inside the editor (custom context menu). */
+    onEditorContextMenu?: (x: number, y: number, view: EditorView) => void;
   },
 ): EditorState {
   const livePreview = opts?.livePreview ?? true;
@@ -118,6 +120,16 @@ export function createEditorState(
     }
     opts?.onStateChange?.(update.state);
   });
+
+  const contextMenuHandler = opts?.onEditorContextMenu
+    ? EditorView.domEventHandlers({
+        contextmenu(event, view) {
+          event.preventDefault();
+          opts.onEditorContextMenu!(event.clientX, event.clientY, view);
+          return true;
+        },
+      })
+    : [];
 
   return EditorState.create({
     doc,
@@ -141,6 +153,7 @@ export function createEditorState(
       searchTheme,
       foldTheme,
       updateListener,
+      contextMenuHandler,
       themeCompartment.of(EditorView.theme({})),
       opts?.markdownContext ? markdownContextFacet.of(opts.markdownContext) : [],
       imagePasteDropExtension,

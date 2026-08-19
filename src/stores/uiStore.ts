@@ -40,6 +40,13 @@ interface UiState {
   addRecent: (path: string) => void;
   clearRecent: () => void;
 
+  /** Recently closed tabs (most recent first, capped). Reopened via the
+   *  "Reopen Closed Tab" command (Ctrl+Shift+T). */
+  recentlyClosed: { title: string; path: string }[];
+  addRecentlyClosed: (d: { title: string; path: string }) => void;
+  /** Pop the most recently closed tab (consumed by the reopen command). */
+  takeRecentlyClosed: () => { title: string; path: string } | null;
+
   aboutOpen: boolean;
   setAboutOpen: (b: boolean) => void;
 
@@ -123,6 +130,15 @@ export const useUiStore = create<UiState>((set, get) => ({
       // ignore
     }
     set({ recentFiles: [] });
+  },
+
+  recentlyClosed: [],
+  addRecentlyClosed: (d) =>
+    set((s) => ({ recentlyClosed: [d, ...s.recentlyClosed].slice(0, 10) })),
+  takeRecentlyClosed: () => {
+    const top = get().recentlyClosed[0] ?? null;
+    if (top) set((s) => ({ recentlyClosed: s.recentlyClosed.slice(1) }));
+    return top;
   },
 
   aboutOpen: false,
