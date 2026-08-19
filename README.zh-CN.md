@@ -2,7 +2,7 @@
 
 # Markion
 
-一款快速、**本地优先**的 Markdown 编辑器，支持 Windows、macOS、Linux。Obsidian 风格实时预览 + 语雀式多级文档树，数据直接以普通 `.md` 文件存于磁盘，可无缝配合你已有的任何同步工具。
+一款快速、**本地优先**的 **Windows** Markdown 编辑器。它融合 Obsidian 风格的实时预览与语雀式的多级文档树，所有笔记以普通 `.md` 文件存于磁盘——无私有数据库、无锁定，可轻松备份，并配合你已有的任意同步方式使用。macOS 与 Linux 版本规划中（应用基于跨平台的 Tauri 2 构建）。
 
 ![MIT License](https://img.shields.io/badge/license-MIT-green)
 ![Tauri 2](https://img.shields.io/badge/Shell-Tauri%202-blue)

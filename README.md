@@ -2,7 +2,7 @@
 
 # Markion
 
-A fast, local-first **Markdown editor** for Windows, macOS, and Linux. Obsidian-style live preview, Yuque-style hierarchical document tree, and a plain-files-on-disk storage model that works with your existing sync setup.
+A fast, local-first Markdown editor for **Windows**. It combines Obsidian-style live preview with a Yuque-style hierarchical document tree, storing everything as plain `.md` files on disk — no database, no lock-in, easy to back up and sync with whatever tool you already use. macOS and Linux builds are planned (the app is built on the cross-platform Tauri 2 shell).
 
 ![MIT License](https://img.shields.io/badge/license-MIT-green)
 ![Tauri 2](https://img.shields.io/badge/Shell-Tauri%202-blue)
