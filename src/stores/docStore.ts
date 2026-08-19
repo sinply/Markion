@@ -18,6 +18,8 @@ interface DocState {
   /** Update the path/title of an open doc after a file rename. The doc id
    *  (== path), tab title, and per-doc maps all move to the new key. */
   renameDoc: (oldPath: string, newPath: string, newTitle: string) => void;
+  /** Close every doc and clear content (vault switch). */
+  reset: () => void;
   switchTo: (id: string) => void;
   /** Move the tab `fromId` to the position of `toId` (drag-to-reorder). */
   reorderDocs: (fromId: string, toId: string) => void;
@@ -143,6 +145,16 @@ export const useDocStore = create<DocState>((set, get) => ({
       savedContent,
     });
   },
+
+  reset: () =>
+    set({
+      openDocs: [],
+      activeDocId: null,
+      dirtyMap: {},
+      savedContent: {},
+      activeContent: "",
+      activeContentDocId: null,
+    }),
 
   markDirty: (id) =>
     set((s) => ({ dirtyMap: { ...s.dirtyMap, [id]: true } })),

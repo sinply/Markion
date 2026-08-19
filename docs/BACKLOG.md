@@ -31,7 +31,7 @@
 - **编辑器内查找替换**(审计补记):Ctrl+F / Ctrl+H(CM6 `searchKeymap` 内置)
 - **外部 URL 点击**(审计补记):`livePreview.ts` `openUrl` 调系统打开
 
-## 待实现功能(按优先级;2026-08-18 审计更新,v0.11.5 已完成全部 🔴 高优先级)
+## 待实现功能(按优先级;2026-08-18 审计更新,v0.11.5/0.11.6 已完成 🔴 高优先级全部 + 🟡 + 🟢)
 
 ### 🔴 高优先级(全部已完成,2026-08-18)
 - [x] **属性面板编辑(Properties)**(v0.11.5)
@@ -50,57 +50,57 @@
   - 剪贴板纯 URL 时粘贴为 `[选中文本](url)` 或 `[url](url)`;
     `media.ts::urlFromClipboard`/`urlToMarkdown` + paste handler
 
-### 🟡 中优先级
-- [ ] **代码块复制按钮 + 行号**
-  - 预览中的代码块右上角加"复制"按钮;可选行号
-- [ ] **目录 TOC 插入**
-  - 命令面板/斜杠命令插入基于大纲的目录列表(斜杠命令现有 19 项,无 TOC)
-  - 方案:复用大纲 hook 生成 `- [标题](#锚点)` 列表
-- [ ] **编辑器内右键菜单**(审计新增)
-  - 现状:仅 FileTree 有 ContextMenu,编辑器右键无菜单(搜 `contextmenu` 零命中)
-  - 方案:`codemirror.ts` 加 `domEventHandlers.contextmenu`,复用
-    `ContextMenu.tsx`,接 cut/copy/paste 命令
-- [ ] **标签页拖拽重排**(审计新增)
-  - 现状:`Tabs.tsx` 无 draggable,只有切换/关闭
-  - 方案:HTML5 拖拽重排 `docStore.openDocs`
-- [ ] **快捷键自定义**(审计新增)
-  - 现状:`ShortcutsDialog` 只读展示,键位硬编码在 `useCommands.ts`,config 无存储
-  - 方案:config 加 keymap 映射,`keymap.of` 动态构建
-- [ ] **侧栏/面板折叠 + 状态记忆**(审计新增)
-  - 现状:三栏只能 resize 无折叠;面板宽度不跨会话记忆
-  - 方案:Layout 加折叠 toggle,尺寸/折叠态写 settingsStore
-- [ ] **图片点击放大预览**(审计新增)
-  - 现状:ImageWidget 只渲染,无 lightbox
-  - 方案:点击开覆盖层大图或调系统 opener
-- [ ] **拖拽非图片文件到编辑器插入链接**(审计新增)
-  - 现状:`media.ts` drop 仅 `filter(isImageFile)`,其他文件静默丢弃
-  - 方案:drop 分支:非图片文件插入 `[name](path)`
-- [ ] **全屏 / 禅模式**(审计新增)
-  - 现状:只有聚焦模式(行高亮+打字机),无全屏
-  - 方案:命令面板 toggle,调 Tauri `getCurrentWindow().setFullscreen()`
-- [ ] **最近关闭标签页**
-  - uiStore 记录关闭的 tab,菜单/快捷键恢复
-- [ ] **workspaces / 布局记忆**(审计新增)
-  - 现状:重启只恢复 recentFiles,打开标签、面板尺寸全部丢失
-  - 方案:localStorage 存布局 JSON(面板尺寸+openDocs),启动恢复
+### 🟡 中优先级(全部已完成,v0.11.6)
+- [x] **代码块复制按钮 + 行号**(v0.11.6)
+  - 编辑/预览模式代码块右上角复制按钮;编辑模式代码块左侧行号
+- [x] **目录 TOC 插入**(v0.11.6)
+  - 命令面板 "Insert Table of Contents":按标题层级生成 `- [[doc#标题]]`
+    列表(点击可锚点跳转,斜杠命令除外)
+- [x] **编辑器内右键菜单**(v0.11.6)
+  - `domEventHandlers.contextmenu` + ContextMenu:剪切/复制/粘贴/全选
+    (cut/copy/paste 走浏览器剪贴板)
+- [x] **标签页拖拽重排**(v0.11.6)
+  - HTML5 拖拽重排 `docStore.openDocs`(reorderDocs)
+- [x] **快捷键自定义**(v0.11.6)
+  - config.rs `shortcuts: HashMap` + `src/lib/shortcuts.ts`(默认绑定表)+
+    ShortcutsDialog 可编辑(修改/重置);useCommands 表驱动 keydown
+- [x] **侧栏/面板折叠 + 状态记忆**(v0.11.6)
+  - Layout 左右折叠按钮(«/»),折叠态 localStorage 持久化
+- [x] **图片点击放大预览**(v0.11.6)
+  - 编辑/预览模式点击图片开 lightbox(`openLightbox`,Esc/点击关闭)
+- [x] **拖拽非图片文件到编辑器插入链接**(v0.11.6)
+  - `.md` 拖入插 `[[wikilink]]`,其他文件插 `[name](name)`
+- [x] **全屏 / 禅模式**(v0.11.6)
+  - 命令面板 "Toggle Fullscreen"(Tauri `setFullscreen`)
+- [x] **最近关闭标签页**(v0.11.6)
+  - uiStore `recentlyClosed` 栈(10 条)+ Ctrl+Shift+T / 命令恢复
+- [x] **workspaces / 布局记忆**(v0.11.6)
+  - Group `defaultLayout` + `onLayoutChanged` 存 localStorage(面板尺寸跨会话)
 
-### 🟢 低优先级(审计新增)
-- [ ] **应用内回收站 / 文件历史版本**:现为系统回收站(`trash::delete`),
-  可改 vault 内 `.markion/trash/` + "最近删除"面板;保存快照做版本历史
-- [ ] **wiki 补全保留原始大小写**(半 bug):索引 stem 转小写,`MyNote.md`
-  补全成 `mynote`;索引需额外保留原始 stem
-- [ ] **大纲面板拖拽移动标题**:`Outline.tsx` 仅 onClick 跳转
-- [ ] **表格对齐/格式化命令**:有 `detectAlign` 但无"格式化表格"命令
-- [ ] **PDF 直接导出免打印对话框**:现为 `printHtml` 系统打印对话框,
-  需引入 PDF 生成方案
-- [ ] **导出为图片**:html2canvas 截渲染区
+### 🟢 低优先级(全部已完成,v0.11.6)
+- [x] **应用内回收站**:删除移入 vault 内 `.markion/trash/`(保留相对路径,
+  重名加后缀),右键菜单"最近删除"打开 TrashDialog 恢复(Rust
+  trash_path/list_trash/restore_trash)
+- [x] **wiki 补全保留原始大小写**:索引额外存原始 stem,`MyNote.md` 补全为
+  `MyNote`(匹配仍大小写不敏感)
+- [x] **大纲面板拖拽移动标题**:拖拽标题块(含子内容)到目标后,两次 dispatch
+  写回文档(`moveHeadingBlock`)
+- [x] **表格对齐/格式化命令**:命令面板 "Format Table" 重排光标所在表格
+  (parse+serialize)
+- [x] **PDF 直接导出免打印对话框**:html2canvas 渲染 + jsPDF 分页,保存对话框
+  直接写 PDF 文件(Rust `write_file_base64`);原打印对话框流程保留在
+  `exportActivePdf`
+- [x] **导出为图片**:html2canvas 渲染笔记为 PNG 保存
 
 ### 🔴 大工程(单独评估,工作量大的功能)
 - [ ] **Canvas 无限画布**(Obsidian Canvas)
 - [ ] **发布 / 多端同步**(Obsidian Publish/Sync,需要服务端)
-- [ ] **文档即容器 index.md**(语雀核心):已有雏形--FileTree 双击含
-  index.md 的文件夹会直接打开(v0.11.4 审计确认),缺容器 UI/创建入口/展开联动
-- [ ] **多知识库管理**(语雀:一个应用管理多个 vault,可切换)
+- [ ] **文档即容器 index.md**(语雀核心):已有雏形--单击含 index.md 的文件夹
+  打开它、双击展开;v0.11.6 加了右键"创建 index 文档"入口(自动创建并打开);
+  仍缺容器 UI(正文下方列子文档)与展开联动
+- [ ] **多知识库管理**(v0.11.6 已完成基础版):文件菜单"知识库…"列出最近
+  vault(最近 8 个,localStorage),点击切换(树/设置/监视器重建、关闭旧标签);
+  缺应用内多 vault 并存视图
 - [ ] **数据表 / 思维导图 / 幻灯片**(语雀特色,均是大工程)
 
 ### 🟢 明确不做(桌面本地工具不适配)

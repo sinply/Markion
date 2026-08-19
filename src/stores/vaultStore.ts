@@ -3,6 +3,8 @@ import type { TreeNode } from "../lib/types";
 import { buildTree, reorderInFolder, setCollapsed, moveNode } from "../lib/ipc";
 
 const DEFAULT_VAULT_KEY = "markion.defaultVault";
+const RECENT_VAULTS_KEY = "markion.recentVaults";
+const MAX_RECENT_VAULTS = 8;
 
 /** Persist the default vault path (last opened) so the app can reopen it. */
 export function getDefaultVault(): string | null {
@@ -29,10 +31,31 @@ function clearDefaultVault() {
   }
 }
 
+/** Recently opened vaults (most recent first), for multi-vault switching. */
+export function loadRecentVaults(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_VAULTS_KEY);
+    const list: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list.filter((v): v is string => typeof v === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentVaults(list: string[]) {
+  try {
+    localStorage.setItem(RECENT_VAULTS_KEY, JSON.stringify(list));
+  } catch {
+    // ignore
+  }
+}
+
 interface VaultState {
   vaultRoot: string | null;
   tree: TreeNode | null;
   expanded: Record<string, boolean>;
+  /** Recently opened vault paths (most recent first). */
+  recentVaults: string[];
   loadTree: (root: string) => Promise<void>;
   /** Load the vault without touching the default. */
   openVault: (root: string) => Promise<void>;
@@ -42,6 +65,10 @@ interface VaultState {
   clearDefault: () => void;
   /** Set a specific path as the default vault (from Settings). */
   setDefaultTo: (root: string) => void;
+  /** Record a vault in the recent list (called on open/switch). */
+  addRecentVault: (root: string) => void;
+  /** Remove a vault from the recent list (forget). */
+  forgetVault: (root: string) => void;
   applyReorder: (folderRel: string, name: string, newIndex: number) => Promise<void>;
   applyMove: (fromFolder: string, fromName: string, toFolder: string, toName: string) => Promise<void>;
   setCollapsed: (folderRel: string, collapsed: boolean) => Promise<void>;
@@ -51,10 +78,12 @@ export const useVaultStore = create<VaultState>((set, get) => ({
   vaultRoot: null,
   tree: null,
   expanded: {},
+  recentVaults: loadRecentVaults(),
 
   loadTree: async (root) => {
     const tree = await buildTree(root);
     set({ vaultRoot: root, tree });
+    get().addRecentVault(root);
   },
 
   openVault: async (root) => {
@@ -69,6 +98,18 @@ export const useVaultStore = create<VaultState>((set, get) => ({
   clearDefault: () => clearDefaultVault(),
 
   setDefaultTo: (root) => setDefaultVault(root),
+
+  addRecentVault: (root) => {
+    const next = [root, ...get().recentVaults.filter((v) => v !== root)].slice(0, MAX_RECENT_VAULTS);
+    saveRecentVaults(next);
+    set({ recentVaults: next });
+  },
+
+  forgetVault: (root) => {
+    const next = get().recentVaults.filter((v) => v !== root);
+    saveRecentVaults(next);
+    set({ recentVaults: next });
+  },
 
   applyReorder: async (folderRel, name, newIndex) => {
     const root = get().vaultRoot;

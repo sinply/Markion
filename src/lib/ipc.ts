@@ -189,6 +189,11 @@ export async function readFileBase64(path: string): Promise<string> {
   return invoke<string>("read_file_base64", { path });
 }
 
+/** Write base64-encoded binary content to an absolute path (PDF/image export). */
+export async function writeFileBase64(path: string, base64Data: string): Promise<void> {
+  await invoke<void>("write_file_base64", { path, base64Data });
+}
+
 /** Size in bytes of a vault-relative file. */
 export async function fileSize(vaultRoot: string, path: string): Promise<number> {
   return invoke<number>("file_size", { vaultRoot, path });

@@ -7,9 +7,10 @@ vi.mock("katex/dist/katex.min.css?raw", () => ({ default: ".katex{color:red}" })
 vi.mock("../ipc", () => ({
   exportFile: vi.fn().mockResolvedValue(undefined),
   readFileBase64: vi.fn().mockResolvedValue("QUJDRA=="),
+  writeFileBase64: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { buildExportHtml, inlineImages, printHtml } from "../exportNote";
+import { buildExportHtml, inlineImages, printHtml, base64FromArrayBuffer } from "../exportNote";
 import { readFileBase64 } from "../ipc";
 
 beforeEach(() => {
@@ -142,5 +143,15 @@ describe("printHtml", () => {
     append.mockRestore();
     remove.mockRestore();
     vi.restoreAllMocks();
+  });
+});
+
+describe("base64FromArrayBuffer", () => {
+  it("encodes binary data losslessly (round-trips through atob)", () => {
+    const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xff, 0x00]);
+    const b64 = base64FromArrayBuffer(bytes.buffer as ArrayBuffer);
+    expect(b64).toBe(btoa(String.fromCharCode(...bytes)));
+    const back = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    expect(Array.from(back)).toEqual(Array.from(bytes));
   });
 });

@@ -155,7 +155,15 @@ export function buildCommands(t: Dict): Command[] {
       title: t.exportPdf,
       keywords: ["export", "pdf", "print", "导出", "打印"],
       run: () => {
-        void import("./exportNote").then((m) => m.exportActivePdf());
+        void import("./exportNote").then((m) => m.exportActivePdfFile());
+      },
+    },
+    {
+      id: "file:exportImage",
+      title: t.exportImage,
+      keywords: ["export", "image", "png", "图片", "导出"],
+      run: () => {
+        void import("./exportNote").then((m) => m.exportActiveImage());
       },
     },
     {

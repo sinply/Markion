@@ -8,6 +8,23 @@ import { openNote } from "../lib/openNote";
 import { exportActiveNote } from "../lib/exportNote";
 import type { Theme } from "../lib/types";
 
+/** Switch the whole app to another vault: reload tree + settings, restart the
+ *  watcher, and drop every open tab (they belong to the old vault). */
+async function switchVault(root: string): Promise<void> {
+  const { useVaultStore } = await import("../stores/vaultStore");
+  const { useDocStore } = await import("../stores/docStore");
+  const { useSettingsStore } = await import("../stores/settingsStore");
+  await useVaultStore.getState().loadTree(root);
+  useDocStore.getState().reset();
+  await useSettingsStore.getState().load(root);
+  try {
+    const { startVaultWatch } = await import("../lib/ipc");
+    await startVaultWatch(root);
+  } catch {
+    // watcher restart is best-effort
+  }
+}
+
 interface MenuItem {
   label: string;
   shortcut?: string;
@@ -135,13 +152,31 @@ export function MenuBar() {
         { label: t.saveAs, shortcut: "Ctrl+Shift+S", action: () => { ui.requestSaveAs(); close(); }, separatorAfter: true },
         { label: t.exportHtml, action: () => { void exportActiveNote(true); close(); } },
         { label: t.exportMarkdown, action: () => { void exportActiveNote(false); close(); } },
-        { label: t.exportPdf, action: () => { void import("../lib/exportNote").then((m) => m.exportActivePdf()); close(); }, separatorAfter: true },
+        { label: t.exportPdf, action: () => { void import("../lib/exportNote").then((m) => m.exportActivePdfFile()); close(); } },
+        { label: t.exportImage, action: () => { void import("../lib/exportNote").then((m) => m.exportActiveImage()); close(); }, separatorAfter: true },
         { label: t.newDailyNote, action: () => {
             const root = vaultStore.vaultRoot;
             if (root) void import("../lib/templates").then((m) => m.openDailyNote(root));
             close();
           } },
         { label: t.insertTemplate, action: () => { ui.setTemplatesOpen(true); close(); }, separatorAfter: true },
+        {
+          label: t.vaults,
+          submenu: {
+            label: t.vaults,
+            items: [
+              ...vaultStore.recentVaults.map((v) => ({
+                label: v === vaultStore.vaultRoot ? `✓ ${v}` : v,
+                action: () => {
+                  void switchVault(v);
+                  close();
+                },
+              })),
+              { label: t.openFolder, action: () => { ui.requestOpenFolder(); close(); } },
+            ],
+          },
+          separatorAfter: true,
+        },
         { label: t.setDefaultVault, action: () => { vaultStore.setAsDefault(); close(); }, separatorAfter: true },
         { label: t.preferences, action: () => { ui.setSettingsOpen(true); close(); }, separatorAfter: true },
         { label: t.recent, action: () => close(), separatorAfter: true },

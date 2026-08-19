@@ -275,6 +275,24 @@ export function FileTree() {
     [vaultRoot, loadTree, t],
   );
 
+  /** Create `index.md` inside a folder (folder-as-container body). */
+  const handleCreateIndex = useCallback(
+    async (target: MenuTarget) => {
+      if (!vaultRoot || target.kind !== "folder") return;
+      const rel = `${target.path}/index.md`;
+      try {
+        await createFile(vaultRoot, rel);
+        await loadTree(vaultRoot);
+        const content = await readFile(vaultRoot, rel);
+        openDoc("index.md", rel);
+        setActiveContent(content);
+      } catch {
+        // creation failed - tree/editor unchanged
+      }
+    },
+    [vaultRoot, loadTree, openDoc, setActiveContent],
+  );
+
   const handleRename = useCallback(
     async (target: MenuTarget) => {
       if (!vaultRoot) return;
@@ -347,6 +365,10 @@ export function FileTree() {
     const isFolderish = !menu.target || menu.target.kind === "folder";
     if (isFolderish) items.push({ id: "new-folder", label: t.ctxNewFolder });
     if (menu.target) {
+      // Folder-as-container: create (or open) the folder's index.md body.
+      if (menu.target.kind === "folder") {
+        items.push({ id: "new-index", label: t.ctxNewIndex });
+      }
       items.push({ id: "rename", label: t.ctxRename });
       items.push({ id: "delete", label: t.ctxDelete, danger: true });
     }
@@ -360,11 +382,12 @@ export function FileTree() {
       setMenu(null);
       if (id === "new-note") void handleNewNote(target);
       else if (id === "new-folder") void handleNewFolder(target);
+      else if (id === "new-index" && target) void handleCreateIndex(target);
       else if (id === "rename" && target) void handleRename(target);
       else if (id === "delete" && target) void handleDelete(target);
       else if (id === "trash") useUiStore.getState().setTrashOpen(true);
     },
-    [menu, handleNewNote, handleNewFolder, handleRename, handleDelete],
+    [menu, handleNewNote, handleNewFolder, handleCreateIndex, handleRename, handleDelete],
   );
 
   // Default: all folders collapsed, showing only the top level

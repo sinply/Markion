@@ -71,6 +71,7 @@ function enDictStub() {
     undo: "Undo", redo: "Redo", cut: "Cut", copy: "Copy", paste: "Paste", selectAll: "Select All",
     openFolder: "Open Folder…", openFile: "Open File…", save: "Save", saveAs: "Save As…",
     exportHtml: "Export as HTML…", exportMarkdown: "Export as Markdown…", exportPdf: "Export as PDF…",
+    exportImage: "Export as Image (PNG)…",
     newDailyNote: "Open Today's Note", insertTemplate: "Insert Template…",
     editProperties: "Edit Properties…",
     reopenClosed: "Reopen Closed Tab", fullscreen: "Toggle Fullscreen",

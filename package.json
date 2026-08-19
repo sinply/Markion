@@ -1,7 +1,7 @@
 {
   "name": "markion",
   "private": true,
-  "version": "0.11.5",
+  "version": "0.11.6",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -25,7 +25,9 @@
     "@types/markdown-it": "^14.1.2",
     "@vitest/ui": "^3.2.7",
     "codemirror": "^6.0.2",
+    "html2canvas": "^1.4.1",
     "jsdom": "^25.0.1",
+    "jspdf": "^4.2.1",
     "katex": "^0.18.3",
     "lowlight": "^3.3.0",
     "markdown-it": "^15.0.0",

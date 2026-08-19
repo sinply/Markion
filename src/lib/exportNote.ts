@@ -1,11 +1,19 @@
 import { renderMarkdown } from "../editor/markdown";
 import { useDocStore } from "../stores/docStore";
 import { useVaultStore } from "../stores/vaultStore";
-import { exportFile, readFileBase64 } from "./ipc";
+import { exportFile, readFileBase64, writeFileBase64 } from "./ipc";
 import { save } from "@tauri-apps/plugin-dialog";
 // Inline the KaTeX stylesheet so the exported HTML renders formulas without
 // any external dependency (local-first: no CDN).
 import katexCss from "katex/dist/katex.min.css?raw";
+
+// Lazy-load heavy renderers only when the corresponding export runs.
+function lazyHtml2canvas(): Promise<typeof import("html2canvas").default> {
+  return import("html2canvas").then((m) => m.default);
+}
+function lazyJsPdf(): Promise<typeof import("jspdf").jsPDF> {
+  return import("jspdf").then((m) => m.jsPDF);
+}
 
 /** Private-use placeholder wrapping a math run, so markdown-it can't mangle
  *  `$...$` content (e.g. `$a*b$` becoming italics) before KaTeX sees it. */
@@ -228,4 +236,100 @@ export async function exportActivePdf(): Promise<void> {
     docRel: active.path,
   });
   printHtml(html);
+}
+
+/** Render an HTML document to a canvas (offscreen, at the exported width). */
+export async function htmlToCanvas(html: string, width = 820): Promise<HTMLCanvasElement> {
+  const holder = document.createElement("div");
+  holder.style.position = "fixed";
+  holder.style.left = "-10000px";
+  holder.style.top = "0";
+  holder.style.width = `${width}px`;
+  holder.style.background = "#ffffff";
+  holder.style.zIndex = "-1";
+  holder.innerHTML = html;
+  document.body.appendChild(holder);
+  try {
+    const html2canvas = await lazyHtml2canvas();
+    const canvas = await html2canvas(holder, {
+      scale: 2,
+      backgroundColor: "#ffffff",
+      useCORS: true,
+    });
+    return canvas;
+  } finally {
+    document.body.removeChild(holder);
+  }
+}
+
+function base64FromCanvas(canvas: HTMLCanvasElement, mime: string, quality?: number): string {
+  return canvas.toDataURL(mime, quality).split(",")[1] ?? "";
+}
+
+/** Export the active note as a real PDF file (renders the note to an image
+ *  canvas and paginates it into a jsPDF document, saved via the dialog). */
+export async function exportActivePdfFile(): Promise<void> {
+  const docStore = useDocStore.getState();
+  const vaultRoot = useVaultStore.getState().vaultRoot;
+  const active = docStore.openDocs.find((d) => d.id === docStore.activeDocId);
+  if (!vaultRoot || !active) return;
+  const base = active.title.replace(/\.md$/i, "");
+  const picked = await save({
+    defaultPath: `${base}.pdf`,
+    filters: [{ name: "PDF", extensions: ["pdf"] }],
+  });
+  if (typeof picked !== "string") return;
+  const html = await buildExportHtml(docStore.activeContent, active.title, {
+    vaultRoot,
+    docRel: active.path,
+  });
+  const canvas = await htmlToCanvas(html);
+  const jsPDF = await lazyJsPdf();
+  const pdf = new jsPDF({ unit: "pt", format: "a4" });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const imgHeight = (canvas.height * pageWidth) / canvas.width;
+  let remaining = imgHeight;
+  let offset = 0;
+  pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, offset, pageWidth, imgHeight);
+  remaining -= pageHeight;
+  while (remaining > 0) {
+    offset -= pageHeight;
+    pdf.addPage();
+    pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, offset, pageWidth, imgHeight);
+    remaining -= pageHeight;
+  }
+  const bytes = pdf.output("arraybuffer");
+  await writeFileBase64(picked, base64FromArrayBuffer(bytes));
+}
+
+/** Export the active note as a PNG image of its rendered content. */
+export async function exportActiveImage(): Promise<void> {
+  const docStore = useDocStore.getState();
+  const vaultRoot = useVaultStore.getState().vaultRoot;
+  const active = docStore.openDocs.find((d) => d.id === docStore.activeDocId);
+  if (!vaultRoot || !active) return;
+  const base = active.title.replace(/\.md$/i, "");
+  const picked = await save({
+    defaultPath: `${base}.png`,
+    filters: [{ name: "PNG", extensions: ["png"] }],
+  });
+  if (typeof picked !== "string") return;
+  const html = await buildExportHtml(docStore.activeContent, active.title, {
+    vaultRoot,
+    docRel: active.path,
+  });
+  const canvas = await htmlToCanvas(html);
+  await writeFileBase64(picked, base64FromCanvas(canvas, "image/png"));
+}
+
+/** ArrayBuffer -> base64 (jsPDF output). */
+export function base64FromArrayBuffer(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
 }

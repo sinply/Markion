@@ -40,6 +40,7 @@ pub fn run() {
             commands::scan_tags,
             commands::export_file,
             commands::read_file_base64,
+            commands::write_file_base64,
             commands::file_size,
             commands::read_config,
             commands::save_config,

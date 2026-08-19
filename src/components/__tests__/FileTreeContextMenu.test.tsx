@@ -40,7 +40,7 @@ const spies = {
   readFile: vi.fn().mockResolvedValue("note body"),
   createFile: vi.fn().mockResolvedValue(undefined),
   createFolder: vi.fn().mockResolvedValue(undefined),
-  deletePath: vi.fn().mockResolvedValue(undefined),
+  trashPath: vi.fn().mockResolvedValue(undefined),
   renameWithLinks: vi.fn().mockResolvedValue(0),
 };
 
@@ -78,7 +78,7 @@ vi.mock("../../lib/ipc", () => ({
   readFile: (...a: any[]) => spies.readFile(...a),
   createFile: (...a: any[]) => spies.createFile(...a),
   createFolder: (...a: any[]) => spies.createFolder(...a),
-  deletePath: (...a: any[]) => spies.deletePath(...a),
+  trashPath: (...a: any[]) => spies.trashPath(...a),
   renameWithLinks: (...a: any[]) => spies.renameWithLinks(...a),
 }));
 
@@ -118,20 +118,20 @@ describe("FileTree context menu", () => {
     const ids = [...menu.querySelectorAll("[data-menu-id]")].map(
       (el) => el.getAttribute("data-menu-id"),
     );
-    expect(ids).toEqual(["new-note", "rename", "delete"]);
+    expect(ids).toEqual(["new-note", "rename", "delete", "trash"]);
   });
 
-  it("right-clicking a folder shows all four items", () => {
+  it("right-clicking a folder shows all items", () => {
     render(<FileTree />);
     openMenuOn("notes");
     const menu = screen.getByTestId("context-menu");
     const ids = [...menu.querySelectorAll("[data-menu-id]")].map(
       (el) => el.getAttribute("data-menu-id"),
     );
-    expect(ids).toEqual(["new-note", "new-folder", "rename", "delete"]);
+    expect(ids).toEqual(["new-note", "new-folder", "new-index", "rename", "delete", "trash"]);
   });
 
-  it("right-clicking empty tree area offers New Note / New Folder only", () => {
+  it("right-clicking empty tree area offers New Note / New Folder / Trash", () => {
     render(<FileTree />);
     // The header strip above the tree rows is not a [data-path] row.
     fireEvent.contextMenu(screen.getByText("vault"), { clientX: 5, clientY: 5 });
@@ -139,7 +139,7 @@ describe("FileTree context menu", () => {
     const ids = [...menu.querySelectorAll("[data-menu-id]")].map(
       (el) => el.getAttribute("data-menu-id"),
     );
-    expect(ids).toEqual(["new-note", "new-folder"]);
+    expect(ids).toEqual(["new-note", "new-folder", "trash"]);
   });
 
   it("Escape closes the menu", () => {
@@ -229,7 +229,7 @@ describe("FileTree context menu", () => {
     openMenuOn("notes");
     fireEvent.click(screen.getByText("Delete"));
     expect(confirmSpy).toHaveBeenCalled();
-    await waitFor(() => expect(spies.deletePath).toHaveBeenCalledWith("/vault", "notes"), WAIT);
+    await waitFor(() => expect(spies.trashPath).toHaveBeenCalledWith("/vault", "notes"), WAIT);
     expect(spies.closeDocsUnder).toHaveBeenCalledWith("notes");
     expect(spies.loadTree).toHaveBeenCalledWith("/vault");
   });
@@ -239,7 +239,7 @@ describe("FileTree context menu", () => {
     render(<FileTree />);
     openMenuOn("intro.md");
     fireEvent.click(screen.getByText("Delete"));
-    expect(spies.deletePath).not.toHaveBeenCalled();
+    expect(spies.trashPath).not.toHaveBeenCalled();
     expect(spies.closeDocsUnder).not.toHaveBeenCalled();
   });
 });

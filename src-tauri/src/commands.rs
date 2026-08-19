@@ -252,6 +252,24 @@ mod tests {
         let err = restore_trash(root.clone(), "gone.md".to_string()).unwrap_err();
         assert!(err.contains("already exists"), "unexpected error: {err}");
     }
+
+    #[test]
+    fn write_file_base64_roundtrip() {
+        use base64::Engine as _;
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("out.png").to_string_lossy().to_string();
+        let bytes = vec![0x89u8, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+        write_file_base64(path.clone(), b64).unwrap();
+        assert_eq!(std::fs::read(dir.path().join("out.png")).unwrap(), bytes);
+    }
+
+    #[test]
+    fn write_file_base64_rejects_invalid_base64() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("out.png").to_string_lossy().to_string();
+        assert!(write_file_base64(path, "!!!not-base64!!!".to_string()).is_err());
+    }
 }
 
 #[tauri::command]
@@ -527,6 +545,21 @@ pub fn read_file_base64(path: String) -> Result<String, String> {
     use base64::Engine as _;
     let bytes = std::fs::read(Path::new(&path)).map_err(|e| e.to_string())?;
     Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
+}
+
+/// Write base64-encoded binary content to an absolute path (used by PDF/image
+/// export, which produce binary buffers).
+#[tauri::command]
+pub fn write_file_base64(path: String, base64_data: String) -> Result<(), String> {
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(base64_data.as_bytes())
+        .map_err(|e| e.to_string())?;
+    let full = Path::new(&path);
+    if let Some(parent) = full.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(full, &bytes).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
