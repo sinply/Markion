@@ -18,16 +18,70 @@ A fast, local-first **Markdown editor** for Windows, macOS, and Linux. Obsidian-
 
 ## Features
 
+### ✍️ Writing & Editing
+
 | | |
 |---|---|
 | 🪄 **Live Preview** | Obsidian-style: other lines render as you type; the line your cursor is on shows the markdown source so you can edit directly. Edit ⇄ Preview modes. |
-| 🌲 **Hierarchical Document Tree** | Yuque-style nested folders, collapse/expand, double-click folders, drag-and-drop reordering and cross-folder moves, hide dotfiles. |
-| 🧭 **Outline / Backlinks / Graph** | Toggleable right panels: live outline, `[[wikilink]]` backlinks, and a zoomable/panable note graph. |
-| ✅ **GFM + Extras** | Tables, task lists, strikethrough, syntax highlighting, Mermaid diagrams, KaTeX math (`$$..$$` & `$..$`), YAML frontmatter. |
+| 🖱️ **Multi-cursor & Column select** | Alt+click to add cursors, Shift+Alt+drag for column selection. |
+| 🎯 **`[[note#heading]]` anchors** | Wikilinks with a `#heading` anchor resolve correctly and scroll to the target heading on open. |
+| 🧘 **Focus mode** | Active-line highlight + typewriter centering (Typora-style). |
+| 📑 **Heading folding** | Fold gutters + keyboard shortcuts to collapse/expand sections. |
+| 🎛️ **Editor context menu** | Cut / copy / paste / select-all on right-click. |
+
+### 📄 Markdown Rendering
+
+| | |
+|---|---|
+| ✅ **GFM + Extras** | Tables, task lists, strikethrough, footnotes `[^1]`, highlight `==text==`, superscript `^x^` / subscript `~x~`. |
+| 📊 **Mermaid** | Full diagram support: `mermaid`, `gantt`, `sequenceDiagram`, `flowchart`, `classDiagram`, `erDiagram`, `pie`, `journey`, `mindmap` and more. Click a diagram to flip back to source. |
+| 🧮 **KaTeX math** | Block `$$..$$` and inline `$..$` formulas. |
+| 💬 **Callouts** | `> [!note]` / `[!tip]` / `[!warning]` / … — 16 types rendered as colored cards. |
+| 🎨 **Syntax highlighting** | 190+ languages via highlight.js. |
+| 🔗 **Paste URL as link** | Pasting a bare URL becomes `[selected](url)` automatically. |
+
+### 🗂️ Notes & Organization
+
+| | |
+|---|---|
+| 🌲 **Hierarchical document tree** | Yuque-style nested folders, drag-and-drop reorder / cross-folder moves, context menu (new/rename/delete → trash), hide dotfiles. |
+| 🏷️ **Tags** | Clickable `#tag` highlighting in the editor + a tag panel that filters notes. |
+| 🧭 **Outline / Backlinks / Graph** | Toggleable right panels: live outline (drag headings to reorder), `[[wikilink]]` backlinks, zoomable note graph. |
+| 🏢 **Multi-vault** | Switch between recently opened vaults from the File menu. |
+| 🔤 **Smart rename** | Renaming a file/folder rewrites every `[[wikilink]]` reference vault-wide. |
+| 📑 **Tab management** | Drag tabs to reorder, reopen recently closed tabs (Ctrl+Shift+T). |
+
+### ⚙️ Productivity
+
+| | |
+|---|---|
+| ⌨️ **Command palette** | Every action searchable (Ctrl+P). |
+| ✨ **Slash commands** | `/` opens 19 markdown insertions. |
+| 📝 **Templates & Daily notes** | Configurable template folder + "Open Today's Note" with a daily template. |
+| 🏷️ **Properties editor** | Visual editor for YAML frontmatter (title, tags, dates, custom keys). |
+| 📋 **Table of Contents** | Insert a clickable, indented TOC generated from your headings. |
+| 🔧 **Customizable shortcuts** | Rebind any shortcut in Preferences; stored per-vault, applies instantly. |
+| 🔍 **Find & replace** | In-editor Ctrl+F/H plus vault-wide regex search & replace. |
+| 🗑️ **In-app recycle bin** | Deleted files go to `.markion/trash`; restore from "Recently Deleted". |
+| 🖱️ **Table operations** | Add/remove rows & columns from the table toolbar; "Format Table" command. |
+
+### 📤 Export
+
+| | |
+|---|---|
+| 🌐 **HTML** | Self-contained: KaTeX + highlight.js styles inlined, local images base64-inlined. |
+| 📄 **PDF** | Direct PDF file export (rendered via canvas), or the OS print dialog. |
+| 🖼️ **PNG** | Export the note as an image. |
+| 📄 **Markdown** | Raw source export. |
+
+### 🎨 Appearance & Language
+
+| | |
+|---|---|
 | 🎨 **Themes & Fonts** | 11 themes (Light/Dark/Sepia/Eye-care/Nord/Dracula/Solarized/Tokyo/Catppuccin/Gruvbox/System) + 5 font choices. |
-| 🌐 **Bilingual** | 中文 / English UI with a built-in documentation (F1) and keyboard-shortcuts overview. |
-| 📁 **Local-First** | Reads and writes plain `.md` files on disk. No proprietary database, no lock-in. Default vault auto-opens on startup. |
-| ⚡ **Fast & Light** | CodeMirror 6 editor core and a Rust (Tauri 2) backend. Small footprint, low memory, instant startup. |
+| 🌐 **Bilingual** | 中文 / English UI with built-in documentation (F1) and a shortcut overview. |
+| 📁 **Local-first** | Plain `.md` files on disk, no proprietary database. Auto-save, external-change detection, default vault auto-open. |
+| ⚡ **Fast & Light** | CodeMirror 6 editor core and a Rust (Tauri 2) backend. Small footprint, instant startup. |
 
 ---
 
@@ -113,23 +167,6 @@ The file system is the **single source of truth**; `.markion/index.json` stores 
 - **Same-folder drag-reorder** → updates the index only
 - **Cross-folder move** → renames the file on disk + updates both folders' index entries
 - **External delete/rename** → the index self-cleans; nothing blocks
-
----
-
-## Roadmap
-
-**Done**
-- [x] Live preview (headings / bold / italic / inline code / links / tables / task lists / code blocks / blockquotes / images / math)
-- [x] Hierarchical file tree + drag-and-drop + double-click expand + hide dotfiles
-- [x] Outline / Backlinks / Graph panels (toggleable) + graph zoom & pan
-- [x] Image paste/drag-drop UI integration
-- [x] External file-change watcher (live tree refresh + reload)
-- [x] Settings persistence (`.markion/config.json`) + default vault auto-open
-- [x] Mermaid diagrams + KaTeX math (block `$$...$$` + inline `$...$`)
-- [x] Backlinks panel ([[wikilink]] reverse lookup)
-- [x] Menu bar: File · Edit · Format · View · Help (bilingual 中文/English)
-- [x] 11 themes + font choices + word count
-- [x] In-app documentation (F1)
 
 ---
 
