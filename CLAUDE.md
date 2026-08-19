@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Session start (mandatory)
+
+**Always sync git BEFORE starting any work**: `git pull` first thing in every session. The repo is worked on from multiple machines/sessions - remote `main` may have commits this session doesn't know about (e.g. v0.11.4 features once landed remotely while a local session was unaware). Pulling first prevents duplicate work, merge conflicts, and stale-code edits. If `src-tauri/Cargo.lock` has local build-artifact noise, discard it (`git checkout -- src-tauri/Cargo.lock`) and pull again. Also read `docs/BACKLOG.md` to avoid re-implementing existing features.
+
 ## Project
 
 Markion — a Tauri 2 desktop Markdown editor with Obsidian-style live preview and a Yuque-style document tree. Local-first, works with plain `.md` files on disk.
