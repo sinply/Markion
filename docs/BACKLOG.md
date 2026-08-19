@@ -13,7 +13,7 @@
 - 标签面板(点击筛选出所有带该标签的笔记)、全文搜索 + 正则替换
 - 命令面板、heading 折叠、KaTeX 公式、Mermaid(含别名,gantt 等)、GFM 表格/任务列表/删除线
 - 190+ 语言代码高亮(lowlight)
-- **重命名自动更新引用**(v0.11.4):文件/文件夹重命名时全库 `[[旧名]]` → `[[新名]]`,
+- **重命名自动更新引用**(v0.11.4):文件/文件夹重命名时全库 `[[旧名]]` -> `[[新名]]`,
   基于增量链接索引(Rust `rename_with_links`),反链已去重
 - **模板系统 + 每日笔记**(v0.11.4):可配模板文件夹(默认 `Templates`)、插入模板对话框、
   打开今日笔记(自动套用 `Daily.md` 模板)
@@ -22,18 +22,35 @@
 - **导出**(v0.11.4):HTML(自包含,KaTeX/高亮/图片 base64 内联)、纯 Markdown、PDF(系统打印对话框)
 
 ### 对齐语雀 / 通用编辑器
-- 文档树:嵌套、拖拽排序/移动、右键菜单(新建/重命名/删除→回收站)、隐藏 dotfiles
+- 文档树:嵌套、拖拽排序/移动、右键菜单(新建/重命名/删除->回收站)、隐藏 dotfiles
 - 自动保存(1s 防抖)、外部变更冲突对话框、外部删除文件对话框(v0.11.3)
 - 超大文件(>5MB)打开前警告(v0.11.3)
 - 主题 ×11、字体 ×5、中英双语、快捷键、最近文件、字数统计、YAML frontmatter 预览卡片
+- **图片粘贴/拖拽插入**(审计补记):`media.ts::imagePasteDropExtension` + `saveImage`,
+  自动存 assets、`assets_strategy`/`path_style` 可配
+- **编辑器内查找替换**(审计补记):Ctrl+F / Ctrl+H(CM6 `searchKeymap` 内置)
+- **外部 URL 点击**(审计补记):`livePreview.ts` `openUrl` 调系统打开
 
-## 待实现功能(按优先级)
+## 待实现功能(按优先级,2026-08-18 审计更新)
 
 ### 🔴 高优先级
 - [ ] **属性面板编辑(Properties)**
   - 现状:预览模式已把 YAML frontmatter 渲染成卡片,但编辑模式无可视化编辑
   - 方案:新建属性编辑弹窗(标题/标签/日期/自定义键值),读写文档头部 YAML;
     或参考 Obsidian 右侧 Properties 面板,CM6 内嵌
+- [ ] **`[[note#heading]]` 锚点解析 + 跳转**(审计新增,含 bug)
+  - 现状:`wikiIndex.ts::resolveWikiLink` 不剥 `#heading`,`[[note#Sec]]` 被误判
+    未解析标红,点击还会误创建 `note#Sec.md`;已解析链接点击只 openNote 不定位
+  - 方案:解析前 split("#");openNote 带 heading 参数,复用 Outline 的
+    `coordsAtPos` 滚动定位;涉及 `wikiIndex.ts`/`livePreview.ts`/`openNote.ts`
+- [ ] **多光标 / 列选择**(审计新增)
+  - 现状:未启用 `allowMultipleSelections`,只能单光标
+  - 方案:`codemirror.ts` 加 `EditorState.allowMultipleSelections.of(true)` +
+    `drawSelection()`,`commands.ts` 命令循环处理选区
+- [ ] **脚注 `[^1]`、高亮 `==text==`、上下标**(审计新增)
+  - 现状:markdown-it 仅启用 table/strikethrough/taskLists,无对应插件与装饰
+  - 方案:`markdown-it-footnote`/`mark`/`sup`/`sub` 插件 + Lezer 扩展 +
+    livePreview 装饰;涉及 `markdown.ts`/`codemirror.ts`/`livePreview.ts`
 - [ ] **粘贴 URL 自动转 markdown 链接**
   - 剪贴板内容是纯 URL 时,粘贴自动变成 `[text](url)`(或 `[url](url)`)
   - 方案:CM6 `handlePaste` 拦截 + 解析剪贴板文本
@@ -42,15 +59,52 @@
 - [ ] **代码块复制按钮 + 行号**
   - 预览中的代码块右上角加"复制"按钮;可选行号
 - [ ] **目录 TOC 插入**
-  - 命令面板/斜杠命令插入基于大纲的目录列表
+  - 命令面板/斜杠命令插入基于大纲的目录列表(斜杠命令现有 19 项,无 TOC)
   - 方案:复用大纲 hook 生成 `- [标题](#锚点)` 列表
+- [ ] **编辑器内右键菜单**(审计新增)
+  - 现状:仅 FileTree 有 ContextMenu,编辑器右键无菜单(搜 `contextmenu` 零命中)
+  - 方案:`codemirror.ts` 加 `domEventHandlers.contextmenu`,复用
+    `ContextMenu.tsx`,接 cut/copy/paste 命令
+- [ ] **标签页拖拽重排**(审计新增)
+  - 现状:`Tabs.tsx` 无 draggable,只有切换/关闭
+  - 方案:HTML5 拖拽重排 `docStore.openDocs`
+- [ ] **快捷键自定义**(审计新增)
+  - 现状:`ShortcutsDialog` 只读展示,键位硬编码在 `useCommands.ts`,config 无存储
+  - 方案:config 加 keymap 映射,`keymap.of` 动态构建
+- [ ] **侧栏/面板折叠 + 状态记忆**(审计新增)
+  - 现状:三栏只能 resize 无折叠;面板宽度不跨会话记忆
+  - 方案:Layout 加折叠 toggle,尺寸/折叠态写 settingsStore
+- [ ] **图片点击放大预览**(审计新增)
+  - 现状:ImageWidget 只渲染,无 lightbox
+  - 方案:点击开覆盖层大图或调系统 opener
+- [ ] **拖拽非图片文件到编辑器插入链接**(审计新增)
+  - 现状:`media.ts` drop 仅 `filter(isImageFile)`,其他文件静默丢弃
+  - 方案:drop 分支:非图片文件插入 `[name](path)`
+- [ ] **全屏 / 禅模式**(审计新增)
+  - 现状:只有聚焦模式(行高亮+打字机),无全屏
+  - 方案:命令面板 toggle,调 Tauri `getCurrentWindow().setFullscreen()`
 - [ ] **最近关闭标签页**
   - uiStore 记录关闭的 tab,菜单/快捷键恢复
+- [ ] **workspaces / 布局记忆**(审计新增)
+  - 现状:重启只恢复 recentFiles,打开标签、面板尺寸全部丢失
+  - 方案:localStorage 存布局 JSON(面板尺寸+openDocs),启动恢复
+
+### 🟢 低优先级(审计新增)
+- [ ] **应用内回收站 / 文件历史版本**:现为系统回收站(`trash::delete`),
+  可改 vault 内 `.markion/trash/` + "最近删除"面板;保存快照做版本历史
+- [ ] **wiki 补全保留原始大小写**(半 bug):索引 stem 转小写,`MyNote.md`
+  补全成 `mynote`;索引需额外保留原始 stem
+- [ ] **大纲面板拖拽移动标题**:`Outline.tsx` 仅 onClick 跳转
+- [ ] **表格对齐/格式化命令**:有 `detectAlign` 但无"格式化表格"命令
+- [ ] **PDF 直接导出免打印对话框**:现为 `printHtml` 系统打印对话框,
+  需引入 PDF 生成方案
+- [ ] **导出为图片**:html2canvas 截渲染区
 
 ### 🔴 大工程(单独评估,工作量大的功能)
 - [ ] **Canvas 无限画布**(Obsidian Canvas)
 - [ ] **发布 / 多端同步**(Obsidian Publish/Sync,需要服务端)
-- [ ] **文档即容器 index.md**(语雀核心:文件夹可绑定一个 index 笔记,打开文件夹显示其内容)
+- [ ] **文档即容器 index.md**(语雀核心):已有雏形--FileTree 双击含
+  index.md 的文件夹会直接打开(v0.11.4 审计确认),缺容器 UI/创建入口/展开联动
 - [ ] **多知识库管理**(语雀:一个应用管理多个 vault,可切换)
 - [ ] **数据表 / 思维导图 / 幻灯片**(语雀特色,均是大工程)
 
