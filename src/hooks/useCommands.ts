@@ -10,6 +10,76 @@ import { getEditorView } from "../editor/registry";
 import { runMarkdownCommand, type MarkdownCommand } from "../editor/commands";
 import { openSearchPanel } from "@codemirror/search";
 import { undo, redo } from "@codemirror/commands";
+import { effectiveShortcuts, parseCombo, type Combo } from "../lib/shortcuts";
+
+/** Execute a shortcut-command id (shared with the shortcuts dialog labels). */
+function runShortcut(id: string): void {
+  const uiStore = useUiStore.getState();
+  switch (id) {
+    case "app:save":
+      void saveActive(false);
+      break;
+    case "app:saveAs":
+      void saveActive(true);
+      break;
+    case "app:openFile":
+      uiStore.requestOpenFile();
+      break;
+    case "app:openFolder":
+      uiStore.requestOpenFolder();
+      break;
+    case "app:toggleMode": {
+      const mode = uiStore.editorMode;
+      uiStore.setEditorMode(mode === "live" ? "preview" : "live");
+      break;
+    }
+    case "app:closeTab": {
+      const docId = useDocStore.getState().activeDocId;
+      if (docId) useDocStore.getState().closeDoc(docId);
+      break;
+    }
+    case "app:find": {
+      const view = getEditorView();
+      if (view) {
+        void openSearchPanel(view);
+        view.focus();
+      }
+      break;
+    }
+    case "app:vaultSearch":
+      uiStore.setSearchOpen(!uiStore.searchOpen);
+      break;
+    case "app:reopenTab": {
+      const top = uiStore.takeRecentlyClosed();
+      if (!top) break;
+      void import("../stores/vaultStore").then((m) => {
+        const root = m.useVaultStore.getState().vaultRoot;
+        if (root) void import("../lib/openNote").then((mod) => mod.openNote(root, top.path));
+      });
+      break;
+    }
+    default:
+      if (id.startsWith("md:")) {
+        const cmd = id.slice(3);
+        if (cmd === "bold" || cmd === "italic" || cmd === "heading1" ||
+            cmd === "heading2" || cmd === "heading3") {
+          uiStore.requestMarkdown(cmd as MarkdownCommand);
+        }
+      }
+  }
+}
+
+/** Effective combo table (defaults + user overrides), rebuilt per keydown so
+ *  config changes apply instantly. */
+function combos(): { id: string; combo: Combo }[] {
+  const overrides = useSettingsStore.getState().shortcuts;
+  const out: { id: string; combo: Combo }[] = [];
+  for (const [id, spec] of Object.entries(effectiveShortcuts(overrides))) {
+    const combo = parseCombo(spec);
+    if (combo) out.push({ id, combo });
+  }
+  return out;
+}
 
 /** Wire menu-bar / keyboard commands to app actions. */
 export function useCommands() {
@@ -105,72 +175,29 @@ export function useCommands() {
     view.focus();
   }, [ui.mdTick, ui.mdCmd]);
 
-  // Keyboard shortcuts. Listeners are attached once and read fresh state via
-  // getState() so UI-store changes don't re-attach them on every tick.
+  // Keyboard shortcuts, table-driven: the built-in bindings (shortcuts.ts)
+  // plus any user overrides from settings. Listeners are attached once and
+  // read fresh state via getState() so config changes apply without re-attach.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       // Skip IME composition events (e.g. Chinese pinyin input): the key
       // pressed is part of the composition, not a shortcut.
       if (e.isComposing || e.keyCode === 229) return;
-      if (!(e.ctrlKey || e.metaKey)) return;
-      const k = e.key.toLowerCase();
-      if (e.shiftKey || e.altKey) return;
-      if (k === "s") {
-        e.preventDefault();
-        void saveActive(false);
-      } else if (k === "o") {
-        e.preventDefault();
-        useUiStore.getState().requestOpenFile();
-      } else if (k === "e") {
-        e.preventDefault();
-        const { editorMode } = useUiStore.getState();
-        useUiStore.getState().setEditorMode(editorMode === "live" ? "preview" : "live");
-      } else if (k === "b") {
-        e.preventDefault();
-        useUiStore.getState().requestMarkdown("bold");
-      } else if (k === "i") {
-        e.preventDefault();
-        useUiStore.getState().requestMarkdown("italic");
-      } else if (k === "1" || k === "2" || k === "3") {
-        e.preventDefault();
-        const cmd = k === "1" ? "heading1" : k === "2" ? "heading2" : "heading3";
-        useUiStore.getState().requestMarkdown(cmd as MarkdownCommand);
-      } else if (k === "w") {
-        e.preventDefault();
-        // close the active tab
-        const id = useDocStore.getState().activeDocId;
-        if (id) useDocStore.getState().closeDoc(id);
-      } else if (k === "f") {
-        // Ctrl+F: focus the editor and open the CM6 search panel. When focus
-        // is already in the editor, its own keymap handled the key (and
-        // preventDefault'ed it) - respect that and do nothing.
-        if (e.defaultPrevented) return;
-        e.preventDefault();
-        const view = getEditorView();
-        if (view) {
-          void openSearchPanel(view);
-          view.focus();
+      const key = e.key.toLowerCase();
+      for (const { id, combo } of combos()) {
+        if (
+          e.ctrlKey === combo.ctrl &&
+          e.shiftKey === combo.shift &&
+          e.altKey === combo.alt &&
+          key === combo.key
+        ) {
+          // Ctrl+F: when focus is inside the editor, CM6's own keymap already
+          // handled the key (and preventDefault'ed it) - respect that.
+          if (id === "app:find" && e.defaultPrevented) return;
+          e.preventDefault();
+          runShortcut(id);
+          return;
         }
-      }
-    };
-    const shiftHandler = (e: KeyboardEvent) => {
-      if (e.isComposing || e.keyCode === 229) return;
-      if (!(e.ctrlKey || e.metaKey) || !e.shiftKey) return;
-      const k = e.key.toLowerCase();
-      if (k === "s") {
-        e.preventDefault();
-        void saveActive(true);
-      } else if (k === "o") {
-        e.preventDefault();
-        useUiStore.getState().requestOpenFolder();
-      } else if (k === "e") {
-        e.preventDefault();
-        const { editorMode } = useUiStore.getState();
-        useUiStore.getState().setEditorMode(editorMode === "live" ? "preview" : "live");
-      } else if (k === "f") {
-        // Ctrl+Shift+F: vault-wide full-text search (toggle)
-        e.preventDefault();
-        useUiStore.getState().setSearchOpen(!useUiStore.getState().searchOpen);
       }
     };
     const helpHandler = (e: KeyboardEvent) => {
@@ -180,11 +207,9 @@ export function useCommands() {
       }
     };
     window.addEventListener("keydown", handler);
-    window.addEventListener("keydown", shiftHandler);
     window.addEventListener("keydown", helpHandler);
     return () => {
       window.removeEventListener("keydown", handler);
-      window.removeEventListener("keydown", shiftHandler);
       window.removeEventListener("keydown", helpHandler);
     };
   }, []);

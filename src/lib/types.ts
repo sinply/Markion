@@ -43,6 +43,8 @@ export interface Settings {
   showGraph: boolean;
   showTags: boolean;
   showWordCount: boolean;
+  /** User-customized shortcuts: command id -> "Ctrl+Shift+K". Empty = defaults. */
+  shortcuts: Record<string, string>;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -59,4 +61,5 @@ export const DEFAULT_SETTINGS: Settings = {
   showGraph: true,
   showTags: true,
   showWordCount: true,
+  shortcuts: {},
 };

@@ -14,6 +14,7 @@ import { DeletedDialog } from "./components/DeletedDialog";
 import { SearchDialog } from "./components/SearchDialog";
 import { TemplatesDialog } from "./components/TemplatesDialog";
 import { PropertiesDialog } from "./components/PropertiesDialog";
+import { TrashDialog } from "./components/TrashDialog";
 import { useTheme } from "./hooks/useTheme";
 import { useFont } from "./hooks/useFont";
 import { useCommands } from "./hooks/useCommands";
@@ -121,6 +122,7 @@ export default function App() {
       <SearchDialog />
       <TemplatesDialog />
       <PropertiesDialog />
+      <TrashDialog />
     </>
   );
 }

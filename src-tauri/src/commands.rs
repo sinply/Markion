@@ -194,6 +194,64 @@ mod tests {
             Err(e) => eprintln!("skipped (no trash service): {e}"),
         }
     }
+
+    #[test]
+    fn trash_path_moves_into_vault_trash() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        std::fs::write(dir.path().join("gone.md"), "bye").unwrap();
+        trash_path(root.clone(), "gone.md".to_string()).unwrap();
+        assert!(!dir.path().join("gone.md").exists());
+        assert!(dir.path().join(".markion/trash/gone.md").exists());
+    }
+
+    #[test]
+    fn trash_path_clash_appends_suffix() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        std::fs::write(dir.path().join("a.md"), "1").unwrap();
+        trash_path(root.clone(), "a.md".to_string()).unwrap();
+        // Trash the same relative path again -> clash with the first copy.
+        std::fs::write(dir.path().join("a.md"), "2").unwrap();
+        trash_path(root.clone(), "a.md".to_string()).unwrap();
+        let trashed: Vec<_> = list_trash(root.clone())
+            .unwrap()
+            .into_iter()
+            .map(|e| e.path)
+            .collect();
+        assert!(trashed.contains(&"a.md".to_string()));
+        assert!(trashed.iter().any(|p| p.contains("a (trashed")));
+    }
+
+    #[test]
+    fn list_trash_returns_nothing_when_empty() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        assert!(list_trash(root).unwrap().is_empty());
+    }
+
+    #[test]
+    fn restore_trash_moves_back_to_original_path() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        std::fs::write(dir.path().join("gone.md"), "bye").unwrap();
+        trash_path(root.clone(), "gone.md".to_string()).unwrap();
+        restore_trash(root.clone(), "gone.md".to_string()).unwrap();
+        assert!(dir.path().join("gone.md").exists());
+        assert_eq!(std::fs::read_to_string(dir.path().join("gone.md")).unwrap(), "bye");
+        assert!(!dir.path().join(".markion/trash/gone.md").exists());
+    }
+
+    #[test]
+    fn restore_trash_fails_when_destination_occupied() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        std::fs::write(dir.path().join("gone.md"), "bye").unwrap();
+        trash_path(root.clone(), "gone.md".to_string()).unwrap();
+        std::fs::write(dir.path().join("gone.md"), "new").unwrap();
+        let err = restore_trash(root.clone(), "gone.md".to_string()).unwrap_err();
+        assert!(err.contains("already exists"), "unexpected error: {err}");
+    }
 }
 
 #[tauri::command]
@@ -305,6 +363,120 @@ pub fn delete_path(vault_root: String, path: String) -> Result<(), String> {
         return Err(format!("path does not exist: {}", path));
     }
     trash::delete(&full).map_err(|e| e.to_string())
+}
+
+/// The vault-internal trash directory: `<root>/.markion/trash`.
+fn trash_dir(root: &Path) -> PathBuf {
+    root.join(".markion").join("trash")
+}
+
+/// Move a file or folder into the vault-internal trash (`.markion/trash/...`),
+/// preserving its relative path so it can be restored. On a name clash inside
+/// the trash a numeric suffix is appended.
+#[tauri::command]
+pub fn trash_path(vault_root: String, path: String) -> Result<(), String> {
+    let root = Path::new(&vault_root);
+    let full = root.join(&path);
+    if !full.exists() {
+        return Err(format!("path does not exist: {}", path));
+    }
+    let dest = trash_dir(root).join(&path);
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    if dest.exists() {
+        let stem = dest
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "item".into());
+        let ext = dest
+            .extension()
+            .map(|e| format!(".{}", e.to_string_lossy()))
+            .unwrap_or_default();
+        for i in 1.. {
+            let cand = dest.with_file_name(format!("{stem} (trashed {i}){ext}"));
+            if !cand.exists() {
+                return std::fs::rename(&full, &cand).map_err(|e| e.to_string());
+            }
+        }
+    }
+    std::fs::rename(&full, &dest).map_err(|e| e.to_string())
+}
+
+/// One entry in the vault-internal trash.
+#[derive(serde::Serialize)]
+pub struct TrashEntry {
+    /// Path relative to the trash dir (== original vault-relative path,
+    /// possibly suffixed on clash).
+    pub path: String,
+    pub name: String,
+    pub kind: String,
+    /// Last-modified unix seconds, newest first in list_trash.
+    pub modified: u64,
+}
+
+/// List the vault-internal trash, newest first.
+#[tauri::command]
+pub fn list_trash(vault_root: String) -> Result<Vec<TrashEntry>, String> {
+    let root = Path::new(&vault_root);
+    let dir = trash_dir(root);
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+    let mut entries = Vec::new();
+    for entry in walkdir::WalkDir::new(&dir)
+        .min_depth(1)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let abs = entry.path();
+        let rel = abs
+            .strip_prefix(&dir)
+            .map_err(|e| e.to_string())?
+            .to_string_lossy()
+            .replace('\\', "/");
+        let modified = abs
+            .metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        entries.push(TrashEntry {
+            name: abs
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            path: rel,
+            kind: if abs.is_dir() { "folder".into() } else { "file".into() },
+            modified,
+        });
+    }
+    entries.sort_by(|a, b| b.modified.cmp(&a.modified));
+    Ok(entries)
+}
+
+/// Restore an entry from the vault-internal trash back to its original
+/// vault-relative location (the `path` returned by list_trash). Fails if the
+/// destination is already occupied.
+#[tauri::command]
+pub fn restore_trash(vault_root: String, rel_path: String) -> Result<(), String> {
+    let root = Path::new(&vault_root);
+    let src = trash_dir(root).join(&rel_path);
+    if !src.exists() {
+        return Err(format!("not in trash: {}", rel_path));
+    }
+    let dest = root.join(&rel_path);
+    if dest.exists() {
+        return Err(format!("destination already exists: {}", rel_path));
+    }
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::rename(&src, &dest).map_err(|e| e.to_string())
 }
 
 /// Rename/move a file or folder and rewrite every `[[oldstem]]` reference in

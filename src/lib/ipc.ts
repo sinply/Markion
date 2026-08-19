@@ -47,6 +47,29 @@ export async function deletePath(vaultRoot: string, path: string): Promise<void>
   await invoke<void>("delete_path", { vaultRoot, path });
 }
 
+/** Move a file/folder into the vault-internal trash (.markion/trash),
+ *  preserving its relative path so it can be restored. */
+export async function trashPath(vaultRoot: string, path: string): Promise<void> {
+  await invoke<void>("trash_path", { vaultRoot, path });
+}
+
+export interface TrashEntry {
+  path: string;
+  name: string;
+  kind: string;
+  modified: number;
+}
+
+/** List the vault-internal trash, newest first. */
+export async function listTrash(vaultRoot: string): Promise<TrashEntry[]> {
+  return invoke<TrashEntry[]>("list_trash", { vaultRoot });
+}
+
+/** Restore a trashed entry (path from listTrash) to its original location. */
+export async function restoreTrash(vaultRoot: string, relPath: string): Promise<void> {
+  await invoke<void>("restore_trash", { vaultRoot, relPath });
+}
+
 /** Rename/move a file or folder and rewrite every `[[oldstem]]` reference in
  *  the vault. Returns the number of files whose content was rewritten. */
 export async function renameWithLinks(

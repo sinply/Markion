@@ -18,6 +18,8 @@ interface SettingsState extends Settings {
   setShowGraph: (v: boolean) => void;
   setShowTags: (v: boolean) => void;
   setShowWordCount: (v: boolean) => void;
+  setShortcut: (id: string, combo: string) => void;
+  resetShortcuts: () => void;
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -36,7 +38,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   save: async (vaultRoot) => {
     try {
       const { saveConfig } = await import("../lib/ipc");
-      const { load, save, setTheme, setAssetsStrategy, setPathStyle, setTemplateFolder, setShowHiddenFiles, setLivePreview, setLanguage, setFont, setShowOutline, setShowBacklinks, setShowGraph, setShowTags, setShowWordCount, ...settings } = get();
+      const { load, save, setTheme, setAssetsStrategy, setPathStyle, setTemplateFolder, setShowHiddenFiles, setLivePreview, setLanguage, setFont, setShowOutline, setShowBacklinks, setShowGraph, setShowTags, setShowWordCount, setShortcut, resetShortcuts, ...settings } = get();
       await saveConfig(vaultRoot, settings as Settings);
     } catch {
       // IPC not available yet
@@ -56,4 +58,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setShowGraph: (showGraph) => set({ showGraph }),
   setShowTags: (showTags) => set({ showTags }),
   setShowWordCount: (showWordCount) => set({ showWordCount }),
+  setShortcut: (id, combo) =>
+    set((s) => ({ shortcuts: { ...s.shortcuts, [id]: combo } })),
+  resetShortcuts: () => set({ shortcuts: {} }),
 }));

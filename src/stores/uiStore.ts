@@ -71,6 +71,10 @@ interface UiState {
   propertiesOpen: boolean;
   setPropertiesOpen: (b: boolean) => void;
 
+  /** Vault-internal trash viewer (restore deleted files). */
+  trashOpen: boolean;
+  setTrashOpen: (b: boolean) => void;
+
   /** Focus mode: active-line highlight + typewriter centering (session-only). */
   focusMode: boolean;
   setFocusMode: (b: boolean) => void;
@@ -158,6 +162,9 @@ export const useUiStore = create<UiState>((set, get) => ({
 
   propertiesOpen: false,
   setPropertiesOpen: (propertiesOpen) => set({ propertiesOpen }),
+
+  trashOpen: false,
+  setTrashOpen: (trashOpen) => set({ trashOpen }),
 
   focusMode: false,
   setFocusMode: (focusMode) => set({ focusMode }),

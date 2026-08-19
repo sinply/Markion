@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::Path;
 
 /// User settings, persisted to `.markion/config.json`.
@@ -26,6 +27,9 @@ pub struct Settings {
     pub show_graph: bool,
     pub show_tags: bool,
     pub show_word_count: bool,
+    /// User-customized keyboard shortcuts: command id -> "Ctrl+Shift+K".
+    /// Empty (default) means the built-in bindings apply.
+    pub shortcuts: HashMap<String, String>,
 }
 
 impl Default for Settings {
@@ -44,6 +48,7 @@ impl Default for Settings {
             show_graph: true,
             show_tags: true,
             show_word_count: true,
+            shortcuts: HashMap::new(),
         }
     }
 }
@@ -126,5 +131,17 @@ mod tests {
         let mut expected = Settings::default();
         expected.theme = "dark".to_string();
         assert_eq!(s, expected);
+    }
+
+    #[test]
+    fn shortcuts_roundtrip() {
+        let dir = tempdir().unwrap();
+        let mut s = Settings::default();
+        s.shortcuts.insert("md:bold".to_string(), "Ctrl+Shift+B".to_string());
+        s.shortcuts.insert("app:save".to_string(), "Ctrl+Alt+S".to_string());
+        save_config(dir.path(), &s).unwrap();
+        let loaded = load_config(dir.path()).unwrap();
+        assert_eq!(loaded.shortcuts.get("md:bold").unwrap(), "Ctrl+Shift+B");
+        assert_eq!(loaded.shortcuts.get("app:save").unwrap(), "Ctrl+Alt+S");
     }
 }

@@ -4,7 +4,8 @@ import type { NodeRendererProps } from "react-arborist";
 import { useVaultStore } from "../stores/vaultStore";
 import { useDocStore } from "../stores/docStore";
 import { useSettingsStore } from "../stores/settingsStore";
-import { createFile, createFolder, deletePath, readFile, renameWithLinks } from "../lib/ipc";
+import { useUiStore } from "../stores/uiStore";
+import { createFile, createFolder, trashPath, readFile, renameWithLinks } from "../lib/ipc";
 import { useI18n } from "../lib/i18n";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 
@@ -326,13 +327,15 @@ export function FileTree() {
         kind === "folder" ? t.ctxDeleteFolderPrompt(name) : t.ctxDeleteFilePrompt(name);
       if (!window.confirm(msg)) return;
       try {
-        await deletePath(vaultRoot, path);
+        // Delete into the vault-internal trash (`.markion/trash`) so the
+        // entry can be restored from the Trash dialog.
+        await trashPath(vaultRoot, path);
         // Close tabs for the deleted node (and everything under it) before
         // the watcher event arrives, so no conflict dialog can appear.
         closeDocsUnder(path);
         await loadTree(vaultRoot);
       } catch {
-        // delete failed (e.g. trash unavailable) - nothing removed
+        // delete failed - nothing removed
       }
     },
     [vaultRoot, closeDocsUnder, loadTree, t],
@@ -347,6 +350,7 @@ export function FileTree() {
       items.push({ id: "rename", label: t.ctxRename });
       items.push({ id: "delete", label: t.ctxDelete, danger: true });
     }
+    items.push({ id: "trash", label: t.ctxTrash });
     return items;
   }, [menu, t]);
 
@@ -358,6 +362,7 @@ export function FileTree() {
       else if (id === "new-folder") void handleNewFolder(target);
       else if (id === "rename" && target) void handleRename(target);
       else if (id === "delete" && target) void handleDelete(target);
+      else if (id === "trash") useUiStore.getState().setTrashOpen(true);
     },
     [menu, handleNewNote, handleNewFolder, handleRename, handleDelete],
   );
