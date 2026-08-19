@@ -8,6 +8,8 @@ import {
   isImageFile,
   imageAltFromName,
   todayStamp,
+  urlFromClipboard,
+  urlToMarkdown,
 } from "../media";
 
 const ctx = { vaultRoot: "C:/vault", docRel: "notes/sub/a.md" };
@@ -133,5 +135,42 @@ describe("imageAltFromName", () => {
 describe("todayStamp", () => {
   it("returns YYYYMMDD", () => {
     expect(todayStamp()).toMatch(/^\d{8}$/);
+  });
+});
+
+describe("urlFromClipboard", () => {
+  it("accepts http(s) and www URLs", () => {
+    expect(urlFromClipboard("https://a.com/x")).toBe("https://a.com/x");
+    expect(urlFromClipboard("http://a.com")).toBe("http://a.com");
+    expect(urlFromClipboard("www.example.com/a")).toBe("https://www.example.com/a");
+  });
+
+  it("rejects non-URLs, multi-line text, and whitespace", () => {
+    expect(urlFromClipboard("hello world")).toBeNull();
+    expect(urlFromClipboard("not a url")).toBeNull();
+    expect(urlFromClipboard("https://a.com\nhttps://b.com")).toBeNull();
+    expect(urlFromClipboard("")).toBeNull();
+    expect(urlFromClipboard("   ")).toBeNull();
+  });
+});
+
+describe("urlToMarkdown", () => {
+  it("wraps the selection as the link text when one exists", () => {
+    const r = urlToMarkdown("https://a.com", "click me");
+    expect(r).toEqual({ markdown: "[click me](https://a.com)", url: "https://a.com" });
+  });
+
+  it("falls back to the URL itself as text with no selection", () => {
+    const r = urlToMarkdown("https://a.com", "");
+    expect(r?.markdown).toBe("[https://a.com](https://a.com)");
+  });
+
+  it("ignores a multi-line selection as link text", () => {
+    const r = urlToMarkdown("https://a.com", "line one\nline two");
+    expect(r?.markdown).toBe("[https://a.com](https://a.com)");
+  });
+
+  it("returns null for non-URL clipboard text", () => {
+    expect(urlToMarkdown("plain text", "")).toBeNull();
   });
 });

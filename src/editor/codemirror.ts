@@ -5,6 +5,7 @@ import {
   lineNumbers,
   ViewPlugin,
   Decoration,
+  drawSelection,
   type DecorationSet,
 } from "@codemirror/view";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
@@ -121,6 +122,11 @@ export function createEditorState(
   return EditorState.create({
     doc,
     extensions: [
+      // Multiple cursors / column selection (Alt+click adds a cursor,
+      // Shift+Alt+drag selects a column). Draws every selection ourselves
+      // because the browser can only paint one native selection at a time.
+      EditorState.allowMultipleSelections.of(true),
+      drawSelection(),
       lineNumbers(),
       foldGutter(),
       markdown({ base: markdownLanguage, extensions: [Table, TaskList, Strikethrough] }),

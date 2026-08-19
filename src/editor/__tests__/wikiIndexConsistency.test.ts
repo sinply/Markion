@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { setWikiIndex, resolveWikiLink, wikiStems } from "../wikiIndex";
+import { setWikiIndex, resolveWikiLink, wikiStems, wikiHeading } from "../wikiIndex";
 
 /**
  * Cross-language consistency tests.
@@ -66,5 +66,21 @@ describe("wikiIndex <-> backlinks.rs consistency", () => {
   it("blank targets never resolve", () => {
     expect(resolveWikiLink("")).toBeNull();
     expect(resolveWikiLink("  ")).toBeNull();
+  });
+
+  it("[[name#heading]] resolves by stem, ignoring the anchor", () => {
+    expect(resolveWikiLink("design#Intro")).toBe("notes/design.md");
+    expect(resolveWikiLink("notes/design#Intro")).toBe("notes/design.md");
+    expect(resolveWikiLink("design#Intro|alias")).toBe("notes/design.md");
+  });
+
+  it("wikiHeading extracts the anchor, or null without one", () => {
+    expect(wikiHeading("design#Intro")).toBe("Intro");
+    expect(wikiHeading("design#My Section")).toBe("My Section");
+    expect(wikiHeading("design#a#b")).toBe("a#b");
+    expect(wikiHeading("design")).toBeNull();
+    expect(wikiHeading("design#")).toBeNull();
+    // The alias comes after the heading part
+    expect(wikiHeading("design#Intro|alias")).toBe("Intro");
   });
 });

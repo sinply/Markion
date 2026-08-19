@@ -1,5 +1,9 @@
 import MarkdownIt from "markdown-it";
 import taskLists from "markdown-it-task-lists";
+import footnote from "markdown-it-footnote";
+import mark from "markdown-it-mark";
+import sup from "markdown-it-sup";
+import sub from "markdown-it-sub";
 import { createLowlight } from "lowlight";
 import type { LanguageFn } from "highlight.js";
 
@@ -28,6 +32,12 @@ md.enable(["table", "strikethrough"]);
 // GFM task lists (`- [ ]`). `enabled: false` renders a disabled checkbox —
 // preview mode is read-only; toggling lives in the editor's live-preview widget.
 md.use(taskLists, { enabled: false });
+// Footnote `[^1]` + definitions, `==highlight==`, `^sup^`, `~sub~`
+// (Obsidian/Typora extensions beyond the GFM core).
+md.use(footnote);
+md.use(mark);
+md.use(sup);
+md.use(sub);
 
 /** Fence languages treated as Mermaid diagrams (Obsidian-compatible aliases).
  *  All of these carry mermaid source even though the fence says `gantt`,

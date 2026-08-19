@@ -7,6 +7,24 @@ import { getDict } from "./i18n";
  *  "opening very large files warns before proceeding"). */
 export const LARGE_FILE_BYTES = 5 * 1024 * 1024;
 
+/** 1-based line number of the first ATX heading whose text equals `heading`
+ *  (case-insensitive, `#` marks stripped), or null. Fenced code blocks are
+ *  skipped so a `# foo` inside ``` never matches. */
+export function findHeadingLine(content: string, heading: string): number | null {
+  const want = heading.trim().toLowerCase();
+  if (!want) return null;
+  let inFence = false;
+  const lines = content.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
+    if (inFence) continue;
+    const m = /^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line);
+    if (m && m[2].toLowerCase() === want) return i + 1;
+  }
+  return null;
+}
+
 /** Open a vault note in the editor tab: reads it, opens/activates the tab, and
  *  records it in the recent list. Shared by the file tree, graph, palette,
  *  wikilinks, and recent menu so they all behave identically.
@@ -15,7 +33,7 @@ export const LARGE_FILE_BYTES = 5 * 1024 * 1024;
 export async function openNote(
   vaultRoot: string,
   path: string,
-  opts?: { addRecent?: boolean },
+  opts?: { addRecent?: boolean; heading?: string },
 ): Promise<boolean> {
   try {
     // Warn before opening very large files.
@@ -37,6 +55,12 @@ export async function openNote(
     useDocStore.getState().setActiveContent(content);
     if (opts?.addRecent !== false) {
       useUiStore.getState().addRecent(path);
+    }
+    // `[[note#heading]]`: scroll to the anchor line once the doc mounts.
+    // Reuses the search-result jump mechanism (consumed in EditorPane).
+    if (opts?.heading) {
+      const line = findHeadingLine(content, opts.heading);
+      if (line) useUiStore.getState().setPendingJump({ path, line, column: 1 });
     }
     return true;
   } catch {

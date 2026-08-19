@@ -65,4 +65,21 @@ describe("renderMarkdown", () => {
     expect(html).toContain("hljs");
     expect(html).toContain("let");
   });
+
+  it("renders ==highlight== as a <mark> element", () => {
+    const html = renderMarkdown("Some ==highlighted text== here\n");
+    expect(html).toContain("<mark>highlighted text</mark>");
+  });
+
+  it("renders footnote refs and definitions", () => {
+    const html = renderMarkdown("Text with a footnote[^1].\n\n[^1]: The note body.\n");
+    expect(html).toContain("footnote-ref");
+    expect(html).toContain("The note body.");
+  });
+
+  it("renders ^sup^ and ~sub~", () => {
+    const html = renderMarkdown("E=^mc2^, H~2~O\n");
+    expect(html).toContain("<sup>mc2</sup>");
+    expect(html).toContain("<sub>2</sub>");
+  });
 });

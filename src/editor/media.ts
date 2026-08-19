@@ -147,6 +147,29 @@ async function insertImages(
   }
 }
 
+/** A single-line plain URL from clipboard text (normalized with https://),
+ *  or null when the text is not a bare URL. */
+export function urlFromClipboard(text: string): string | null {
+  const t = text.trim();
+  if (!t || /\s/.test(t)) return null; // multi-line / spaced text is not a URL
+  if (/^https?:\/\//i.test(t)) return t;
+  if (/^www\./i.test(t)) return `https://${t}`;
+  return null;
+}
+
+/** Markdown link text for a pasted URL: the current selection when it is a
+ *  single-line non-blank range, else the URL itself. */
+export function urlToMarkdown(
+  text: string,
+  selected: string,
+): { markdown: string; url: string } | null {
+  const url = urlFromClipboard(text);
+  if (!url) return null;
+  const trimmed = selected.trim();
+  const linkText = trimmed && !/[\r\n]/.test(trimmed) ? trimmed : url;
+  return { markdown: `[${linkText}](${url})`, url };
+}
+
 /** Always-on paste/drop handling for images (independent of live-preview toggle). */
 export const imagePasteDropExtension = EditorView.domEventHandlers({
   paste(event, view) {
@@ -158,10 +181,23 @@ export const imagePasteDropExtension = EditorView.domEventHandlers({
         if (file && isImageFile(file)) files.push(file);
       }
     }
-    if (files.length === 0) return false;
-    event.preventDefault();
+    if (files.length > 0) {
+      event.preventDefault();
+      const sel = view.state.selection.main;
+      void insertImages(view, files, sel.from, sel.to);
+      return true;
+    }
+    // Plain-text URL: auto-convert to a markdown link (pastes like Obsidian).
+    const text = event.clipboardData?.getData("text/plain") ?? "";
     const sel = view.state.selection.main;
-    void insertImages(view, files, sel.from, sel.to);
+    const selected = view.state.sliceDoc(sel.from, sel.to);
+    const link = urlToMarkdown(text, selected);
+    if (!link) return false;
+    event.preventDefault();
+    view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert: link.markdown },
+      selection: { anchor: sel.from + link.markdown.length },
+    });
     return true;
   },
 

@@ -31,29 +31,24 @@
 - **编辑器内查找替换**(审计补记):Ctrl+F / Ctrl+H(CM6 `searchKeymap` 内置)
 - **外部 URL 点击**(审计补记):`livePreview.ts` `openUrl` 调系统打开
 
-## 待实现功能(按优先级,2026-08-18 审计更新)
+## 待实现功能(按优先级;2026-08-18 审计更新,v0.11.5 已完成全部 🔴 高优先级)
 
-### 🔴 高优先级
-- [ ] **属性面板编辑(Properties)**
-  - 现状:预览模式已把 YAML frontmatter 渲染成卡片,但编辑模式无可视化编辑
-  - 方案:新建属性编辑弹窗(标题/标签/日期/自定义键值),读写文档头部 YAML;
-    或参考 Obsidian 右侧 Properties 面板,CM6 内嵌
-- [ ] **`[[note#heading]]` 锚点解析 + 跳转**(审计新增,含 bug)
-  - 现状:`wikiIndex.ts::resolveWikiLink` 不剥 `#heading`,`[[note#Sec]]` 被误判
-    未解析标红,点击还会误创建 `note#Sec.md`;已解析链接点击只 openNote 不定位
-  - 方案:解析前 split("#");openNote 带 heading 参数,复用 Outline 的
-    `coordsAtPos` 滚动定位;涉及 `wikiIndex.ts`/`livePreview.ts`/`openNote.ts`
-- [ ] **多光标 / 列选择**(审计新增)
-  - 现状:未启用 `allowMultipleSelections`,只能单光标
-  - 方案:`codemirror.ts` 加 `EditorState.allowMultipleSelections.of(true)` +
-    `drawSelection()`,`commands.ts` 命令循环处理选区
-- [ ] **脚注 `[^1]`、高亮 `==text==`、上下标**(审计新增)
-  - 现状:markdown-it 仅启用 table/strikethrough/taskLists,无对应插件与装饰
-  - 方案:`markdown-it-footnote`/`mark`/`sup`/`sub` 插件 + Lezer 扩展 +
-    livePreview 装饰;涉及 `markdown.ts`/`codemirror.ts`/`livePreview.ts`
-- [ ] **粘贴 URL 自动转 markdown 链接**
-  - 剪贴板内容是纯 URL 时,粘贴自动变成 `[text](url)`(或 `[url](url)`)
-  - 方案:CM6 `handlePaste` 拦截 + 解析剪贴板文本
+### 🔴 高优先级(全部已完成,2026-08-18)
+- [x] **属性面板编辑(Properties)**(v0.11.5)
+  - 命令面板"编辑属性"打开弹窗:列出/增删 frontmatter 键值,保存写回
+    CM6(可撤销 + 自动保存);`src/lib/frontmatter.ts` + `PropertiesDialog.tsx`
+- [x] **`[[note#heading]]` 锚点解析 + 跳转**(v0.11.5,含 bug)
+  - `resolveWikiLink` 剥离 `#heading`(不再误判未解析/误创建文件);Ctrl+点击
+    `[[note#Sec]]` 打开后滚动到该标题(`openNote` 带 heading,复用 pendingJump)
+- [x] **多光标 / 列选择**(v0.11.5)
+  - `EditorState.allowMultipleSelections.of(true)` + `drawSelection()`;
+    Alt+点击加光标,Shift+Alt+拖拽列选择
+- [x] **脚注 `[^1]`、高亮 `==text==`、上下标**(v0.11.5)
+  - markdown-it-footnote/mark/sup/sub 插件(预览);live preview `==text==`
+    cm-mark 装饰
+- [x] **粘贴 URL 自动转 markdown 链接**(v0.11.5)
+  - 剪贴板纯 URL 时粘贴为 `[选中文本](url)` 或 `[url](url)`;
+    `media.ts::urlFromClipboard`/`urlToMarkdown` + paste handler
 
 ### 🟡 中优先级
 - [ ] **代码块复制按钮 + 行号**

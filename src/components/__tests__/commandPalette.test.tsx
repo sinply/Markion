@@ -71,6 +71,7 @@ function enDictStub() {
     openFolder: "Open Folder…", openFile: "Open File…", save: "Save", saveAs: "Save As…",
     exportHtml: "Export as HTML…", exportMarkdown: "Export as Markdown…", exportPdf: "Export as PDF…",
     newDailyNote: "Open Today's Note", insertTemplate: "Insert Template…",
+    editProperties: "Edit Properties…",
     editMode: "Edit Mode", previewMode: "Preview Mode", preferences: "Preferences…",
     focusMode: "Focus Mode",
     theme: "Theme", language: "Language",

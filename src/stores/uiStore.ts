@@ -60,6 +60,10 @@ interface UiState {
   templatesOpen: boolean;
   setTemplatesOpen: (b: boolean) => void;
 
+  /** Properties editor for the active doc's YAML frontmatter. */
+  propertiesOpen: boolean;
+  setPropertiesOpen: (b: boolean) => void;
+
   /** Focus mode: active-line highlight + typewriter centering (session-only). */
   focusMode: boolean;
   setFocusMode: (b: boolean) => void;
@@ -135,6 +139,9 @@ export const useUiStore = create<UiState>((set, get) => ({
 
   templatesOpen: false,
   setTemplatesOpen: (templatesOpen) => set({ templatesOpen }),
+
+  propertiesOpen: false,
+  setPropertiesOpen: (propertiesOpen) => set({ propertiesOpen }),
 
   focusMode: false,
   setFocusMode: (focusMode) => set({ focusMode }),

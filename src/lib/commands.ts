@@ -183,6 +183,12 @@ export function buildCommands(t: Dict): Command[] {
       run: () => ui().setTemplatesOpen(true),
     },
     {
+      id: "note:properties",
+      title: t.editProperties,
+      keywords: ["properties", "frontmatter", "meta", "yaml", "属性", "元数据"],
+      run: () => ui().setPropertiesOpen(true),
+    },
+    {
       id: "view:edit",
       title: t.editMode,
       shortcut: "Ctrl+E",

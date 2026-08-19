@@ -5,7 +5,7 @@ import type { SyntaxNode } from "@lezer/common";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget, MathInlineWidget, PreviewWidget, WikiLinkWidget, CalloutWidget, EmbedWidget } from "./widgets";
 import { markdownContextFacet, type MarkdownContext } from "./media";
-import { resolveWikiLink } from "./wikiIndex";
+import { resolveWikiLink, wikiHeading } from "./wikiIndex";
 
 interface DecoEntry {
   from: number;
@@ -604,6 +604,22 @@ function scanBlocks(state: EditorState): Block[] {
     });
   }
 
+  // --- Inline: ==highlight== (Obsidian). Rendered live and in preview; the
+  // source markers stay visible until the active line replaces them.
+  const markRe = /==([^=\n]+)==/g;
+  let hm: RegExpExecArray | null;
+  while ((hm = markRe.exec(docText)) !== null) {
+    const from = hm.index;
+    const to = from + hm[0].length;
+    if (insideCode(from)) continue;
+    blocks.push({
+      kind: "style",
+      from, to,
+      styleClass: "cm-mark",
+      styleAttr: "background:rgba(255,213,89,0.45);border-radius:3px;padding:0 2px;",
+    });
+  }
+
   return blocks;
 }
 
@@ -808,9 +824,10 @@ export const livePreviewExtension = ViewPlugin.fromClass(LivePlugin, {
         }
       }
 
-      // Wiki links: Ctrl+click a resolved link opens the target note; clicking
-      // an unresolved link creates it. A plain click on a resolved link leaves
-      // the default cursor placement so the source stays editable.
+      // Wiki links: Ctrl+click a resolved link opens the target note (a
+      // `#heading` anchor scrolls to that heading); clicking an unresolved
+      // link creates it. A plain click on a resolved link leaves the default
+      // cursor placement so the source stays editable.
       const wikilink = target.closest<HTMLElement>(".cm-wikilink");
       if (wikilink) {
         const ctx = view.state.facet(markdownContextFacet)[0];
@@ -820,7 +837,7 @@ export const livePreviewExtension = ViewPlugin.fromClass(LivePlugin, {
         if (targetPath) {
           if (event.ctrlKey || event.metaKey) {
             event.preventDefault();
-            void openWikiLink(ctx, targetPath);
+            void openWikiLink(ctx, targetPath, wikiHeading(raw) ?? undefined);
             return true;
           }
           return false;
@@ -849,19 +866,24 @@ export const livePreviewExtension = ViewPlugin.fromClass(LivePlugin, {
 
 export const LivePreviewPlugin = LivePlugin;
 
-async function openWikiLink(ctx: MarkdownContext, path: string): Promise<void> {
+async function openWikiLink(
+  ctx: MarkdownContext,
+  path: string,
+  heading?: string,
+): Promise<void> {
   const { openNote } = await import("../lib/openNote");
-  await openNote(ctx.vaultRoot, path);
+  await openNote(ctx.vaultRoot, path, { heading });
 }
 
 /** Create a missing `[[target]]` note and open it. A target with a `/` is used
  *  as-is (vault-root-relative); a bare name is created next to the current doc
- *  (Obsidian default). */
+ *  (Obsidian default). A `#heading` anchor is stripped so only the file is
+ *  created (Obsidian behavior). */
 async function createAndOpenWikiNote(ctx: MarkdownContext, raw: string): Promise<void> {
   const { createFile } = await import("../lib/ipc");
   const { openNote } = await import("../lib/openNote");
   const { useVaultStore } = await import("../stores/vaultStore");
-  const target = raw.split("|")[0].trim();
+  const target = raw.split("|")[0].split("#")[0].trim();
   if (!target) return;
   const docDir = ctx.docRel.includes("/")
     ? ctx.docRel.slice(0, ctx.docRel.lastIndexOf("/"))

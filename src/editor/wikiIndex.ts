@@ -38,16 +38,28 @@ export function isWikiPath(path: string): boolean {
 }
 
 /**
- * Resolve a wikilink target (`name`, `path/name`, or `...|alias`) to a
- * relative vault path, or null if no file matches. Alias and leading path
- * segments are stripped, then the stem is matched case-insensitively.
+ * Resolve a wikilink target (`name`, `path/name`, `...|alias`, `name#heading`)
+ * to a relative vault path, or null if no file matches. Alias, leading path
+ * segments, and a trailing `#heading` anchor are stripped, then the stem is
+ * matched case-insensitively.
  */
 export function resolveWikiLink(target: string): string | null {
   const withoutAlias = target.split("|")[0];
-  const stem = withoutAlias.split("/").pop() ?? withoutAlias;
+  const withoutHeading = withoutAlias.split("#")[0];
+  const stem = withoutHeading.split("/").pop() ?? withoutHeading;
   const key = stem.trim().toLowerCase();
   if (!key) return null;
   return stemToPath.get(key) ?? null;
+}
+
+/** The `#heading` anchor of a wikilink target (before any `|alias`), or null.
+ *  `[[note#Sec]]` -> "Sec"; `[[note]]` -> null. */
+export function wikiHeading(target: string): string | null {
+  const withoutAlias = target.split("|")[0];
+  const parts = withoutAlias.split("#");
+  if (parts.length < 2) return null;
+  const heading = parts.slice(1).join("#").trim();
+  return heading || null;
 }
 
 /** Visible text for a wikilink token: alias if present, else the basename. */

@@ -254,6 +254,18 @@ describe("#tag highlight", () => {
   });
 });
 
+describe("==highlight== decoration", () => {
+  it("marks ==text== ranges with the cm-mark class", () => {
+    const decos = buildDecorations(stateOfEnd("some ==important== words\n\nmore\n"));
+    expect(countByClass(decos, "cm-mark")).toBe(1);
+  });
+
+  it("does not mark == inside fenced code blocks", () => {
+    const decos = buildDecorations(stateOfEnd("```\n==not mark==\n```\n\nok\n"));
+    expect(countByClass(decos, "cm-mark")).toBe(0);
+  });
+});
+
 describe("callout decoration", () => {
   it("replaces a > [!note] blockquote with a CalloutWidget", () => {
     const decos = buildDecorations(stateOfEnd("> [!tip] Try this\n> details\n\nbody\n"));

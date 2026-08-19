@@ -739,6 +739,18 @@ body {
   vertical-align: middle;
   accent-color: var(--accent);
 }
+/* ==highlight== (markdown-it-mark), footnote refs, sup/sub */
+.cm-preview mark {
+  background: rgba(255, 213, 89, 0.45);
+  border-radius: 3px;
+  padding: 0 2px;
+}
+.cm-preview .footnote-ref {
+  font-size: 0.75em;
+  vertical-align: super;
+}
+.cm-preview .footnote-item p { margin: 0 0 4px; }
+.cm-preview .footnote-sep { border: none; border-top: 1px solid var(--border); margin: 16px 0 8px; }
 
 /* --- Theme-aware form controls (QuickOpen input, Settings selects/buttons) --- */
 input[type="text"], input[type="search"], input:not([type]), select, textarea {

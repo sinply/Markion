@@ -3,6 +3,7 @@ import type { EditorView } from "@codemirror/view";
 import { renderMarkdown, renderMarkdownWithTableSource, highlightCode, isMermaidLang } from "./markdown";
 import { markdownContextFacet, imageToSrc, isRemoteSrc } from "./media";
 import { wikiLabel } from "./wikiIndex";
+import { parseFrontmatter } from "../lib/frontmatter";
 
 export class CodeBlockWidget extends WidgetType {
   readonly language: string;
@@ -250,22 +251,9 @@ export class PreviewWidget extends WidgetType {
   }
 }
 
-/** Parse a YAML frontmatter body into [key, value] pairs (top-level only). */
-export function parseFrontmatter(body: string): [string, string][] {
-  const props: [string, string][] = [];
-  for (const line of body.split("\n")) {
-    const idx = line.indexOf(":");
-    if (idx <= 0) continue; // skip comment/blank/indented lines
-    let key = line.slice(0, idx).trim();
-    let val = line.slice(idx + 1).trim();
-    // strip surrounding quotes
-    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-      val = val.slice(1, -1);
-    }
-    if (key) props.push([key, val]);
-  }
-  return props;
-}
+/** Parse a YAML frontmatter body into [key, value] pairs (top-level only).
+ *  Lives in ../lib/frontmatter.ts (shared with the Properties dialog). */
+export { parseFrontmatter } from "../lib/frontmatter";
 
 /** Map a frontmatter key to an Obsidian-style property icon. */
 function propertyIcon(key: string): string {

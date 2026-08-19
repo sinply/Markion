@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { openNote, LARGE_FILE_BYTES } from "../openNote";
+import { openNote, LARGE_FILE_BYTES, findHeadingLine } from "../openNote";
 import { useDocStore } from "../../stores/docStore";
 import { useUiStore } from "../../stores/uiStore";
 
@@ -82,5 +82,46 @@ describe("openNote", () => {
 
     const ok = await openNote("/vault", "missing.md");
     expect(ok).toBe(false);
+  });
+
+  it("sets a pendingJump to the heading line when opened with #anchor", async () => {
+    mockedSize.mockResolvedValue(10);
+    mockedRead.mockResolvedValue("# Title\n\nIntro text\n\n## Section Two\n\nBody\n");
+    useUiStore.setState({ pendingJump: null });
+
+    const ok = await openNote("/vault", "a.md", { heading: "Section Two" });
+    expect(ok).toBe(true);
+    expect(useUiStore.getState().pendingJump).toEqual({ path: "a.md", line: 5, column: 1 });
+  });
+
+  it("leaves pendingJump alone when the heading is missing", async () => {
+    mockedSize.mockResolvedValue(10);
+    mockedRead.mockResolvedValue("# Title\n");
+    useUiStore.setState({ pendingJump: null });
+
+    await openNote("/vault", "a.md", { heading: "Nope" });
+    expect(useUiStore.getState().pendingJump).toBeNull();
+  });
+});
+
+describe("findHeadingLine", () => {
+  it("finds the 1-based line of a matching ATX heading", () => {
+    const doc = "intro\n\n## Deep Dive\n\nmore\n";
+    expect(findHeadingLine(doc, "Deep Dive")).toBe(3);
+  });
+
+  it("matches case-insensitively and ignores trailing # marks", () => {
+    const doc = "# Title\n## My Heading ##\n";
+    expect(findHeadingLine(doc, "my heading")).toBe(2);
+  });
+
+  it("skips headings inside fenced code blocks", () => {
+    const doc = "```\n# fake heading\n```\n\n# real heading\n";
+    expect(findHeadingLine(doc, "fake heading")).toBeNull();
+    expect(findHeadingLine(doc, "real heading")).toBe(5);
+  });
+
+  it("returns null when no heading matches", () => {
+    expect(findHeadingLine("plain text only", "anything")).toBeNull();
   });
 });
