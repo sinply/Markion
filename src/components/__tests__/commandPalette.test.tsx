@@ -77,6 +77,8 @@ function enDictStub() {
     reopenClosed: "Reopen Closed Tab", fullscreen: "Toggle Fullscreen",
     editMode: "Edit Mode", previewMode: "Preview Mode", preferences: "Preferences…",
     focusMode: "Focus Mode",
+    baseOpenCommand: "Open Database…",
+    slideshowCommand: "Start Slideshow",
     theme: "Theme", language: "Language",
     find: "Find…", findShortcut: "Ctrl+F",
     findInVault: "Find in Vault…", findInVaultShortcut: "Ctrl+Shift+F",

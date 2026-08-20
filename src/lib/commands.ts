@@ -228,6 +228,18 @@ export function buildCommands(t: Dict): Command[] {
       run: () => ui().setPropertiesOpen(true),
     },
     {
+      id: "database:open",
+      title: t.baseOpenCommand,
+      keywords: ["database", "base", "数据", "数据库", "table", "表格"],
+      run: () => ui().setBaseOpen(true, null),
+    },
+    {
+      id: "view:slideshow",
+      title: t.slideshowCommand,
+      keywords: ["slideshow", "presentation", "slides", "演示", "幻灯片", "放映"],
+      run: () => ui().setSlideshowOpen(true),
+    },
+    {
       id: "view:edit",
       title: t.editMode,
       shortcut: "Ctrl+E",

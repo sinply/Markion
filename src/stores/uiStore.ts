@@ -79,6 +79,16 @@ interface UiState {
   vaultsOpen: boolean;
   setVaultsOpen: (b: boolean) => void;
 
+  /** Obsidian-Base-style database view: vault-relative path of the .base file
+   *  currently displayed (null = picker mode, showing every .base file). */
+  baseFile: string | null;
+  baseOpen: boolean;
+  setBaseOpen: (open: boolean, file?: string | null) => void;
+
+  /** Fullscreen slideshow for the active note. */
+  slideshowOpen: boolean;
+  setSlideshowOpen: (b: boolean) => void;
+
   /** Focus mode: active-line highlight + typewriter centering (session-only). */
   focusMode: boolean;
   setFocusMode: (b: boolean) => void;
@@ -172,6 +182,19 @@ export const useUiStore = create<UiState>((set, get) => ({
 
   vaultsOpen: false,
   setVaultsOpen: (vaultsOpen) => set({ vaultsOpen }),
+
+  baseFile: null,
+  baseOpen: false,
+  setBaseOpen: (open, file) =>
+    set((s) => ({
+      baseOpen: open,
+      // opening without an explicit file keeps whatever was previously selected
+      // (so re-opening keeps the user's last database); closing always clears
+      baseFile: open ? (file === undefined ? s.baseFile : file) : null,
+    })),
+
+  slideshowOpen: false,
+  setSlideshowOpen: (slideshowOpen) => set({ slideshowOpen }),
 
   focusMode: false,
   setFocusMode: (focusMode) => set({ focusMode }),
