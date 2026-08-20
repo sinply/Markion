@@ -8,23 +8,6 @@ import { openNote } from "../lib/openNote";
 import { exportActiveNote } from "../lib/exportNote";
 import type { Theme } from "../lib/types";
 
-/** Switch the whole app to another vault: reload tree + settings, restart the
- *  watcher, and drop every open tab (they belong to the old vault). */
-async function switchVault(root: string): Promise<void> {
-  const { useVaultStore } = await import("../stores/vaultStore");
-  const { useDocStore } = await import("../stores/docStore");
-  const { useSettingsStore } = await import("../stores/settingsStore");
-  await useVaultStore.getState().loadTree(root);
-  useDocStore.getState().reset();
-  await useSettingsStore.getState().load(root);
-  try {
-    const { startVaultWatch } = await import("../lib/ipc");
-    await startVaultWatch(root);
-  } catch {
-    // watcher restart is best-effort
-  }
-}
-
 interface MenuItem {
   label: string;
   shortcut?: string;
@@ -168,10 +151,11 @@ export function MenuBar() {
               ...vaultStore.recentVaults.map((v) => ({
                 label: v === vaultStore.vaultRoot ? `✓ ${v}` : v,
                 action: () => {
-                  void switchVault(v);
+                  void vaultStore.switchVault(v);
                   close();
                 },
               })),
+              { label: t.vaultsManage, action: () => { ui.setVaultsOpen(true); close(); } },
               { label: t.openFolder, action: () => { ui.requestOpenFolder(); close(); } },
             ],
           },

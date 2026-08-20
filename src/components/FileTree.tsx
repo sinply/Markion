@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
-import { Tree } from "react-arborist";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { Tree, type TreeApi } from "react-arborist";
 import type { NodeRendererProps } from "react-arborist";
 import { useVaultStore } from "../stores/vaultStore";
 import { useDocStore } from "../stores/docStore";
@@ -167,15 +167,18 @@ export function FileTree() {
   const [menu, setMenu] = useState<
     { x: number; y: number; target: MenuTarget | null } | null
   >(null);
+  const treeRef = useRef<TreeApi<RowData> | null>(null);
 
   const handleActivate = useCallback(
     async (node: any) => {
       const d = node.data;
       if (!vaultRoot) return;
-      // A folder with an index.md opens that file (folder-as-container body).
+      // A folder with an index.md opens that file (folder-as-container body)
+      // and expands the folder so its children are visible (container UX).
       if (d.kind === "folder") {
         const index = d.children?.find((c: any) => c.name === "index.md" && c.kind === "file");
         if (!index) return; // no index.md: keep default folder behavior
+        treeRef.current?.open(d.id);
         const content = await readFile(vaultRoot, index.id);
         openDoc(index.name, index.id);
         setActiveContent(content);
@@ -425,6 +428,7 @@ export function FileTree() {
           {tree.name || "Vault"}
         </div>
         <Tree<RowData>
+          ref={treeRef}
           data={rowData}
           width="100%"
           height={window.innerHeight - 40}

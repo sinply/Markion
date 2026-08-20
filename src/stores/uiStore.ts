@@ -75,6 +75,10 @@ interface UiState {
   trashOpen: boolean;
   setTrashOpen: (b: boolean) => void;
 
+  /** Multi-vault manager dialog. */
+  vaultsOpen: boolean;
+  setVaultsOpen: (b: boolean) => void;
+
   /** Focus mode: active-line highlight + typewriter centering (session-only). */
   focusMode: boolean;
   setFocusMode: (b: boolean) => void;
@@ -165,6 +169,9 @@ export const useUiStore = create<UiState>((set, get) => ({
 
   trashOpen: false,
   setTrashOpen: (trashOpen) => set({ trashOpen }),
+
+  vaultsOpen: false,
+  setVaultsOpen: (vaultsOpen) => set({ vaultsOpen }),
 
   focusMode: false,
   setFocusMode: (focusMode) => set({ focusMode }),

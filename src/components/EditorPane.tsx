@@ -7,6 +7,7 @@ import { readFile, writeFileAtomic } from "../lib/ipc";
 import { getEditorView } from "../editor/registry";
 import { MarkdownEditor, type EditorHandle } from "../editor/EditorView";
 import { Tabs } from "./Tabs";
+import { FolderContainer } from "./FolderContainer";
 import type { EditorState } from "@codemirror/state";
 
 export function EditorPane({
@@ -134,6 +135,8 @@ export function EditorPane({
           </div>
         )}
       </div>
+      {/* Folder-as-container: sibling notes under an open index.md */}
+      <FolderContainer />
       <div
         style={{
           padding: "3px 8px",

@@ -69,6 +69,9 @@ interface VaultState {
   addRecentVault: (root: string) => void;
   /** Remove a vault from the recent list (forget). */
   forgetVault: (root: string) => void;
+  /** Switch the whole app to another vault: tree + settings + watcher, and
+   *  drop every open tab (they belong to the old vault). */
+  switchVault: (root: string) => Promise<void>;
   applyReorder: (folderRel: string, name: string, newIndex: number) => Promise<void>;
   applyMove: (fromFolder: string, fromName: string, toFolder: string, toName: string) => Promise<void>;
   setCollapsed: (folderRel: string, collapsed: boolean) => Promise<void>;
@@ -109,6 +112,20 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     const next = get().recentVaults.filter((v) => v !== root);
     saveRecentVaults(next);
     set({ recentVaults: next });
+  },
+
+  switchVault: async (root) => {
+    await get().loadTree(root);
+    const { useDocStore } = await import("./docStore");
+    useDocStore.getState().reset();
+    const { useSettingsStore } = await import("./settingsStore");
+    await useSettingsStore.getState().load(root);
+    try {
+      const { startVaultWatch } = await import("../lib/ipc");
+      await startVaultWatch(root);
+    } catch {
+      // watcher restart is best-effort
+    }
   },
 
   applyReorder: async (folderRel, name, newIndex) => {
