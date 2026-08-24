@@ -141,7 +141,16 @@ export function SettingsDialog() {
           <input
             type="checkbox"
             checked={settings.showHiddenFiles}
-            onChange={(e) => settings.setShowHiddenFiles(e.target.checked)}
+            onChange={(e) => {
+              settings.setShowHiddenFiles(e.target.checked);
+              // The tree is filtered at the store level - reload it so the
+              // change takes effect immediately.
+              void (async () => {
+                const { useVaultStore } = await import("../stores/vaultStore");
+                const vs = useVaultStore.getState();
+                if (vs.vaultRoot) await vs.loadTree(vs.vaultRoot);
+              })();
+            }}
           />
           {" "}{t.showHidden}
         </label>

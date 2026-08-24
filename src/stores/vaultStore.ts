@@ -6,6 +6,18 @@ const DEFAULT_VAULT_KEY = "markion.defaultVault";
 const RECENT_VAULTS_KEY = "markion.recentVaults";
 const MAX_RECENT_VAULTS = 8;
 
+/** Recursively drop dot-files / dot-folders (.markion, .obsidian, …). Applied
+ *  at the store level so EVERY view (tree, palette, container lists) inherits
+ *  the hidden-files setting, not just the file tree rendering. */
+function filterHiddenFiles(node: TreeNode): TreeNode {
+  return {
+    ...node,
+    children: node.children
+      .filter((c) => !c.name.startsWith("."))
+      .map(filterHiddenFiles),
+  };
+}
+
 /** Persist the default vault path (last opened) so the app can reopen it. */
 export function getDefaultVault(): string | null {
   try {
@@ -84,7 +96,17 @@ export const useVaultStore = create<VaultState>((set, get) => ({
   recentVaults: loadRecentVaults(),
 
   loadTree: async (root) => {
-    const tree = await buildTree(root);
+    const raw = await buildTree(root);
+    // Honor the "show hidden files" setting (defaults to off). Read lazily to
+    // avoid a static import cycle with settingsStore.
+    let showHidden = false;
+    try {
+      showHidden = (await import("./settingsStore")).useSettingsStore.getState()
+        .showHiddenFiles;
+    } catch {
+      // settings not available - keep the safe default
+    }
+    const tree = showHidden ? raw : filterHiddenFiles(raw);
     set({ vaultRoot: root, tree });
     get().addRecentVault(root);
   },

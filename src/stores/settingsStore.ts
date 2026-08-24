@@ -30,6 +30,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const { readConfig } = await import("../lib/ipc");
       const s = await readConfig(vaultRoot);
       set(s);
+      // The first loadTree runs before settings arrive and hides dotfiles by
+      // default; if this vault shows them, refresh the tree once.
+      if (s.showHiddenFiles) {
+        const { useVaultStore } = await import("./vaultStore");
+        const vs = useVaultStore.getState();
+        if (vs.vaultRoot) await vs.loadTree(vs.vaultRoot);
+      }
     } catch {
       // IPC not available yet (backend missing read_config); use defaults
     }

@@ -673,12 +673,21 @@ pub fn start_vault_watch(
 
 /// Library home data: document cards (newest first), optionally scoped to a
 /// folder. Served from the SQLite projection, which self-heals when stale.
+/// A cold start (first open) rebuilds the projection; progress is streamed to
+/// the frontend as `index-progress` events for the loading bar.
 #[tauri::command]
 pub fn query_library(
+    app: tauri::AppHandle,
     vault_root: String,
     folder: Option<String>,
 ) -> Result<Vec<docdb::LibraryEntry>, String> {
-    docdb::query_library(Path::new(&vault_root), folder.as_deref())
+    use tauri::Emitter;
+    let root = Path::new(&vault_root);
+    docdb::ensure_ready_with_progress(root, Some(&|done, total| {
+        let _ = app.emit("index-progress", serde_json::json!({ "done": done, "total": total }));
+    }))?;
+    let _ = app.emit("index-progress", serde_json::json!({ "done": -1, "total": -1 }));
+    docdb::query_library_ready(root, folder.as_deref())
 }
 
 /// Folder table view: direct `.md` children as rows, frontmatter keys as

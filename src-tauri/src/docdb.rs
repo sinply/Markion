@@ -320,12 +320,18 @@ fn parent_folder(path: &str) -> String {
 }
 
 /// All `.md` files under the vault (relative, forward-slash), sorted. Skips
-/// the `.markion` metadata directory.
-pub fn walk_md(vault_root: &Path) -> Vec<String> {    let mut out = Vec::new();
+/// every dot-entry (`.markion`, `.obsidian`, `.git`, …) — hidden files never
+/// enter the projection, matching the file tree's default filter.
+pub fn walk_md(vault_root: &Path) -> Vec<String> {
+    let mut out = Vec::new();
     let root = vault_root.to_path_buf();
     let walker = walkdir::WalkDir::new(&root)
         .into_iter()
-        .filter_entry(|e| e.file_name() != ".markion")
+        .filter_entry(|e| {
+            // The vault root itself (depth 0) may legitimately be a dotdir
+            // (e.g. tempfile's `.tmpXYZ`); prune only entries BELOW it.
+            e.depth() == 0 || !e.file_name().to_string_lossy().starts_with('.')
+        })
         .filter_map(|e| e.ok());
     for entry in walker {
         if !entry.file_type().is_file() {
@@ -353,6 +359,13 @@ struct DocRecord {
     summary: String,
     props: Vec<(String, String)>,
     tags: Vec<String>,
+}
+
+/// A vault-relative path is hidden if ANY segment starts with a dot
+/// (`.obsidian/x.md`, `.markion/cache.db`, `notes/.x.md`, …). Hidden paths
+/// never enter the projection, no matter which entry point tries.
+pub fn is_hidden_path(rel_path: &str) -> bool {
+    rel_path.split('/').any(|seg| seg.starts_with('.'))
 }
 
 /// Parse a note's text into an insertable record. Pure (no I/O).
@@ -428,6 +441,9 @@ fn insert_doc(
 /// Missing file removes the row. Best-effort: errors are returned but callers
 /// may ignore them — the projection can always be rebuilt.
 pub fn update_one(vault_root: &Path, rel_path: &str) -> Result<(), String> {
+    if is_hidden_path(rel_path) {
+        return Ok(()); // dot-entries are invisible to the projection
+    }
     let abs = vault_root.join(rel_path);
     if !abs.is_file() {
         return remove_path(vault_root, rel_path);
@@ -447,6 +463,9 @@ pub fn update_one(vault_root: &Path, rel_path: &str) -> Result<(), String> {
 /// Remove a document (and its properties/tags). Paths ending in `/` or an
 /// existing directory remove every document under that prefix.
 pub fn remove_path(vault_root: &Path, rel_path: &str) -> Result<(), String> {
+    if is_hidden_path(rel_path) {
+        return Ok(()); // nothing hidden was ever inserted
+    }
     let mut conn = open_conn(vault_root).map_err(|e| e.to_string())?;
     if !is_our_db(&conn) {
         return Ok(()); // nothing to remove in a foreign/empty db
@@ -470,6 +489,15 @@ pub fn remove_path(vault_root: &Path, rel_path: &str) -> Result<(), String> {
 
 /// Rebuild the whole projection from the files on disk (drop-and-recreate).
 pub fn rebuild_all(vault_root: &Path) -> Result<(), String> {
+    rebuild_all_with_progress(vault_root, None)
+}
+
+/// Same as [`rebuild_all`], reporting `(done, total)` through `progress` so
+/// the UI can show a determinate bar on first load.
+pub fn rebuild_all_with_progress(
+    vault_root: &Path,
+    progress: Option<&dyn Fn(usize, usize)>,
+) -> Result<(), String> {
     let db = vault_root.join(CACHE_FILE);
     if let Some(dir) = db.parent() {
         std::fs::create_dir_all(dir).ok();
@@ -485,15 +513,19 @@ pub fn rebuild_all(vault_root: &Path) -> Result<(), String> {
     // thousand notes stays well under a second (per-file transactions were
     // ~100x slower and blocked the library home with a blank screen).
     let files = walk_md(vault_root);
+    let total = files.len();
     let mut conn = open_conn(vault_root).map_err(|e| e.to_string())?;
     init_schema(&conn).map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
-    for f in &files {
+    for (i, f) in files.iter().enumerate() {
         let abs = vault_root.join(f);
         // Best-effort: unreadable/binary files are skipped, never fatal.
         if let Ok(text) = std::fs::read_to_string(&abs) {
             let rec = parse_document(f, &text, mtime_of(&abs));
             insert_doc(&tx, &rec).ok(); // skip rows that violate constraints
+        }
+        if let Some(cb) = progress {
+            cb(i + 1, total);
         }
     }
     tx.commit().map_err(|e| e.to_string())
@@ -503,26 +535,46 @@ pub fn rebuild_all(vault_root: &Path) -> Result<(), String> {
 /// the vault is not. Cheap checks only — per-file freshness relies on the
 /// save hooks and watcher events.
 pub fn ensure_ready(vault_root: &Path) -> Result<(), String> {
+    ensure_ready_with_progress(vault_root, None)
+}
+
+pub fn ensure_ready_with_progress(
+    vault_root: &Path,
+    progress: Option<&dyn Fn(usize, usize)>,
+) -> Result<(), String> {
     let has_files = !walk_md(vault_root).is_empty();
-    let conn = open_conn(vault_root);
-    let (usable, rows) = match &conn {
-        Ok(c) if is_our_db(c) => (
-            true,
-            c.query_row("SELECT COUNT(*) FROM documents", [], |r| r.get::<_, i64>(0))
-                .unwrap_or(-1),
-        ),
-        _ => (false, 0),
+    // Scope the probe connection so it is CLOSED before a possible rebuild —
+    // on Windows an open handle blocks deleting the very same db file.
+    let (usable, rows) = {
+        let conn = open_conn(vault_root);
+        match &conn {
+            Ok(c) if is_our_db(c) => (
+                true,
+                c.query_row("SELECT COUNT(*) FROM documents", [], |r| r.get::<_, i64>(0))
+                    .unwrap_or(-1),
+            ),
+            _ => (false, 0),
+        }
     };
     if !usable || (has_files && rows <= 0) {
-        return rebuild_all(vault_root);
+        return rebuild_all_with_progress(vault_root, progress);
     }
     Ok(())
 }
 
 /// Library home entries: newest-modified first, optionally scoped to a folder
-/// (prefix match on the folder column).
+/// (prefix match on the folder column). Self-heals the projection first.
 pub fn query_library(vault_root: &Path, folder: Option<&str>) -> Result<Vec<LibraryEntry>, String> {
     ensure_ready(vault_root)?;
+    query_library_ready(vault_root, folder)
+}
+
+/// The query half of [`query_library`] — assumes `ensure_ready` already ran
+/// (the command layer runs it with a progress reporter).
+pub fn query_library_ready(
+    vault_root: &Path,
+    folder: Option<&str>,
+) -> Result<Vec<LibraryEntry>, String> {
     let conn = open_conn(vault_root).map_err(|e| e.to_string())?;
     // Folder filter = exact folder OR anything under it ("folder/%").
     let prefix = folder.as_ref().map(|f| format!("{f}/%"));
@@ -579,6 +631,10 @@ pub fn query_folder_table(vault_root: &Path, folder: &str) -> Result<FolderTable
     };
     for e in rd.filter_map(|e| e.ok()) {
         let name = e.file_name().to_string_lossy().to_string();
+        // Hidden (dot) entries never appear in the table view.
+        if name.starts_with('.') {
+            continue;
+        }
         if !name.to_lowercase().ends_with(".md") || !e.path().is_file() {
             continue;
         }
@@ -746,5 +802,28 @@ mod tests {
         assert_eq!(when.r#type, "date");
         let score = table.columns.iter().find(|c| c.name == "score").unwrap();
         assert_eq!(score.r#type, "number");
+    }
+
+    #[test]
+    fn hidden_paths_never_enter_the_projection() {
+        assert!(is_hidden_path(".obsidian/x.md"));
+        assert!(is_hidden_path("notes/.draft.md"));
+        assert!(!is_hidden_path("notes/draft.md"));
+
+        let dir = tempdir().unwrap();
+        let root = dir.path();
+        write(root, "real.md", "# real");
+        write(root, ".obsidian/note.md", "# hidden");
+        write(root, ".secret.md", "# hidden too");
+        // Watcher-style upserts of hidden paths must be no-ops…
+        update_one(root, ".obsidian/note.md").unwrap();
+        update_one(root, ".secret.md").unwrap();
+        ensure_ready(root).unwrap();
+        let lib = query_library(root, None).unwrap();
+        assert_eq!(lib.len(), 1);
+        assert_eq!(lib[0].path, "real.md");
+        // …and removals of hidden paths must not error either.
+        remove_path(root, ".obsidian").unwrap();
+        assert_eq!(query_library(root, None).unwrap().len(), 1);
     }
 }

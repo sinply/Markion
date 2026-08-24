@@ -173,16 +173,26 @@ export function MenuBar() {
         },
         { label: t.setDefaultVault, action: () => { vaultStore.setAsDefault(); close(); }, separatorAfter: true },
         { label: t.preferences, action: () => { ui.setSettingsOpen(true); close(); }, separatorAfter: true },
-        { label: t.recent, action: () => close(), separatorAfter: true },
-        ...ui.recentFiles.slice(0, 5).map((p, i) => ({
-          label: `  ${docTitle(p)}`,
-          action: () => {
-            const root = vaultStore.vaultRoot;
-            if (root) void openNote(root, p);
-            close();
-          },
-        })),
-        { label: t.clearRecent, action: () => { ui.clearRecent(); close(); }, separatorAfter: true },
+        // Recent files live one level down so the top-level menu stays short.
+        ...(ui.recentFiles.length > 0
+          ? [{
+              label: t.recent,
+              submenu: {
+                label: t.recent,
+                items: [
+                  ...ui.recentFiles.slice(0, 8).map((p) => ({
+                    label: docTitle(p),
+                    action: () => {
+                      const root = vaultStore.vaultRoot;
+                      if (root) void openNote(root, p);
+                      close();
+                    },
+                  })),
+                  { label: t.clearRecent, action: () => { ui.clearRecent(); close(); } },
+                ],
+              },
+            }]
+          : []),
         { label: t.exit, action: () => { window.close(); close(); } },
       ],
     },

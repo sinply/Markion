@@ -44,11 +44,14 @@ export function LibraryHome() {
   const [folder, setFolder] = useState<string>("");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  /** Live rebuild progress from the backend (`index-progress` events). */
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
   useEffect(() => {
     if (!show || !vaultRoot) return;
     let cancelled = false;
     setLoading(true);
+    setProgress(null);
     queryLibrary(vaultRoot, folder || null)
       .then((rows) => {
         if (!cancelled) setEntries(rows);
@@ -57,12 +60,46 @@ export function LibraryHome() {
         if (!cancelled) setEntries([]);
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setProgress(null);
+        }
       });
     return () => {
       cancelled = true;
     };
   }, [show, vaultRoot, folder]);
+
+  // Cold-start index progress (emitted by query_library while rebuilding).
+  useEffect(() => {
+    if (!show) return;
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    void import("@tauri-apps/api/event").then(({ listen }) =>
+      listen<{ done: number; total: number }>("index-progress", (e) => {
+        if (cancelled) return;
+        const { done, total } = e.payload;
+        setProgress(done < 0 ? null : { done, total });
+      }),
+    ).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [show]);
+
+  // Escape leaves the library home.
+  useEffect(() => {
+    if (!show) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShow(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [show, setShow]);
 
   const folders = useMemo(() => collectFolders(tree), [tree]);
 
@@ -82,7 +119,9 @@ export function LibraryHome() {
   return (
     <div
       style={{
-        position: "fixed",
+        // Absolute (not fixed): covers the Layout area only, so the menu bar
+        // on top stays visible and clickable.
+        position: "absolute",
         inset: 0,
         zIndex: 900,
         background: "var(--bg)",
@@ -144,7 +183,7 @@ export function LibraryHome() {
         </select>
         <button
           onClick={() => setShow(false)}
-          title={t.exit}
+          title={t.close}
           style={{
             background: "none",
             border: "1px solid var(--border)",
@@ -162,8 +201,48 @@ export function LibraryHome() {
       {/* Card grid */}
       <div style={{ flex: 1, overflow: "auto", padding: "18px 22px" }}>
         {loading && (
-          <div style={{ textAlign: "center", color: "var(--fg-muted)", fontSize: 14, padding: 40 }}>
-            {t.libraryIndexing}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 12,
+              color: "var(--fg-muted)",
+              fontSize: 14,
+              padding: 40,
+            }}
+          >
+            <div>
+              {t.libraryIndexing}
+              {progress && progress.total > 0
+                ? ` ${progress.done}/${progress.total}`
+                : "…"}
+            </div>
+            <div
+              style={{
+                width: "min(320px, 70%)",
+                height: 6,
+                borderRadius: 3,
+                background: "var(--border)",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  width:
+                    progress && progress.total > 0
+                      ? `${Math.max(4, Math.round((progress.done / progress.total) * 100))}%`
+                      : "30%",
+                  borderRadius: 3,
+                  background: "var(--accent)",
+                  transition: "width 0.15s ease",
+                  // Indeterminate shimmer until the first event arrives.
+                  animation:
+                    progress && progress.total > 0 ? undefined : "indexPulse 1.2s ease-in-out infinite alternate",
+                }}
+              />
+            </div>
           </div>
         )}
         {!loading && filtered.length === 0 && (

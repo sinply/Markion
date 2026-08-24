@@ -1032,3 +1032,16 @@ label {
 .markdown-editor span[style*="monospace"] {
   border-radius: 4px;
 }
+
+/* Library home: indeterminate index-progress shimmer (before the first
+   determinate event arrives from the backend). */
+@keyframes indexPulse {
+  from {
+    margin-left: 0;
+    width: 30%;
+  }
+  to {
+    margin-left: 55%;
+    width: 45%;
+  }
+}
