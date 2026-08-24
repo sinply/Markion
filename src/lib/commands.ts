@@ -35,8 +35,8 @@ export async function createAndOpenNote(name: string): Promise<void> {
     await createFile(root, newPath);
     await useVaultStore.getState().loadTree(root);
     const content = await readFile(root, newPath);
-    const title = newPath.split("/").pop() ?? newPath;
-    useDocStore.getState().openDoc(title, newPath);
+    const { docTitle } = await import("./docTitle");
+    useDocStore.getState().openDoc(docTitle(newPath), newPath);
     useDocStore.getState().setActiveContent(content);
     useUiStore.getState().addRecent(newPath);
   } catch {
@@ -185,6 +185,12 @@ export function buildCommands(t: Dict): Command[] {
           if (root) void import("./templates").then((mod) => mod.openDailyNote(root));
         });
       },
+    },
+    {
+      id: "view:library",
+      title: t.libraryHome,
+      keywords: ["library", "home", "知识库", "首页", "卡片"],
+      run: () => ui().setShowHome(true),
     },
     {
       id: "file:reopenClosed",

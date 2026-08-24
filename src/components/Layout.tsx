@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Panel, Group, Separator, type Layout as PanelLayout } from "react-resizable-panels";
 import { FileTree } from "./FileTree";
 import { EditorPane } from "./EditorPane";
@@ -7,8 +7,13 @@ import { BacklinksPanel } from "./BacklinksPanel";
 import { GraphPanel } from "./GraphPanel";
 import { TagsPanel } from "./TagsPanel";
 import { CommandPalette } from "./CommandPalette";
+import { LibraryHome } from "./LibraryHome";
+import { FolderTableDialog } from "./FolderTableDialog";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useWikiIndex } from "../hooks/useWikiIndex";
+import { useUiStore } from "../stores/uiStore";
+import { useDocStore } from "../stores/docStore";
+import { useVaultStore } from "../stores/vaultStore";
 import { EditorView } from "@codemirror/view";
 import type { EditorState } from "@codemirror/state";
 
@@ -63,6 +68,18 @@ function chevron(label: string, title: string, onClick: () => void, style?: Reac
 export function Layout() {
   useWikiIndex();
   const [editorState, setEditorState] = useState<EditorState | null>(null);
+  const showHome = useUiStore((s) => s.showHome);
+  const setShowHome = useUiStore((s) => s.setShowHome);
+  // Startup: with a vault open and no documents open, greet the user with the
+  // Yuque-style library home (once per session; reopenable via menu/command).
+  const vaultRoot = useVaultStore((s) => s.vaultRoot);
+  const openDocCount = useDocStore((s) => s.openDocs.length);
+  const homeChecked = useRef(false);
+  useEffect(() => {
+    if (homeChecked.current || !vaultRoot) return;
+    homeChecked.current = true;
+    if (openDocCount === 0) setShowHome(true);
+  }, [vaultRoot, openDocCount, setShowHome]);
   const showOutline = useSettingsStore((s) => s.showOutline);
   const showBacklinks = useSettingsStore((s) => s.showBacklinks);
   const showGraph = useSettingsStore((s) => s.showGraph);
@@ -186,6 +203,8 @@ export function Layout() {
           zIndex: 5,
         })}
       <CommandPalette />
+      <LibraryHome />
+      <FolderTableDialog />
     </div>
   );
 }

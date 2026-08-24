@@ -89,6 +89,16 @@ interface UiState {
   slideshowOpen: boolean;
   setSlideshowOpen: (b: boolean) => void;
 
+  /** Yuque-style library home (document card grid). Shown automatically at
+   *  startup when no documents are open; toggled via menu/command. */
+  showHome: boolean;
+  setShowHome: (b: boolean) => void;
+
+  /** Folder table view (auto-derived database over a folder's notes). */
+  folderTableFolder: string | null;
+  folderTableOpen: boolean;
+  setFolderTableOpen: (open: boolean, folder?: string | null) => void;
+
   /** Focus mode: active-line highlight + typewriter centering (session-only). */
   focusMode: boolean;
   setFocusMode: (b: boolean) => void;
@@ -195,6 +205,17 @@ export const useUiStore = create<UiState>((set, get) => ({
 
   slideshowOpen: false,
   setSlideshowOpen: (slideshowOpen) => set({ slideshowOpen }),
+
+  showHome: false,
+  setShowHome: (showHome) => set({ showHome }),
+
+  folderTableFolder: null,
+  folderTableOpen: false,
+  setFolderTableOpen: (open, folder) =>
+    set((s) => ({
+      folderTableOpen: open,
+      folderTableFolder: open ? (folder === undefined ? s.folderTableFolder : folder) : null,
+    })),
 
   focusMode: false,
   setFocusMode: (focusMode) => set({ focusMode }),

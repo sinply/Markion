@@ -340,8 +340,10 @@ body {
 }
 
 .markdown-editor .cm-content {
-  padding: 16px;
-  line-height: 1.6;
+  padding: 28px 32px;
+  line-height: 1.75;
+  max-width: 48em;
+  margin: 0 auto;
 }
 
 .markdown-editor .cm-editor.cm-focused {
@@ -960,5 +962,73 @@ label {
 .cm-frontmatter-bar {
   background: var(--panel-bg);
   border-left: 3px solid var(--border);
+  border-radius: 4px;
+}
+
+/* ==========================================================================
+   Yuque-style reading typography — content-first polish layered on the live
+   preview. All rules use theme variables so every theme adapts automatically.
+   ========================================================================== */
+
+/* Heading ladder: generous, confident sizes with breathing room (Yuque-like),
+   no underline borders. */
+.markdown-editor .cm-header-1 {
+  font-size: 1.65em;
+  font-weight: 700;
+  line-height: 1.35;
+  margin-top: 0.8em;
+}
+.markdown-editor .cm-header-2 {
+  font-size: 1.38em;
+  font-weight: 700;
+  line-height: 1.4;
+  margin-top: 0.9em;
+}
+.markdown-editor .cm-header-3 {
+  font-size: 1.18em;
+  font-weight: 600;
+  margin-top: 0.85em;
+}
+.markdown-editor .cm-header-4,
+.markdown-editor .cm-header-5,
+.markdown-editor .cm-header-6 {
+  font-size: 1.05em;
+  font-weight: 600;
+  margin-top: 0.8em;
+}
+
+/* Code blocks read as soft cards */
+.markdown-editor .cm-codeblock {
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+/* Blockquotes become tinted callout-style cards */
+.markdown-editor .cm-blockquote,
+.cm-preview blockquote {
+  border-left: 3px solid var(--accent);
+  background: var(--hover-bg, rgba(127, 127, 127, 0.08));
+  padding: 8px 14px;
+  border-radius: 0 6px 6px 0;
+}
+
+/* Tables: zebra rows + softer header separation */
+.markdown-editor .cm-table th,
+.cm-preview table th {
+  border-bottom-width: 2px;
+}
+.markdown-editor .cm-table tbody tr:nth-child(even) td,
+.cm-preview table tbody tr:nth-child(even) td {
+  background: var(--hover-bg, rgba(127, 127, 127, 0.06));
+}
+
+/* Images sit quietly inside the reading column */
+.markdown-editor .cm-image {
+  border-radius: 6px;
+}
+
+/* Inline code keeps its pill look but slightly rounder */
+.markdown-editor .cm-inline-code code,
+.markdown-editor span[style*="monospace"] {
   border-radius: 4px;
 }

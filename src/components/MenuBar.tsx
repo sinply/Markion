@@ -143,6 +143,7 @@ export function MenuBar() {
             if (root) void import("../lib/templates").then((m) => m.openDailyNote(root));
             close();
           } },
+        { label: t.libraryHome, action: () => { ui.setShowHome(true); close(); } },
         { label: t.insertTemplate, action: () => { ui.setTemplatesOpen(true); close(); }, separatorAfter: true },
         {
           label: t.vaults,

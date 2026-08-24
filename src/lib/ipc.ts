@@ -198,3 +198,46 @@ export async function writeFileBase64(path: string, base64Data: string): Promise
 export async function fileSize(vaultRoot: string, path: string): Promise<number> {
   return invoke<number>("file_size", { vaultRoot, path });
 }
+
+// --- Document projection (read-model over the .md files) --------------------
+
+export interface LibraryEntry {
+  path: string;
+  title: string;
+  mtimeSecs: number;
+  wordCount: number;
+  summary: string;
+  tags: string[];
+}
+
+/** Document cards for the library home, newest first; `folder` scopes to a
+ *  folder subtree (null/undefined = whole vault). */
+export async function queryLibrary(
+  vaultRoot: string,
+  folder?: string | null,
+): Promise<LibraryEntry[]> {
+  return invoke<LibraryEntry[]>("query_library", { vaultRoot, folder: folder ?? null });
+}
+
+export interface TableColumn {
+  name: string;
+  /** "text" | "number" | "date" | "tags" */
+  type: string;
+}
+
+export interface FolderTableRow {
+  path: string;
+  name: string;
+  values: Record<string, string>;
+}
+
+export interface FolderTable {
+  columns: TableColumn[];
+  rows: FolderTableRow[];
+}
+
+/** Folder table view: direct `.md` children as rows, frontmatter keys as
+ *  auto-inferred columns (the Yuque-style folder-as-database mapping). */
+export async function queryFolderTable(vaultRoot: string, folder: string): Promise<FolderTable> {
+  return invoke<FolderTable>("query_folder_table", { vaultRoot, folder });
+}

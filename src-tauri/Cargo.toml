@@ -1,6 +1,6 @@
 [package]
 name = "markion"
-version = "0.11.9"
+version = "0.12.0"
 edition = "2021"
 
 [lib]
@@ -23,6 +23,10 @@ walkdir = "2"
 trash = "5"
 regex = "1"
 base64 = "0.22"
+# Read-model projection of the vault (documents/properties/tags) backing the
+# library home and folder table views. The DB is a disposable cache: the .md
+# files remain the single source of truth.
+rusqlite = { version = "0.32", features = ["bundled"] }
 
 [dev-dependencies]
 tempfile = "3"

@@ -97,16 +97,30 @@
   它并自动展开该文件夹(展开联动);打开 index.md 时编辑器下方显示
   "本文件夹内容"列表(容器 UI,点击子笔记即打开);右键文件夹可
   创建/打开 index.md(创建入口)
-- [ ] **Canvas 无限画布**(Obsidian Canvas,大工程)
+- [x] **Canvas 无限画布**:用户明确不做(2026-08-19)
 - [ ] **发布 / 多端同步**(Obsidian Publish/Sync,需要服务端,本地应用无法实现)
 - [x] **多知识库管理**(v0.11.7 管理对话框):文件菜单"知识库…"快速切换 +
   "管理知识库…"对话框(列出最近 vault、打开/移除/设为默认);
   多 vault 并存单窗视图仍未做(架构上 vaultRoot 单一)
-- [ ] **数据表 / 思维导图 / 幻灯片**(语雀特色,均是大工程;思维导图已有
-  mermaid mindmap 语法支持,交互式导图编辑仍未做)
-- [ ] **Obsidian Base 风格数据库基础版**(v0.11.8 后台实现中):`.base` 文件
-  定义字段 + 数据源文件夹,以笔记为行(列值来自 frontmatter),表格视图 +
-  排序 + 筛选 + 单元格编辑写回 frontmatter;命令面板 "Open Database…"
+- [ ] **数据表 / 思维导图 / 幻灯片**:幻灯片已完成(v0.11.8);交互式导图未做
+- [x] **Obsidian Base 风格数据库基础版**(v0.11.8):`.base` 文件定义字段 +
+  数据源文件夹,以笔记为行(列值来自 frontmatter),表格视图 + 排序 + 筛选 +
+  单元格编辑写回 frontmatter;命令面板 "Open Database…"
+- [x] **语雀式体验重构**(v0.12.0):
+  - **文档化显示层**:`src/lib/docTitle.ts`(docTitle/titleForPath)——全 UI
+    不再出现 .md 扩展名;index.md 显示为所在文件夹名;FolderContainer 容器
+    判定改用 path
+  - **SQLite 只读投影**(架构决策:md 是唯一真相源,DB 只是可重建缓存,
+    拒绝双向同步):`src-tauri/src/docdb.rs` + `.markion/cache.db`
+    (documents/properties/tags 表),写入钩子(write/trash/delete/rename)+ 
+    watcher 事件双向增量维护,损坏自愈(删库重建)
+  - **知识库首页 LibraryHome**:启动无文档时自动显示;卡片网格(标题/
+    摘要/相对时间/字数/标签)+ 搜索 + 文件夹筛选;菜单/命令可随时回到
+  - **文件夹表格视图**:右键文件夹"以表格查看"→ 列=frontmatter 键并集
+    自动推断类型(number/date/tags/text),排序/筛选/双击改单元格写回;
+    共享 TableView 抽到 BaseTable.tsx(.base 与 folder table 共用)
+  - **阅读排版语雀化**:正文限宽居中 48em、行高 1.75、标题阶梯、代码块
+    卡片化、引用块着色、表格斑马纹
 
 ### 🟢 明确不做(桌面本地工具不适配)
 - 团队协作评论、@提及、关注订阅(需要账号体系)

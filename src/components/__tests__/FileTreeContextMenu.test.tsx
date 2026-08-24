@@ -128,7 +128,7 @@ describe("FileTree context menu", () => {
     const ids = [...menu.querySelectorAll("[data-menu-id]")].map(
       (el) => el.getAttribute("data-menu-id"),
     );
-    expect(ids).toEqual(["new-note", "new-folder", "new-index", "rename", "delete", "trash"]);
+    expect(ids).toEqual(["new-note", "new-folder", "new-index", "view-table", "rename", "delete", "trash"]);
   });
 
   it("right-clicking empty tree area offers New Note / New Folder / Trash", () => {

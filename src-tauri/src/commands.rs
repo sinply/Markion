@@ -1,9 +1,27 @@
 use crate::backlinks::{self, Backlink, GraphEdge, GraphNode};
+use crate::docdb;
 use crate::file_io;
 use crate::image::{self, AssetsStrategy, PathStyle};
 use crate::link_index::LinkIndex;
 use crate::tree_index::{self, TreeNode};
 use std::path::{Path, PathBuf};
+
+/// Best-effort projection refresh after an in-app write (only `.md` files are
+/// indexed). Failures are logged and ignored — the cache is rebuildable.
+fn project_upsert(vault_root: &str, path: &str) {
+    if path.to_lowercase().ends_with(".md") {
+        if let Err(e) = docdb::update_one(Path::new(vault_root), path) {
+            eprintln!("[docdb] update {path} failed: {e}");
+        }
+    }
+}
+
+/// Best-effort projection removal after an in-app delete/trash.
+fn project_remove(vault_root: &str, path: &str) {
+    if let Err(e) = docdb::remove_path(Path::new(vault_root), path) {
+        eprintln!("[docdb] remove {path} failed: {e}");
+    }
+}
 
 /// Managed state: the incremental link index for the current vault (None until
 /// first use / watcher start).
@@ -37,7 +55,10 @@ pub fn read_file(vault_root: String, path: String) -> Result<String, String> {
 #[tauri::command]
 pub fn write_file_atomic(vault_root: String, path: String, content: String) -> Result<(), String> {
     file_io::write_file_atomic(&Path::new(&vault_root).join(&path), &content)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    // Write-through projection refresh (md files only; best-effort).
+    project_upsert(&vault_root, &path);
+    Ok(())
 }
 
 #[tauri::command]
@@ -361,7 +382,9 @@ pub fn create_file(vault_root: String, path: String) -> Result<(), String> {
     if let Some(parent) = full.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    std::fs::write(full, "").map_err(|e| e.to_string())
+    std::fs::write(full, "").map_err(|e| e.to_string())?;
+    project_upsert(&vault_root, &path);
+    Ok(())
 }
 
 /// Create a folder at `path` (relative to vault root). Idempotent: creating
@@ -380,7 +403,9 @@ pub fn delete_path(vault_root: String, path: String) -> Result<(), String> {
     if !full.exists() {
         return Err(format!("path does not exist: {}", path));
     }
-    trash::delete(&full).map_err(|e| e.to_string())
+    trash::delete(&full).map_err(|e| e.to_string())?;
+    project_remove(&vault_root, &path);
+    Ok(())
 }
 
 /// The vault-internal trash directory: `<root>/.markion/trash`.
@@ -414,11 +439,15 @@ pub fn trash_path(vault_root: String, path: String) -> Result<(), String> {
         for i in 1.. {
             let cand = dest.with_file_name(format!("{stem} (trashed {i}){ext}"));
             if !cand.exists() {
-                return std::fs::rename(&full, &cand).map_err(|e| e.to_string());
+                std::fs::rename(&full, &cand).map_err(|e| e.to_string())?;
+                project_remove(&vault_root, &path);
+                return Ok(());
             }
         }
     }
-    std::fs::rename(&full, &dest).map_err(|e| e.to_string())
+    std::fs::rename(&full, &dest).map_err(|e| e.to_string())?;
+    project_remove(&vault_root, &path);
+    Ok(())
 }
 
 /// One entry in the vault-internal trash.
@@ -513,8 +542,24 @@ pub fn rename_with_links(
         // referrer lookup is still O(referrers) instead of a full scan.
         *idx = LinkIndex::build(Path::new(&vault_root)).map_err(|e| e.to_string())?;
     }
-    idx.rename_with_links(Path::new(&vault_root), &old_path, &new_path)
-        .map_err(|e| e.to_string())
+    let count = idx
+        .rename_with_links(Path::new(&vault_root), &old_path, &new_path)
+        .map_err(|e| e.to_string())?;
+    // Projection sync: drop the old path (prefix-aware for folders), then
+    // re-index the new location — walking the subtree when a folder moved.
+    project_remove(&vault_root, &old_path);
+    let new_abs = Path::new(&vault_root).join(&new_path);
+    if new_abs.is_dir() {
+        let prefix = format!("{}/", new_path);
+        for f in docdb::walk_md(Path::new(&vault_root)) {
+            if f == new_path || f.starts_with(&prefix) {
+                project_upsert(&vault_root, &f);
+            }
+        }
+    } else {
+        project_upsert(&vault_root, &new_path);
+    }
+    Ok(count)
 }
 
 /// Write `content` to an arbitrary absolute path (used by export). Parent
@@ -607,8 +652,38 @@ pub fn start_vault_watch(
                     }
                 }
             }
+            // Sync the document projection with external (or missed) changes.
+            for p in &paths {
+                let abs = root.join(p);
+                if !p.to_lowercase().ends_with(".md") {
+                    // Folder-level event (create/delete/move): drop the subtree
+                    // from the projection; per-file events fill creations in.
+                    let _ = docdb::remove_path(&root, p);
+                } else if abs.exists() {
+                    let _ = docdb::update_one(&root, p);
+                } else {
+                    let _ = docdb::remove_path(&root, p);
+                }
+            }
             let _ = app_handle.emit("vault-changed", paths);
         }
     });
     Ok(())
+}
+
+/// Library home data: document cards (newest first), optionally scoped to a
+/// folder. Served from the SQLite projection, which self-heals when stale.
+#[tauri::command]
+pub fn query_library(
+    vault_root: String,
+    folder: Option<String>,
+) -> Result<Vec<docdb::LibraryEntry>, String> {
+    docdb::query_library(Path::new(&vault_root), folder.as_deref())
+}
+
+/// Folder table view: direct `.md` children as rows, frontmatter keys as
+/// auto-inferred columns (read from disk so brand-new notes appear at once).
+#[tauri::command]
+pub fn query_folder_table(vault_root: String, folder: String) -> Result<docdb::FolderTable, String> {
+    docdb::query_folder_table(Path::new(&vault_root), &folder)
 }

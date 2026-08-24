@@ -375,6 +375,7 @@ export function FileTree() {
       // Folder-as-container: create (or open) the folder's index.md body.
       if (menu.target.kind === "folder") {
         items.push({ id: "new-index", label: t.ctxNewIndex });
+        items.push({ id: "view-table", label: t.viewAsTable });
       }
       items.push({ id: "rename", label: t.ctxRename });
       items.push({ id: "delete", label: t.ctxDelete, danger: true });
@@ -390,7 +391,9 @@ export function FileTree() {
       if (id === "new-note") void handleNewNote(target);
       else if (id === "new-folder") void handleNewFolder(target);
       else if (id === "new-index" && target) void handleCreateIndex(target);
-      else if (id === "rename" && target) void handleRename(target);
+      else if (id === "view-table" && target) {
+        useUiStore.getState().setFolderTableOpen(true, target.path);
+      } else if (id === "rename" && target) void handleRename(target);
       else if (id === "delete" && target) void handleDelete(target);
       else if (id === "trash") useUiStore.getState().setTrashOpen(true);
     },

@@ -1,6 +1,7 @@
 pub mod backlinks;
 pub mod commands;
 pub mod config;
+pub mod docdb;
 pub mod file_io;
 pub mod image;
 pub mod link_index;
@@ -45,6 +46,8 @@ pub fn run() {
             commands::read_config,
             commands::save_config,
             commands::start_vault_watch,
+            commands::query_library,
+            commands::query_folder_table,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

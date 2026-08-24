@@ -79,6 +79,7 @@ function enDictStub() {
     focusMode: "Focus Mode",
     baseOpenCommand: "Open Database…",
     slideshowCommand: "Start Slideshow",
+    libraryHome: "Library Home",
     theme: "Theme", language: "Language",
     find: "Find…", findShortcut: "Ctrl+F",
     findInVault: "Find in Vault…", findInVaultShortcut: "Ctrl+Shift+F",
