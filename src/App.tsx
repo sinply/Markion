@@ -5,6 +5,7 @@ import { useSettingsStore } from "./stores/settingsStore";
 import { startVaultWatch } from "./lib/ipc";
 import { Layout } from "./components/Layout";
 import { MenuBar } from "./components/MenuBar";
+import { Splash } from "./components/Splash";
 import { AboutDialog } from "./components/AboutDialog";
 import { HelpDialog } from "./components/HelpDialog";
 import { SettingsDialog } from "./components/SettingsDialog";
@@ -86,16 +87,12 @@ export default function App() {
   };
 
   if (loading || !booted) {
-    return (
-      <div style={{ padding: 32, textAlign: "center", fontFamily: "sans-serif" }}>
-        Loading vault…
-      </div>
-    );
+    return <Splash />;
   }
 
   if (!vaultRoot) {
     return (
-      <div style={{ padding: 32, textAlign: "center", fontFamily: "sans-serif" }}>
+      <div className="markion-app-fade" style={{ padding: 32, textAlign: "center", fontFamily: "sans-serif" }}>
         <h1>Markion</h1>
         <p style={{ color: "#666" }}>A fast, local-first Markdown editor</p>
         <button
@@ -110,7 +107,7 @@ export default function App() {
 
   return (
     <>
-      <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      <div className="markion-app-fade" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
         <MenuBar />
         <div style={{ flex: 1, minHeight: 0 }}>
           <Layout />

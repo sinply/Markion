@@ -97,6 +97,7 @@ const en = {
   containerListView: "Show as list",
   settingsTemplateFolderHint:
     "A folder in your vault that holds reusable .md snippets. Files there are offered by the Insert Template dialog (menu: Format/Insert Template). Create the folder and drop notes in to use it.",
+  splashOpening: "Opening vault…",
   viewAsTable: "View as Table",
   folderTableTitle: (folder: string) => `Table · ${folder || "vault"}`,
   clearRecent: "Clear Recent",
@@ -326,6 +327,7 @@ const zh: typeof en = {
   containerListView: "以列表显示",
   settingsTemplateFolderHint:
     "存放可复用 .md 片段的文件夹（相对当前知识库）。「插入模板…」对话框会列出这里的文件。在 vault 里新建该文件夹并放入笔记即可使用；留空则关闭模板功能。",
+  splashOpening: "正在打开知识库…",
   viewAsTable: "以表格查看",
   folderTableTitle: (folder: string) => `表格 · ${folder || "根目录"}`,
   clearRecent: "清除最近记录",
