@@ -3,7 +3,7 @@ import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder, EditorState, StateField, Text } from "@codemirror/state";
 import type { SyntaxNode } from "@lezer/common";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget, MathInlineWidget, PreviewWidget, WikiLinkWidget, CalloutWidget, EmbedWidget, FrontmatterWidget } from "./widgets";
+import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget, MathInlineWidget, PreviewWidget, WikiLinkWidget, CalloutWidget, EmbedWidget, FrontmatterWidget, HrWidget } from "./widgets";
 import { markdownContextFacet, type MarkdownContext } from "./media";
 import { extractFrontmatter, parseFrontmatter } from "../lib/frontmatter";
 import { resolveWikiLink, wikiHeading } from "./wikiIndex";
@@ -66,10 +66,21 @@ function hiddenMark(): Decoration {
   return Decoration.mark({ attributes: { class: "cm-hidden cm-mark" } });
 }
 
-/** Mark a syntax marker as hidden — unless it's on the active (cursor) line,
- *  where the source should stay visible so the user can edit it. */
-function markHiddenAt(state: EditorState, from: number, to: number, activeLine: number): Decoration {
-  if (activeLine >= 0 && state.doc.lineAt(from).number === activeLine) {
+/** Mark a syntax marker as hidden — unless the cursor is inside the marker's
+ *  OWN syntax node (Typora behavior). The old rule kept markers visible for
+ *  the whole cursor LINE, so freshly typed `**bold**` / [links](url) looked
+ *  broken until you moved to another line. Now the pair renders as soon as
+ *  the cursor steps out of it, even mid-line; step back in and the raw
+ *  source reappears for editing. */
+function markHiddenAt(
+  state: EditorState,
+  _markFrom: number,
+  _markTo: number,
+  nodeFrom: number,
+  nodeTo: number,
+): Decoration {
+  const head = state.selection.main.head;
+  if (head >= nodeFrom && head <= nodeTo) {
     return Decoration.mark({ attributes: { class: "cm-active-line-mark", style: "opacity:0.55" } });
   }
   return hiddenMark();
@@ -182,16 +193,20 @@ export function buildDecorations(state: EditorState): DecorationSet {
   const doc = state.doc;
   let cache = scanCache.get(doc);
   if (!cache) {
-    cache = { blocks: scanBlocks(state), lastActiveLine: -1, lastSet: null };
+    cache = { blocks: scanBlocks(state), lastHead: -1, lastSet: null };
     scanCache.set(doc, cache);
   }
-  const activeLine = activeLineOf(state);
-  if (cache.lastActiveLine === activeLine && cache.lastSet) {
+  // Node-granularity rule: markers show/hide per CURSOR POSITION now (inside
+  // a syntax node = raw source), not per line. So the reuse check must be
+  // the exact head — reusing per line swallowed same-line cursor moves and
+  // kept `**bold**` raw after typing it.
+  const head = state.selection.main.head;
+  if (cache.lastHead === head && cache.lastSet) {
     return cache.lastSet;
   }
   const entries = decideEntries(state, cache.blocks);
   const set = buildSet(entries);
-  cache.lastActiveLine = activeLine;
+  cache.lastHead = head;
   cache.lastSet = set;
   return set;
 }
@@ -200,7 +215,7 @@ export function buildDecorations(state: EditorState): DecorationSet {
 
 interface ScanCache {
   blocks: Block[];
-  lastActiveLine: number;
+  lastHead: number;
   lastSet: DecorationSet | null;
 }
 
@@ -211,6 +226,7 @@ type BlockKind =
   | "marks"       // standalone hidden markers (ListMark, outer link brackets)
   | "link"        // link text span with fixed-hidden brackets
   | "image"       // image widget (skipped on active line)
+  | "hr"          // horizontal rule widget
   | "code"        // fenced code widget (skipped on active line)
   | "table"       // GFM table widget (skipped on active line)
   | "task"        // task checkbox widget (skipped on active line)
@@ -230,6 +246,11 @@ interface Block {
   /** Class applied to the whole [from,to] span (with styleAttr). */
   styleClass?: string;
   styleAttr?: string;
+  /** Cursor-sensitivity range for marker hiding, when different from
+   *  [from,to] (a link's [from,to] is just its title text; the raw source
+   *  must also reappear when the cursor is over the URL part). */
+  spanFrom?: number;
+  spanTo?: number;
   // Widget payloads:
   code?: string;
   lang?: string;
@@ -244,6 +265,7 @@ interface Block {
   embedHeading?: string | null;
   calloutType?: string;
   calloutBody?: string;
+  hr?: boolean;
 }
 
 function collectMarks(node: SyntaxNode, name: string): { from: number; to: number }[] {
@@ -307,6 +329,36 @@ function scanBlocks(state: EditorState): Block[] {
           styleAttr: type === "StrongEmphasis" ? "font-weight:700" : "font-style:italic",
           markList: collectMarks(node.node, "EmphasisMark"),
         });
+        return false;
+      }
+
+      // --- Inline: GFM strikethrough (~~text~~) — was never handled, so the
+      //     tildes stayed visible forever. Hide marks + strike the content. ---
+      if (type === "Strikethrough") {
+        blocks.push({
+          kind: "style",
+          from: node.from, to: node.to,
+          styleClass: "cm-strikethrough",
+          markList: collectMarks(node.node, "StrikethroughMark"),
+        });
+        return false;
+      }
+
+      // --- Inline: ^super^ / ~sub~ (needs the Superscript/Subscript lezer
+      //     extensions, now enabled in codemirror.ts) ---
+      if (type === "Superscript" || type === "Subscript") {
+        blocks.push({
+          kind: "style",
+          from: node.from, to: node.to,
+          styleClass: type === "Superscript" ? "cm-superscript" : "cm-subscript",
+          markList: collectMarks(node.node, type === "Superscript" ? "SuperscriptMark" : "SubscriptMark"),
+        });
+        return false;
+      }
+
+      // --- Block: horizontal rule (--- / *** / ___) renders as a line ---
+      if (type === "HorizontalRule") {
+        blocks.push({ kind: "hr", from: node.from, to: node.to });
         return false;
       }
 
@@ -381,6 +433,8 @@ function scanBlocks(state: EditorState): Block[] {
             styleClass: "cm-link",
             styleAttr: "color:#0366d6;text-decoration:underline;cursor:pointer",
             markList: markers,
+            spanFrom: node.from,
+            spanTo: node.to,
           });
         } else {
           blocks.push({ kind: "link", from: node.from, to: node.to, markList: markers });
@@ -606,7 +660,7 @@ function scanBlocks(state: EditorState): Block[] {
   }
 
   // --- Inline: ==highlight== (Obsidian). Rendered live and in preview; the
-  // source markers stay visible until the active line replaces them.
+  // == markers hide unless the cursor is inside the span.
   const markRe = /==([^=\n]+)==/g;
   let hm: RegExpExecArray | null;
   while ((hm = markRe.exec(docText)) !== null) {
@@ -618,6 +672,10 @@ function scanBlocks(state: EditorState): Block[] {
       from, to,
       styleClass: "cm-mark",
       styleAttr: "background:rgba(255,213,89,0.45);border-radius:3px;padding:0 2px;",
+      markList: [
+        { from, to: from + 2 },
+        { from: to - 2, to },
+      ],
     });
   }
 
@@ -634,7 +692,7 @@ function decideEntries(state: EditorState, blocks: Block[]): DecoEntry[] {
       case "style": {
         if (b.markList) {
           for (const mk of b.markList) {
-            entries.push({ from: mk.from, to: mk.to, decoration: markHiddenAt(state, mk.from, mk.to, activeLine) });
+            entries.push({ from: mk.from, to: mk.to, decoration: markHiddenAt(state, mk.from, mk.to, b.from, b.to) });
           }
         }
         if (b.styleClass) {
@@ -650,16 +708,18 @@ function decideEntries(state: EditorState, blocks: Block[]): DecoEntry[] {
 
       case "marks": {
         for (const mk of b.markList ?? []) {
-          entries.push({ from: mk.from, to: mk.to, decoration: markHiddenAt(state, mk.from, mk.to, activeLine) });
+          entries.push({ from: mk.from, to: mk.to, decoration: markHiddenAt(state, mk.from, mk.to, b.from, b.to) });
         }
         break;
       }
 
       case "link": {
+        const spanFrom = b.spanFrom ?? b.from;
+        const spanTo = b.spanTo ?? b.to;
         for (const mk of b.markList ?? []) {
           entries.push({
             from: mk.from, to: mk.to,
-            decoration: markHiddenAt(state, mk.from, mk.to, activeLine),
+            decoration: markHiddenAt(state, mk.from, mk.to, spanFrom, spanTo),
           });
         }
         if (b.styleClass) {
@@ -753,6 +813,16 @@ function decideEntries(state: EditorState, blocks: Block[]): DecoEntry[] {
         if (isOnActiveLine(state, b.from, b.to, activeLine)) break; // keep source editable
         const w = new CalloutWidget(b.calloutType ?? "note", b.calloutBody ?? "");
         entries.push({ from: b.from, to: b.to, decoration: Decoration.replace({ widget: w, block: true }) });
+        break;
+      }
+
+      case "hr": {
+        // Same rule as other blocks: cursor on it = edit the marker.
+        if (isOnActiveLine(state, b.from, b.to, activeLine)) break;
+        entries.push({
+          from: b.from, to: b.to,
+          decoration: Decoration.replace({ widget: new HrWidget(), block: true }),
+        });
         break;
       }
 

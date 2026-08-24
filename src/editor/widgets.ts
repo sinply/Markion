@@ -739,6 +739,19 @@ export class WikiLinkWidget extends WidgetType {
 }
 
 /** Obsidian-style callout card (`> [!note] ...`). */
+/** Horizontal rule (---): a plain themed line. */
+export class HrWidget extends WidgetType {
+  eq(): boolean {
+    return true;
+  }
+
+  toDOM(): HTMLElement {
+    const div = document.createElement("div");
+    div.className = "cm-hr";
+    return div;
+  }
+}
+
 export class CalloutWidget extends WidgetType {
   constructor(readonly type: string, readonly body: string) {
     super();

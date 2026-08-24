@@ -9,7 +9,7 @@ import {
   type DecorationSet,
 } from "@codemirror/view";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import { Table, TaskList, Strikethrough } from "@lezer/markdown";
+import { Table, TaskList, Strikethrough, Superscript, Subscript } from "@lezer/markdown";
 import { languages as codeLanguages } from "@codemirror/language-data";
 import { LanguageDescription } from "@codemirror/language";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
@@ -172,7 +172,7 @@ export function createEditorState(
       foldGutter(),
       markdown({
         base: markdownLanguage,
-        extensions: [Table, TaskList, Strikethrough],
+        extensions: [Table, TaskList, Strikethrough, Superscript, Subscript],
         // Real syntax highlighting for fence contents while editing source
         // (languages load on demand from @codemirror/language-data).
         codeLanguages: codeLanguagesWithAliases,

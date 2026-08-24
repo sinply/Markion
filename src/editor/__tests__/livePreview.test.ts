@@ -257,7 +257,9 @@ describe("#tag highlight", () => {
 describe("==highlight== decoration", () => {
   it("marks ==text== ranges with the cm-mark class", () => {
     const decos = buildDecorations(stateOfEnd("some ==important== words\n\nmore\n"));
-    expect(countByClass(decos, "cm-mark")).toBe(1);
+    // 1 content style + the now-hidden == markers (2) share the cm-mark class.
+    expect(countByClass(decos, "cm-mark")).toBe(3);
+    expect(countByClass(decos, "cm-hidden")).toBeGreaterThanOrEqual(2);
   });
 
   it("does not mark == inside fenced code blocks", () => {

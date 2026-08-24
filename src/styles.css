@@ -386,6 +386,23 @@ body {
   font-size: 0.9em;
 }
 
+/* GFM strikethrough (~~text~~) content */
+.cm-strikethrough {
+  text-decoration: line-through;
+  text-decoration-color: var(--fg-muted, #999);
+}
+
+/* ^super^ / ~sub~ content */
+.cm-superscript { vertical-align: super; font-size: 0.78em; }
+.cm-subscript { vertical-align: sub; font-size: 0.78em; }
+
+/* Horizontal rule widget (---) */
+.cm-hr {
+  border: none;
+  border-top: 2px solid var(--border);
+  margin: 10px 0;
+}
+
 /* Code block widget */
 .cm-codeblock {
   background: var(--code-bg);
