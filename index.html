@@ -6,6 +6,67 @@
     <title>Markion</title>
   </head>
   <body>
+    <!-- Inline splash: pure HTML/CSS so it paints on the FIRST frame, before
+         the JS bundle (large: ~190 highlight.js grammars) has even downloaded.
+         main.tsx removes it as soon as React takes over. -->
+    <div id="splash">
+      <div class="sp-logo">M</div>
+      <div class="sp-title">MARKION</div>
+      <div class="sp-bar">
+        <div class="sp-fill"></div>
+        <div class="sp-fill sp-fill-delay"></div>
+      </div>
+      <div class="sp-label">Opening vault…</div>
+    </div>
+    <style>
+      @keyframes spPulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(46,160,67,.35); transform: scale(1); }
+        50% { box-shadow: 0 0 34px 8px rgba(46,160,67,.28); transform: scale(1.05); }
+      }
+      @keyframes spSweep {
+        from { left: -40%; }
+        to { left: 100%; }
+      }
+      @keyframes spBreathe {
+        0%, 100% { opacity: .55; }
+        50% { opacity: 1; }
+      }
+      #splash {
+        position: fixed; inset: 0; z-index: 9999;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 20px; background: #ffffff;
+      }
+      .sp-logo {
+        width: 76px; height: 76px; border-radius: 22px;
+        display: grid; place-items: center;
+        font-size: 42px; font-weight: 800; color: #fff;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        background: linear-gradient(135deg, #2ea043, #57d364);
+        animation: spPulse 1.8s ease-in-out infinite;
+        user-select: none;
+      }
+      .sp-title {
+        font-size: 20px; font-weight: 700; letter-spacing: 8px; text-indent: 8px;
+        color: #1f2328; opacity: .9;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      .sp-bar {
+        position: relative; width: min(320px, 60vw); height: 5px;
+        border-radius: 999px; background: #e1e4e8; overflow: hidden;
+      }
+      .sp-fill {
+        position: absolute; top: 0; height: 100%; width: 40%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, transparent, #2ea043, transparent);
+        animation: spSweep 1.15s cubic-bezier(.4, 0, .6, 1) infinite;
+      }
+      .sp-fill-delay { animation-delay: .55s; }
+      .sp-label {
+        font-size: 12.5px; color: #6a737d; letter-spacing: 1px;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        animation: spBreathe 1.6s ease-in-out infinite;
+      }
+    </style>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

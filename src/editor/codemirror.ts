@@ -1,4 +1,4 @@
-import { EditorState, Compartment, StateEffect, StateField, Facet } from "@codemirror/state";
+import { EditorState, Compartment, StateEffect, StateField, Facet, Range } from "@codemirror/state";
 import {
   EditorView,
   keymap,
@@ -256,20 +256,49 @@ const focusLineHighlighter = ViewPlugin.fromClass(
     update(u: {
       docChanged: boolean;
       selectionSet: boolean;
+      viewportChanged: boolean;
       view: EditorView;
       startState: EditorState;
     }) {
       const focusChanged =
         u.startState.facet(focusModeFacet) !== u.view.state.facet(focusModeFacet);
-      if (u.docChanged || u.selectionSet || focusChanged) {
+      if (u.docChanged || u.selectionSet || u.viewportChanged || focusChanged) {
         this.decorations = this.compute(u.view);
       }
     }
     compute(view: EditorView): DecorationSet {
       if (!view.state.facet(focusModeFacet)) return Decoration.none;
-      const { from } = view.state.selection.main;
-      const line = view.state.doc.lineAt(from);
-      return Decoration.set([Decoration.line({ class: "cm-activeLine" }).range(line.from)]);
+      const { head } = view.state.selection.main;
+      const active = view.state.doc.lineAt(head);
+
+      // The "focus paragraph": expand from the cursor line until a blank line
+      // (or the doc edge). Everything else in view dims to near-invisible.
+      let paraFromLine = active.number;
+      let paraToLine = active.number;
+      while (paraFromLine > 1 && view.state.doc.line(paraFromLine - 1).text.trim()) {
+        paraFromLine--;
+      }
+      while (
+        paraToLine < view.state.doc.lines &&
+        view.state.doc.line(paraToLine + 1).text.trim()
+      ) {
+        paraToLine++;
+      }
+
+      const decos: Range<Decoration>[] = [
+        Decoration.line({ class: "cm-activeLine cm-focus-line" }).range(active.from),
+      ];
+      for (const range of view.visibleRanges) {
+        let pos = range.from;
+        while (pos <= range.to) {
+          const ln = view.state.doc.lineAt(pos);
+          if (ln.number < paraFromLine || ln.number > paraToLine) {
+            decos.push(Decoration.line({ class: "cm-focus-dim" }).range(ln.from));
+          }
+          pos = ln.to + 1;
+        }
+      }
+      return Decoration.set(decos, true);
     }
   },
   { decorations: (v) => v.decorations },

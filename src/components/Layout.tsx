@@ -74,6 +74,22 @@ export function Layout() {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
 
+  // Focus mode clears the stage: collapse both side panels while it's on and
+  // restore the previous state when it turns off.
+  const focusMode = useUiStore((s) => s.focusMode);
+  const panelsBeforeFocus = useRef({ left: false, right: false });
+  useEffect(() => {
+    if (focusMode) {
+      panelsBeforeFocus.current = { left: leftCollapsed, right: rightCollapsed };
+      setLeftCollapsed(true);
+      setRightCollapsed(true);
+    } else {
+      setLeftCollapsed(panelsBeforeFocus.current.left);
+      setRightCollapsed(panelsBeforeFocus.current.right);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusMode]);
+
   const handleJump = useCallback((from: number) => {
     const activeEl = document.querySelector(".cm-editor .cm-content") as HTMLElement | null;
     if (!activeEl) return;

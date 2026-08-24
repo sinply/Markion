@@ -1033,6 +1033,20 @@ label {
   to { opacity: 1; }
 }
 
+/* --- Focus mode (View > Focus Mode) ---------------------------------------
+   The paragraph under the cursor stays fully visible with an accent bar;
+   every other line in view fades back. Transitions keep movement soft. */
+.markdown-editor .cm-content .cm-line {
+  transition: opacity 0.25s ease;
+}
+.markdown-editor .cm-focus-line {
+  background: var(--hover-bg, rgba(127, 127, 127, 0.08));
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.markdown-editor .cm-focus-dim {
+  opacity: 0.3;
+}
+
 /* --- Thin overlay scrollbars (Windows WebView2 supports ::-webkit-scrollbar) --- */::-webkit-scrollbar {
   width: 8px;
   height: 8px;
