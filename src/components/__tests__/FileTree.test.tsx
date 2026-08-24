@@ -75,12 +75,13 @@ describe("FileTree component hierarchy", () => {
 
   it("shows top-level files/folders and HIDES collapsed subfolders by default", () => {
     render(<FileTree />);
-    // Top-level items visible
-    expect(screen.getByText("intro.md")).toBeTruthy();
+    // Top-level items visible — displayed WITHOUT the .md extension
+    expect(screen.getByText("intro")).toBeTruthy();
+    expect(screen.queryByText("intro.md")).toBeNull();
     expect(screen.getByText("notes")).toBeTruthy();
     // Nested items hidden until folder is expanded
-    expect(screen.queryByText("a.md")).toBeNull();
-    expect(screen.queryByText("x.md")).toBeNull();
+    expect(screen.queryByText("a")).toBeNull();
+    expect(screen.queryByText("x")).toBeNull();
   });
 
   it("preserves nested folder data in the tree structure (expandable)", () => {

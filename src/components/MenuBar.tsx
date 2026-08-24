@@ -5,6 +5,7 @@ import { useVaultStore } from "../stores/vaultStore";
 import type { MarkdownCommand } from "../editor/commands";
 import { useI18n, THEME_LABELS } from "../lib/i18n";
 import { openNote } from "../lib/openNote";
+import { docTitle } from "../lib/docTitle";
 import { exportActiveNote } from "../lib/exportNote";
 import type { Theme } from "../lib/types";
 
@@ -165,7 +166,7 @@ export function MenuBar() {
         { label: t.preferences, action: () => { ui.setSettingsOpen(true); close(); }, separatorAfter: true },
         { label: t.recent, action: () => close(), separatorAfter: true },
         ...ui.recentFiles.slice(0, 5).map((p, i) => ({
-          label: `  ${p}`,
+          label: `  ${docTitle(p)}`,
           action: () => {
             const root = vaultStore.vaultRoot;
             if (root) void openNote(root, p);

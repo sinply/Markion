@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useVaultStore } from "../stores/vaultStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { openNote } from "../lib/openNote";
+import { docTitle } from "../lib/docTitle";
 import { buildCommands, createAndOpenNote, type Command } from "../lib/commands";
 import { useI18n } from "../lib/i18n";
 
@@ -142,9 +143,9 @@ export function CommandPalette() {
           } as const;
           if (item.kind === "file") {
             return (
-              <div key={item.path} style={rowStyle} onClick={() => void runItem(item)}>
+              <div key={item.path} style={rowStyle} onClick={() => void runItem(item)} title={item.path}>
                 <span style={{ marginRight: 6, opacity: 0.7 }}>📄</span>
-                {item.name}
+                {docTitle(item.name)}
               </div>
             );
           }

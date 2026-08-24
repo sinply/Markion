@@ -113,7 +113,7 @@ describe("FileTree context menu", () => {
 
   it("right-clicking a file shows New Note / Rename / Delete (no New Folder)", () => {
     render(<FileTree />);
-    openMenuOn("intro.md");
+    openMenuOn("intro");
     const menu = screen.getByTestId("context-menu");
     const ids = [...menu.querySelectorAll("[data-menu-id]")].map(
       (el) => el.getAttribute("data-menu-id"),
@@ -144,7 +144,7 @@ describe("FileTree context menu", () => {
 
   it("Escape closes the menu", () => {
     render(<FileTree />);
-    openMenuOn("intro.md");
+    openMenuOn("intro");
     expect(screen.getByTestId("context-menu")).toBeTruthy();
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByTestId("context-menu")).toBeNull();
@@ -157,14 +157,14 @@ describe("FileTree context menu", () => {
     fireEvent.click(screen.getByText("New Note"));
     await waitFor(() => expect(spies.createFile).toHaveBeenCalledWith("/vault", "notes/fresh.md"), WAIT);
     expect(spies.loadTree).toHaveBeenCalledWith("/vault");
-    expect(spies.openDoc).toHaveBeenCalledWith("fresh.md", "notes/fresh.md");
+    expect(spies.openDoc).toHaveBeenCalledWith("fresh", "notes/fresh.md");
     expect(spies.setActiveContent).toHaveBeenCalledWith("note body");
   });
 
   it("New Note on a file creates next to it (same parent)", { timeout: SLOW }, async () => {
     promptSpy.mockReturnValue("sibling");
     render(<FileTree />);
-    openMenuOn("intro.md");
+    openMenuOn("intro");
     fireEvent.click(screen.getByText("New Note"));
     await waitFor(() => expect(spies.createFile).toHaveBeenCalledWith("/vault", "sibling.md"), WAIT);
   });
@@ -172,7 +172,7 @@ describe("FileTree context menu", () => {
   it("New Note rejects invalid names", () => {
     promptSpy.mockReturnValue("bad/name");
     render(<FileTree />);
-    openMenuOn("intro.md");
+    openMenuOn("intro");
     fireEvent.click(screen.getByText("New Note"));
     expect(alertSpy).toHaveBeenCalled();
     expect(spies.createFile).not.toHaveBeenCalled();
@@ -190,23 +190,24 @@ describe("FileTree context menu", () => {
   it("Rename on a file renames on disk and remaps the open doc", { timeout: SLOW }, async () => {
     promptSpy.mockReturnValue("renamed"); // no .md typed -> auto-appended
     render(<FileTree />);
-    openMenuOn("intro.md");
+    openMenuOn("intro");
     fireEvent.click(screen.getByText("Rename…"));
     await waitFor(
       () =>
         expect(spies.renameWithLinks).toHaveBeenCalledWith("/vault", "intro.md", "renamed.md"),
       WAIT,
     );
-    expect(spies.renameDoc).toHaveBeenCalledWith("intro.md", "renamed.md", "renamed.md");
+    expect(spies.renameDoc).toHaveBeenCalledWith("intro.md", "renamed.md", "renamed");
     expect(spies.loadTree).toHaveBeenCalledWith("/vault");
   });
 
   it("Rename prompts with the current name prefilled", () => {
     promptSpy.mockReturnValue(null);
     render(<FileTree />);
-    openMenuOn("intro.md");
+    openMenuOn("intro");
     fireEvent.click(screen.getByText("Rename…"));
-    expect(promptSpy).toHaveBeenCalledWith(expect.any(String), "intro.md");
+    // The prompt prefills the document title WITHOUT the .md extension.
+    expect(promptSpy).toHaveBeenCalledWith(expect.any(String), "intro");
     expect(spies.renameWithLinks).not.toHaveBeenCalled();
   });
 
@@ -237,7 +238,7 @@ describe("FileTree context menu", () => {
   it("Delete cancelled does nothing", () => {
     confirmSpy.mockReturnValue(false);
     render(<FileTree />);
-    openMenuOn("intro.md");
+    openMenuOn("intro");
     fireEvent.click(screen.getByText("Delete"));
     expect(spies.trashPath).not.toHaveBeenCalled();
     expect(spies.closeDocsUnder).not.toHaveBeenCalled();

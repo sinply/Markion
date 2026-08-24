@@ -48,7 +48,7 @@ describe("openNote", () => {
     expect(ok).toBe(true);
     expect(readFile).toHaveBeenCalledWith("/vault", "notes/a.md");
     const doc = useDocStore.getState();
-    expect(doc.openDocs).toContainEqual({ id: "notes/a.md", path: "notes/a.md", title: "a.md" });
+    expect(doc.openDocs).toContainEqual({ id: "notes/a.md", path: "notes/a.md", title: "a" });
     expect(doc.activeDocId).toBe("notes/a.md");
     expect(doc.activeContent).toBe("# hello");
     expect(useUiStore.getState().recentFiles).toContain("notes/a.md");

@@ -7,6 +7,7 @@ import { useSettingsStore } from "../stores/settingsStore";
 import { useUiStore } from "../stores/uiStore";
 import { createFile, createFolder, trashPath, readFile, renameWithLinks } from "../lib/ipc";
 import { useI18n } from "../lib/i18n";
+import { docTitle, titleForPath } from "../lib/docTitle";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 
 interface RowData {
@@ -130,7 +131,7 @@ function NodeView({ node, style, dragHandle }: NodeRendererProps<RowData>) {
           whiteSpace: "nowrap",
         }}
       >
-        {node.data.name}
+        {docTitle(node.data.name)}
       </span>
       {hasIndex && (
         <span
@@ -180,13 +181,13 @@ export function FileTree() {
         if (!index) return; // no index.md: keep default folder behavior
         treeRef.current?.open(d.id);
         const content = await readFile(vaultRoot, index.id);
-        openDoc(index.name, index.id);
+        openDoc(titleForPath(index.id), index.id);
         setActiveContent(content);
         return;
       }
       if (d.kind !== "file") return;
       const content = await readFile(vaultRoot, d.id);
-      openDoc(d.name, d.id);
+      openDoc(titleForPath(d.id), d.id);
       setActiveContent(content);
     },
     [vaultRoot, openDoc, setActiveContent],
@@ -247,7 +248,7 @@ export function FileTree() {
         await createFile(vaultRoot, rel);
         await loadTree(vaultRoot);
         const content = await readFile(vaultRoot, rel);
-        openDoc(fileName, rel);
+        openDoc(docTitle(fileName), rel);
         setActiveContent(content);
       } catch {
         // creation failed - tree/editor unchanged
@@ -287,7 +288,7 @@ export function FileTree() {
         await createFile(vaultRoot, rel);
         await loadTree(vaultRoot);
         const content = await readFile(vaultRoot, rel);
-        openDoc("index.md", rel);
+        openDoc(titleForPath(rel), rel);
         setActiveContent(content);
       } catch {
         // creation failed - tree/editor unchanged
@@ -300,7 +301,10 @@ export function FileTree() {
     async (target: MenuTarget) => {
       if (!vaultRoot) return;
       const { path, name, kind } = target;
-      const raw = window.prompt(t.ctxRenamePrompt, name);
+      // Prefill WITHOUT the extension (Yuque-style document title); the .md
+      // suffix is re-appended below when the user doesn't type one.
+      const prefill = kind === "file" ? name.replace(/\.md$/i, "") : name;
+      const raw = window.prompt(t.ctxRenamePrompt, prefill);
       if (raw === null) return;
       const trimmed = raw.trim();
       if (!validName(trimmed)) {
@@ -321,14 +325,14 @@ export function FileTree() {
         // links were updated.
         await renameWithLinks(vaultRoot, path, newPath);
         if (kind === "file") {
-          renameDoc(path, newPath, newName);
+          renameDoc(path, newPath, docTitle(newName));
         } else {
           // Folder rename: remap every open doc at/under the old folder path.
           const prefix = `${path}/`;
           for (const d of [...useDocStore.getState().openDocs]) {
             if (d.path === path || d.path.startsWith(prefix)) {
               const rel = newPath + d.path.slice(path.length);
-              renameDoc(d.path, rel, rel.split("/").pop() ?? rel);
+              renameDoc(d.path, rel, titleForPath(rel));
             }
           }
         }

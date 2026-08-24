@@ -2,6 +2,7 @@ import { useVaultStore } from "../stores/vaultStore";
 import { useDocStore } from "../stores/docStore";
 import { useI18n } from "../lib/i18n";
 import { openNote } from "../lib/openNote";
+import { docTitle } from "../lib/docTitle";
 import type { TreeNode } from "../lib/types";
 
 /** Find a folder node by its relative path (depth-first). */
@@ -28,7 +29,10 @@ export function FolderContainer() {
   const t = useI18n();
 
   const active = openDocs.find((d) => d.id === activeDocId);
-  if (!active || !/index\.md$/i.test(active.title)) return null;
+  // Container mode keys on the PATH (the storage truth), never the display
+  // title — titles are extension-free since the docTitle conversion layer.
+  const activeBase = active ? active.path.split("/").pop() ?? "" : "";
+  if (!active || !/^index\.md$/i.test(activeBase)) return null;
 
   const slash = active.path.lastIndexOf("/");
   const folderRel = slash > 0 ? active.path.slice(0, slash) : "";
@@ -79,7 +83,7 @@ export function FolderContainer() {
           }}
         >
           <span style={{ opacity: 0.7 }}>📄</span>
-          <span>{c.name}</span>
+          <span>{docTitle(c.name)}</span>
         </div>
       ))}
     </div>

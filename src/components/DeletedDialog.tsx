@@ -21,8 +21,11 @@ export function DeletedDialog() {
   };
 
   const saveAs = async () => {
+    // Default filename derives from the real path (keeps the .md extension);
+    // `title` is the display title, which no longer carries an extension.
+    const fileName = deleted.path.split("/").pop() ?? deleted.title;
     const picked = await save({
-      defaultPath: deleted.title,
+      defaultPath: fileName,
       filters: [{ name: "Markdown", extensions: ["md"] }],
     });
     if (typeof picked !== "string") return; // cancelled — keep the dialog open

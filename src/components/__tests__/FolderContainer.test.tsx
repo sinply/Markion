@@ -36,19 +36,21 @@ beforeEach(() => {
 describe("FolderContainer", () => {
   it("renders sibling notes when the active doc is an index.md", () => {
     useDocStore.setState({
-      openDocs: [{ id: "docs/index.md", path: "docs/index.md", title: "index.md" }],
+      openDocs: [{ id: "docs/index.md", path: "docs/index.md", title: "docs" }],
       activeDocId: "docs/index.md",
     });
     render(<FolderContainer />);
-    expect(screen.getByText("a.md")).toBeTruthy();
+    // Siblings display without the .md extension (docTitle conversion layer).
+    expect(screen.getByText("a")).toBeTruthy();
+    expect(screen.queryByText("a.md")).toBeNull();
     // Folder container lists only `.md` files, not subfolders or itself.
-    expect(screen.queryByText("index.md")).toBeNull();
+    expect(screen.queryByText("index")).toBeNull();
     expect(screen.queryByText("sub")).toBeNull();
   });
 
   it("renders nothing for a non-index note", () => {
     useDocStore.setState({
-      openDocs: [{ id: "docs/a.md", path: "docs/a.md", title: "a.md" }],
+      openDocs: [{ id: "docs/a.md", path: "docs/a.md", title: "a" }],
       activeDocId: "docs/a.md",
     });
     const { container } = render(<FolderContainer />);
@@ -57,11 +59,21 @@ describe("FolderContainer", () => {
 
   it("clicking a note opens it", () => {
     useDocStore.setState({
-      openDocs: [{ id: "docs/index.md", path: "docs/index.md", title: "index.md" }],
+      openDocs: [{ id: "docs/index.md", path: "docs/index.md", title: "docs" }],
       activeDocId: "docs/index.md",
     });
     render(<FolderContainer />);
-    fireEvent.click(screen.getByText("a.md"));
+    fireEvent.click(screen.getByText("a"));
     expect(mockOpenNote).toHaveBeenCalledWith("/vault", "docs/a.md");
+  });
+
+  it("detects container mode from the PATH, not the display title", () => {
+    // A stale/odd title must not break container detection.
+    useDocStore.setState({
+      openDocs: [{ id: "docs/index.md", path: "docs/index.md", title: "" }],
+      activeDocId: "docs/index.md",
+    });
+    const { container } = render(<FolderContainer />);
+    expect(container.innerHTML).not.toBe("");
   });
 });

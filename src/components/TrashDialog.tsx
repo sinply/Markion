@@ -3,6 +3,7 @@ import { useUiStore } from "../stores/uiStore";
 import { useVaultStore } from "../stores/vaultStore";
 import { useI18n } from "../lib/i18n";
 import { listTrash, restoreTrash, type TrashEntry } from "../lib/ipc";
+import { docTitle } from "../lib/docTitle";
 
 /** Vault-internal trash viewer: lists deleted files and restores them to
  *  their original location (delete goes to `.markion/trash`, see FileTree). */
@@ -98,7 +99,7 @@ export function TrashDialog() {
             >
               <span style={{ opacity: 0.7 }}>{entry.kind === "folder" ? "📁" : "📄"}</span>
               <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={entry.path}>
-                {entry.name}
+                {entry.kind === "folder" ? entry.name : docTitle(entry.name)}
               </span>
               <span style={{ color: "var(--fg-muted)", fontSize: 12 }}>{fmt(entry.modified)}</span>
               <button

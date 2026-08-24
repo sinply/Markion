@@ -2,6 +2,7 @@ import { readFile, fileSize } from "./ipc";
 import { useDocStore } from "../stores/docStore";
 import { useUiStore } from "../stores/uiStore";
 import { getDict } from "./i18n";
+import { titleForPath } from "./docTitle";
 
 /** Files above this size trigger a confirmation before opening (design spec §7:
  *  "opening very large files warns before proceeding"). */
@@ -50,7 +51,7 @@ export async function openNote(
       // size check failed — proceed with the open anyway
     }
     const content = await readFile(vaultRoot, path);
-    const title = path.split("/").pop() ?? path;
+    const title = titleForPath(path);
     useDocStore.getState().openDoc(title, path);
     useDocStore.getState().setActiveContent(content);
     if (opts?.addRecent !== false) {
