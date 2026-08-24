@@ -3,11 +3,26 @@ import { EditorView } from "@codemirror/view";
 import type { EditorState } from "@codemirror/state";
 import { selectAll } from "@codemirror/commands";
 import { createEditorState, setLivePreview, setEditorMode, setFocusMode } from "./codemirror";
+import { extractFrontmatter } from "../lib/frontmatter";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useUiStore } from "../stores/uiStore";
 import { useI18n } from "../lib/i18n";
 import { setEditorView } from "./registry";
 import { ContextMenu } from "../components/ContextMenu";
+
+/** A freshly opened note puts the cursor at position 0 — inside the
+ *  frontmatter, which would show raw YAML instead of the Properties card.
+ *  When the passive cursor sits in the frontmatter block, move it just past
+ *  the block so the note opens on its rendered body. An explicit user click
+ *  into the card still reveals the YAML (cursorInside rule in livePreview). */
+export function skipFrontmatterCursor(view: EditorView): void {
+  const fm = extractFrontmatter(view.state.doc.toString());
+  if (!fm) return;
+  const head = view.state.selection.main.head;
+  if (head < fm.end) {
+    view.dispatch({ selection: { anchor: Math.min(fm.end, view.state.doc.length) } });
+  }
+}
 
 /** Run a context-menu edit action. selectAll is a real CM6 command; cut/copy/
  *  paste go through the browser clipboard (execCommand) after focusing the
@@ -71,6 +86,7 @@ export const MarkdownEditor = forwardRef<EditorHandle, EditorViewProps>(
       });
       const view = new EditorView({ state, parent: containerRef.current });
       viewRef.current = view;
+      skipFrontmatterCursor(view);
       setEditorView(view);
       onStateChangeRef.current?.(state);
       return () => {
@@ -110,6 +126,7 @@ export const MarkdownEditor = forwardRef<EditorHandle, EditorViewProps>(
         view.dispatch({
           changes: { from: 0, to: view.state.doc.length, insert: newDoc },
         });
+        skipFrontmatterCursor(view);
       },
       get view() {
         return viewRef.current;

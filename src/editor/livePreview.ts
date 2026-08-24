@@ -95,6 +95,13 @@ function isOnActiveLine(state: EditorState, from: number, to: number, activeLine
   return lineFrom <= activeLine && activeLine <= lineTo;
 }
 
+/** True when the cursor sits within [from,to] — the node-granularity trigger
+ *  for revealing raw source (inline marks and the frontmatter block). */
+function cursorInside(state: EditorState, from: number, to: number): boolean {
+  const head = state.selection.main.head;
+  return head >= from && head <= to;
+}
+
 /** The 1-based line the selection cursor is on, or -1 if unknown. */
 function activeLineOf(state: EditorState): number {
   const head = state.selection.main.head;
@@ -307,6 +314,31 @@ export function parseCallout(raw: string): { type: string; body: string } | null
 function scanBlocks(state: EditorState): Block[] {
   const blocks: Block[] = [];
   const tree = syntaxTree(state);
+  const docText = state.doc.toString();
+
+  // Frontmatter FIRST: everything inside the leading ---...--- block is
+  // property metadata, NOT markdown. Detect it up front and skip it in the
+  // iterate and regex scans below — otherwise the --- fences would ALSO
+  // parse as HorizontalRule nodes and double-replace the same range.
+  let fmEnd = -1;
+  {
+    // Bound to the first 100 lines: a doc that starts with `---` but never
+    // closes it can't make this scan run to EOF.
+    let pos = 0;
+    for (let i = 0; i < 100; i++) {
+      const nl = docText.indexOf("\n", pos);
+      if (nl < 0) { pos = docText.length; break; }
+      pos = nl + 1;
+    }
+    const head = pos < docText.length ? docText.slice(0, pos) : docText;
+    const fmMatch = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(head);
+    if (fmMatch) {
+      fmEnd = fmMatch[0].length;
+      blocks.push({ kind: "frontmatter", from: 0, to: fmEnd });
+    }
+  }
+  const insideFrontmatter = (pos: number): boolean => fmEnd >= 0 && pos < fmEnd;
+
   // Ranges of every fenced/indented/inline code span. Regex-based scans below
   // (math, wikilinks) must skip matches inside these, otherwise a `$x$` or
   // `[[...]]` inside code would create a decoration overlapping the block
@@ -319,6 +351,8 @@ function scanBlocks(state: EditorState): Block[] {
   tree.iterate({
     enter(node) {
       const { name: type } = node.type;
+
+      if (insideFrontmatter(node.from)) return false;
 
       // --- Inline: Emphasis + StrongEmphasis (hide markers, style content) ---
       if (type === "Emphasis" || type === "StrongEmphasis") {
@@ -559,26 +593,8 @@ function scanBlocks(state: EditorState): Block[] {
     },
   });
 
-  // YAML frontmatter: keep it as editable source, but give it a subtle
-  // background bar (not highlighted) so it reads as a distinct panel.
-  // Frontmatter can only ever sit at the very top of a note, so bound the
-  // regex to the first 100 lines: a doc that starts with `---` but never
-  // closes it can't make the lazy scan run to EOF.
-  const docText = state.doc.toString();
-  let head = docText;
-  {
-    let pos = 0;
-    for (let i = 0; i < 100; i++) {
-      const nl = docText.indexOf("\n", pos);
-      if (nl < 0) { pos = docText.length; break; }
-      pos = nl + 1;
-    }
-    if (pos < docText.length) head = docText.slice(0, pos);
-  }
-  const fmMatch = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(head);
-  if (fmMatch) {
-    blocks.push({ kind: "frontmatter", from: 0, to: fmMatch[0].length });
-  }
+  // (Frontmatter was already detected and pushed at the TOP of scanBlocks;
+  // everything inside it is skipped by the iterate and the regex scans below.)
 
   // --- Block math: $$...$$ (Lezer markdown has no math nodes; scan the doc) ---
   const mathRe = /\$\$([\s\S]+?)\$\$/g;
@@ -587,7 +603,7 @@ function scanBlocks(state: EditorState): Block[] {
   while ((m = mathRe.exec(docText)) !== null) {
     const from = m.index;
     const to = m.index + m[0].length;
-    if (insideCode(from)) continue; // `$$` inside a code block is code, not math
+    if (insideCode(from) || insideFrontmatter(from)) continue; // `$$` inside a code block is code, not math
     blockMathRanges.push({ from, to });
     blocks.push({ kind: "mathBlock", from, to, tex: m[1].trim() });
   }
@@ -621,7 +637,7 @@ function scanBlocks(state: EditorState): Block[] {
   while ((wm = wikiRe.exec(docText)) !== null) {
     const from = wm.index;
     const to = from + wm[0].length;
-    if (insideCode(from)) continue; // never render `[[` inside code blocks
+    if (insideCode(from) || insideFrontmatter(from)) continue; // never render `[[` inside code blocks
     const raw = wm[2].trim();
     if (wm[1] === "!") {
       // Embed: `![[target]]` or `![[target#heading]]`.
@@ -650,7 +666,7 @@ function scanBlocks(state: EditorState): Block[] {
   while ((tg = tagRe.exec(docText)) !== null) {
     const from = tg.index + tg[1].length; // start at the `#`
     const to = tg.index + tg[0].length;
-    if (insideCode(from)) continue;
+    if (insideCode(from) || insideFrontmatter(from)) continue;
     blocks.push({
       kind: "style",
       from, to,
@@ -666,7 +682,7 @@ function scanBlocks(state: EditorState): Block[] {
   while ((hm = markRe.exec(docText)) !== null) {
     const from = hm.index;
     const to = from + hm[0].length;
-    if (insideCode(from)) continue;
+    if (insideCode(from) || insideFrontmatter(from)) continue;
     blocks.push({
       kind: "style",
       from, to,
@@ -827,9 +843,11 @@ function decideEntries(state: EditorState, blocks: Block[]): DecoEntry[] {
       }
 
       case "frontmatter": {
-        // Render as an Obsidian-style Properties card. When the cursor is
-        // inside the block, fall back to the raw YAML so it stays editable.
-        if (isOnActiveLine(state, b.from, b.to, activeLine)) break; // keep source editable
+        // Raw YAML only while the cursor is INSIDE the block — half-open at
+        // the end: position `to` is the first body character, so a cursor
+        // there (where opening a note lands it) still shows the card.
+        const fmHead = state.selection.main.head;
+        if (fmHead >= b.from && fmHead < b.to) break; // keep source editable
         const fm = extractFrontmatter(state.doc.toString());
         if (!fm || !fm.body.trim()) break;
         entries.push({
