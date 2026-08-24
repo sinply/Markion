@@ -161,6 +161,11 @@ export function LibraryHome() {
 
       {/* Card grid */}
       <div style={{ flex: 1, overflow: "auto", padding: "18px 22px" }}>
+        {loading && (
+          <div style={{ textAlign: "center", color: "var(--fg-muted)", fontSize: 14, padding: 40 }}>
+            {t.libraryIndexing}
+          </div>
+        )}
         {!loading && filtered.length === 0 && (
           <div style={{ textAlign: "center", color: "var(--fg-muted)", fontSize: 14, padding: 40 }}>
             {t.libraryEmpty}

@@ -133,11 +133,19 @@ export function MenuBar() {
         { label: t.openFolder, shortcut: "Ctrl+Shift+O", action: () => { ui.requestOpenFolder(); close(); } },
         { label: t.openFile, shortcut: "Ctrl+O", action: () => { ui.requestOpenFile(); close(); } },
         { label: t.save, shortcut: "Ctrl+S", action: () => { ui.requestSave(); close(); } },
-        { label: t.saveAs, shortcut: "Ctrl+Shift+S", action: () => { ui.requestSaveAs(); close(); }, separatorAfter: true },
-        { label: t.exportHtml, action: () => { void exportActiveNote(true); close(); } },
-        { label: t.exportMarkdown, action: () => { void exportActiveNote(false); close(); } },
-        { label: t.exportPdf, action: () => { void import("../lib/exportNote").then((m) => m.exportActivePdfFile()); close(); } },
-        { label: t.exportImage, action: () => { void import("../lib/exportNote").then((m) => m.exportActiveImage()); close(); }, separatorAfter: true },
+        { label: t.saveAs, shortcut: "Ctrl+Shift+S", action: () => { ui.requestSaveAs(); close(); } },
+        {
+          label: t.saveAsExport,
+          submenu: {
+            label: t.saveAsExport,
+            items: [
+              { label: t.exportHtml, action: () => { void exportActiveNote(true); close(); } },
+              { label: t.exportMarkdown, action: () => { void exportActiveNote(false); close(); } },
+              { label: t.exportPdf, action: () => { void import("../lib/exportNote").then((m) => m.exportActivePdfFile()); close(); } },
+              { label: t.exportImage, action: () => { void import("../lib/exportNote").then((m) => m.exportActiveImage()); close(); } },
+            ],
+          },
+          separatorAfter: true },
         { label: t.newDailyNote, action: () => {
             const root = vaultStore.vaultRoot;
             if (root) void import("../lib/templates").then((m) => m.openDailyNote(root));

@@ -343,33 +343,22 @@ pub fn walk_md(vault_root: &Path) -> Vec<String> {    let mut out = Vec::new();
     out
 }
 
-/// Insert or refresh one document row (+ properties/tags) from disk.
-/// Missing file removes the row. Best-effort: errors are returned but callers
-/// may ignore them — the projection can always be rebuilt.
-pub fn update_one(vault_root: &Path, rel_path: &str) -> Result<(), String> {
-    let abs = vault_root.join(rel_path);
-    if !abs.is_file() {
-        return remove_path(vault_root, rel_path);
-    }
-    let meta = std::fs::metadata(&abs).map_err(|e| e.to_string())?;
-    let mtime = meta
-        .modified()
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-    let text = std::fs::read_to_string(&abs).map_err(|e| e.to_string())?;
-    let stem = strip_title_ext(
-        abs.file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_default()
-            .as_str(),
-    );
-    let folder = parent_folder(rel_path);
-    let wc = word_count(&text);
-    let summary = extract_summary(&text);
+/// Everything extracted from one note, ready to insert.
+struct DocRecord {
+    path: String,
+    title: String,
+    folder: String,
+    mtime_secs: i64,
+    word_count: i64,
+    summary: String,
+    props: Vec<(String, String)>,
+    tags: Vec<String>,
+}
 
-    let fm = extract_frontmatter(&text).unwrap_or_default();
+/// Parse a note's text into an insertable record. Pure (no I/O).
+fn parse_document(rel_path: &str, text: &str, mtime_secs: i64) -> DocRecord {
+    let stem = strip_title_ext(rel_path.rsplit('/').next().unwrap_or(rel_path));
+    let fm = extract_frontmatter(text).unwrap_or_default();
     // Display title prefers an explicit frontmatter `title` (Yuque-style
     // document metadata); otherwise the file-name stem.
     let title = fm
@@ -378,8 +367,7 @@ pub fn update_one(vault_root: &Path, rel_path: &str) -> Result<(), String> {
         .find(|(k, v)| k == "title" && !v.trim().is_empty())
         .map(|(_, v)| v.clone())
         .unwrap_or(stem);
-
-    let tags: Vec<String> = fm
+    let tags = fm
         .props
         .iter()
         .filter(|(k, _)| k == "tags")
@@ -387,37 +375,72 @@ pub fn update_one(vault_root: &Path, rel_path: &str) -> Result<(), String> {
         .map(|t| t.trim().to_string())
         .filter(|t| !t.is_empty())
         .collect();
+    DocRecord {
+        path: rel_path.to_string(),
+        title,
+        folder: parent_folder(rel_path),
+        mtime_secs,
+        word_count: word_count(text),
+        summary: extract_summary(text),
+        props: fm.props,
+        tags,
+    }
+}
+
+fn mtime_of(abs: &Path) -> i64 {
+    std::fs::metadata(abs)
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// Insert/refresh one record inside an open transaction.
+fn insert_doc(
+    tx: &rusqlite::Transaction,
+    rec: &DocRecord,
+) -> rusqlite::Result<()> {
+    tx.execute(
+        "INSERT INTO documents (path, title, folder, mtime_secs, word_count, summary)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(path) DO UPDATE SET title=?2, folder=?3, mtime_secs=?4, word_count=?5, summary=?6",
+        rusqlite::params![rec.path, rec.title, rec.folder, rec.mtime_secs, rec.word_count, rec.summary],
+    )?;
+    tx.execute("DELETE FROM properties WHERE path = ?1", [&rec.path])?;
+    tx.execute("DELETE FROM tags WHERE path = ?1", [&rec.path])?;
+    for (k, v) in &rec.props {
+        tx.execute(
+            "INSERT OR REPLACE INTO properties (path, key, value) VALUES (?1, ?2, ?3)",
+            rusqlite::params![rec.path, k, v],
+        )?;
+    }
+    for t in &rec.tags {
+        tx.execute(
+            "INSERT OR REPLACE INTO tags (path, tag) VALUES (?1, ?2)",
+            rusqlite::params![rec.path, t],
+        )?;
+    }
+    Ok(())
+}
+
+/// Insert or refresh one document row (+ properties/tags) from disk.
+/// Missing file removes the row. Best-effort: errors are returned but callers
+/// may ignore them — the projection can always be rebuilt.
+pub fn update_one(vault_root: &Path, rel_path: &str) -> Result<(), String> {
+    let abs = vault_root.join(rel_path);
+    if !abs.is_file() {
+        return remove_path(vault_root, rel_path);
+    }
+    let text = std::fs::read_to_string(&abs).map_err(|e| e.to_string())?;
+    let rec = parse_document(rel_path, &text, mtime_of(&abs));
 
     let mut conn = open_conn(vault_root).map_err(|e| e.to_string())?;
     if !is_our_db(&conn) {
         init_schema(&conn).map_err(|e| e.to_string())?;
     }
     let tx = conn.transaction().map_err(|e| e.to_string())?;
-    tx.execute(
-        "INSERT INTO documents (path, title, folder, mtime_secs, word_count, summary)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-         ON CONFLICT(path) DO UPDATE SET title=?2, folder=?3, mtime_secs=?4, word_count=?5, summary=?6",
-        rusqlite::params![rel_path, title, folder, mtime, wc, summary],
-    )
-    .map_err(|e| e.to_string())?;
-    tx.execute("DELETE FROM properties WHERE path = ?1", [rel_path])
-        .map_err(|e| e.to_string())?;
-    tx.execute("DELETE FROM tags WHERE path = ?1", [rel_path])
-        .map_err(|e| e.to_string())?;
-    for (k, v) in &fm.props {
-        tx.execute(
-            "INSERT OR REPLACE INTO properties (path, key, value) VALUES (?1, ?2, ?3)",
-            rusqlite::params![rel_path, k, v],
-        )
-        .map_err(|e| e.to_string())?;
-    }
-    for t in &tags {
-        tx.execute(
-            "INSERT OR REPLACE INTO tags (path, tag) VALUES (?1, ?2)",
-            rusqlite::params![rel_path, t],
-        )
-        .map_err(|e| e.to_string())?;
-    }
+    insert_doc(&tx, &rec).map_err(|e| e.to_string())?;
     tx.commit().map_err(|e| e.to_string())
 }
 
@@ -458,11 +481,22 @@ pub fn rebuild_all(vault_root: &Path) -> Result<(), String> {
             std::fs::remove_file(&p).map_err(|e| e.to_string())?;
         }
     }
+    // Single connection + single transaction: a full rebuild of even a few
+    // thousand notes stays well under a second (per-file transactions were
+    // ~100x slower and blocked the library home with a blank screen).
     let files = walk_md(vault_root);
+    let mut conn = open_conn(vault_root).map_err(|e| e.to_string())?;
+    init_schema(&conn).map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
     for f in &files {
-        let _ = update_one(vault_root, f); // best-effort; unreadable files skip
+        let abs = vault_root.join(f);
+        // Best-effort: unreadable/binary files are skipped, never fatal.
+        if let Ok(text) = std::fs::read_to_string(&abs) {
+            let rec = parse_document(f, &text, mtime_of(&abs));
+            insert_doc(&tx, &rec).ok(); // skip rows that violate constraints
+        }
     }
-    Ok(())
+    tx.commit().map_err(|e| e.to_string())
 }
 
 /// Ensure the projection exists, belongs to this vault, and is non-empty when
