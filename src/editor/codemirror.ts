@@ -139,6 +139,8 @@ export function createEditorState(
       // because the browser can only paint one native selection at a time.
       EditorState.allowMultipleSelections.of(true),
       drawSelection(),
+      // Soft-wrap long lines instead of a horizontal scrollbar at the bottom.
+      EditorView.lineWrapping,
       lineNumbers(),
       foldGutter(),
       markdown({ base: markdownLanguage, extensions: [Table, TaskList, Strikethrough] }),

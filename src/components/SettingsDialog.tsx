@@ -72,6 +72,9 @@ export function SettingsDialog() {
           placeholder="Templates"
           style={{ padding: "2px 6px", border: "1px solid var(--border)", borderRadius: 4, background: "var(--bg)", color: "var(--fg)" }}
         />
+        <div style={{ fontSize: 12, color: "var(--fg-muted)", marginTop: 4 }}>
+          {t.settingsTemplateFolderHint}
+        </div>
       </div>
 
       <div style={{ margin: "8px 0" }}>

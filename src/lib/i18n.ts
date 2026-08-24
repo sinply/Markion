@@ -100,6 +100,8 @@ const en = {
   saveAsExport: "Save As / Export",
   showDailyNote: "Show \"Today's Note\" entry",
   containerListView: "Show as list",
+  settingsTemplateFolderHint:
+    "A folder in your vault that holds reusable .md snippets. Files there are offered by the Insert Template dialog (menu: Format/Insert Template). Create the folder and drop notes in to use it.",
   today: "Today",
   yesterday: "Yesterday",
   daysAgo: (n: number) => `${n} days ago`,
@@ -336,6 +338,8 @@ const zh: typeof en = {
   saveAsExport: "另存为 / 导出",
   showDailyNote: "显示\"今日笔记\"入口",
   containerListView: "以列表显示",
+  settingsTemplateFolderHint:
+    "存放可复用 .md 片段的文件夹（相对当前知识库）。「插入模板…」对话框会列出这里的文件。在 vault 里新建该文件夹并放入笔记即可使用；留空则关闭模板功能。",
   today: "今天",
   yesterday: "昨天",
   daysAgo: (n: number) => `${n} 天前`,

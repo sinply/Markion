@@ -18,8 +18,6 @@ import { EditorView } from "@codemirror/view";
 import type { EditorState } from "@codemirror/state";
 
 const LAYOUT_KEY = "markion.layout";
-const LEFT_KEY = "markion.leftCollapsed";
-const RIGHT_KEY = "markion.rightCollapsed";
 
 function loadJson<T>(key: string): T | null {
   try {
@@ -28,10 +26,6 @@ function loadJson<T>(key: string): T | null {
   } catch {
     return null;
   }
-}
-
-function loadBool(key: string): boolean {
-  return localStorage.getItem(key) === "1";
 }
 
 function save(key: string, value: string): void {
@@ -76,9 +70,10 @@ export function Layout() {
 
   // Panel sizes persist across sessions (workspaces-lite) via the group layout.
   const [layout, setLayout] = useState<PanelLayout | null>(() => loadJson<PanelLayout>(LAYOUT_KEY));
-  // Side panel collapsed state (also persisted).
-  const [leftCollapsed, setLeftCollapsed] = useState(() => loadBool(LEFT_KEY));
-  const [rightCollapsed, setRightCollapsed] = useState(() => loadBool(RIGHT_KEY));
+  // Side panels always START expanded; collapsing is session-only. Persisting
+  // it made a single accidental click hide the sidebar on every launch.
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
 
   const handleJump = useCallback((from: number) => {
     const activeEl = document.querySelector(".cm-editor .cm-content") as HTMLElement | null;
@@ -105,11 +100,9 @@ export function Layout() {
 
   const toggleLeft = (collapsed: boolean) => {
     setLeftCollapsed(collapsed);
-    save(LEFT_KEY, collapsed ? "1" : "0");
   };
   const toggleRight = (collapsed: boolean) => {
     setRightCollapsed(collapsed);
-    save(RIGHT_KEY, collapsed ? "1" : "0");
   };
 
   return (
