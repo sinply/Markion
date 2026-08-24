@@ -18,5 +18,11 @@ export default defineConfig(async () => ({
     environment: "jsdom",
     globals: true,
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    // CM6 editor mounts are timing-sensitive under jsdom; full-width worker
+    // pools made 1-2 files fail nondeterministically per run (they always
+    // pass standalone). Cap workers and run files sequentially per worker.
+    maxWorkers: 2,
+    fileParallelism: false,
+    testTimeout: 20000,
   },
 }));
