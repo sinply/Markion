@@ -28,11 +28,6 @@ function runShortcut(id: string): void {
     case "app:openFolder":
       uiStore.requestOpenFolder();
       break;
-    case "app:toggleMode": {
-      const mode = uiStore.editorMode;
-      uiStore.setEditorMode(mode === "live" ? "preview" : "live");
-      break;
-    }
     case "app:closeTab": {
       const docId = useDocStore.getState().activeDocId;
       if (docId) useDocStore.getState().closeDoc(docId);

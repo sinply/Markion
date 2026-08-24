@@ -201,24 +201,6 @@ export async function fileSize(vaultRoot: string, path: string): Promise<number>
 
 // --- Document projection (read-model over the .md files) --------------------
 
-export interface LibraryEntry {
-  path: string;
-  title: string;
-  mtimeSecs: number;
-  wordCount: number;
-  summary: string;
-  tags: string[];
-}
-
-/** Document cards for the library home, newest first; `folder` scopes to a
- *  folder subtree (null/undefined = whole vault). */
-export async function queryLibrary(
-  vaultRoot: string,
-  folder?: string | null,
-): Promise<LibraryEntry[]> {
-  return invoke<LibraryEntry[]>("query_library", { vaultRoot, folder: folder ?? null });
-}
-
 export interface TableColumn {
   name: string;
   /** "text" | "number" | "date" | "tags" */

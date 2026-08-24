@@ -189,12 +189,6 @@ export function buildCommands(t: Dict): Command[] {
         }]
       : []),
     {
-      id: "view:library",
-      title: t.libraryHome,
-      keywords: ["library", "home", "知识库", "首页", "卡片"],
-      run: () => ui().setShowHome(true),
-    },
-    {
       id: "file:reopenClosed",
       title: t.reopenClosed,
       shortcut: "Ctrl+Shift+T",
@@ -246,17 +240,6 @@ export function buildCommands(t: Dict): Command[] {
       title: t.slideshowCommand,
       keywords: ["slideshow", "presentation", "slides", "演示", "幻灯片", "放映"],
       run: () => ui().setSlideshowOpen(true),
-    },
-    {
-      id: "view:edit",
-      title: t.editMode,
-      shortcut: "Ctrl+E",
-      run: () => ui().setEditorMode("live"),
-    },
-    {
-      id: "view:preview",
-      title: t.previewMode,
-      shortcut: "Ctrl+Shift+E",      run: () => ui().setEditorMode("preview"),
     },
     {
       id: "view:focus",

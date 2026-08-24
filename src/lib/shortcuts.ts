@@ -12,7 +12,6 @@ export const DEFAULT_SHORTCUTS: Record<string, string> = {
   "md:heading1": "Ctrl+1",
   "md:heading2": "Ctrl+2",
   "md:heading3": "Ctrl+3",
-  "app:toggleMode": "Ctrl+E",
   "app:closeTab": "Ctrl+W",
   "app:find": "Ctrl+F",
   "app:vaultSearch": "Ctrl+Shift+F",

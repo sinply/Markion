@@ -21,7 +21,6 @@ describe("buildCommands", () => {
     expect(ids.has("edit:undo")).toBe(true);
     expect(ids.has("file:openFolder")).toBe(true);
     expect(ids.has("file:saveAs")).toBe(true);
-    expect(ids.has("view:preview")).toBe(true);
     expect(ids.has("theme:dark")).toBe(true);
     expect(ids.has("lang:zh")).toBe(true);
   });
@@ -79,7 +78,6 @@ function enDictStub() {
     focusMode: "Focus Mode",
     baseOpenCommand: "Open Database…",
     slideshowCommand: "Start Slideshow",
-    libraryHome: "Library Home",
     theme: "Theme", language: "Language",
     find: "Find…", findShortcut: "Ctrl+F",
     findInVault: "Find in Vault…", findInVaultShortcut: "Ctrl+Shift+F",

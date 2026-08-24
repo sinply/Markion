@@ -13,7 +13,6 @@ const LABELS: Record<string, { en: string; zh: string }> = {
   "md:heading1": { en: "Heading 1", zh: "标题 1" },
   "md:heading2": { en: "Heading 2", zh: "标题 2" },
   "md:heading3": { en: "Heading 3", zh: "标题 3" },
-  "app:toggleMode": { en: "Toggle edit/preview", zh: "编辑/预览切换" },
   "app:closeTab": { en: "Close tab", zh: "关闭标签" },
   "app:find": { en: "Find in note", zh: "笔记内查找" },
   "app:vaultSearch": { en: "Search vault", zh: "全库搜索" },

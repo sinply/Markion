@@ -54,8 +54,6 @@ export async function openNote(
     const title = titleForPath(path);
     useDocStore.getState().openDoc(title, path);
     useDocStore.getState().setActiveContent(content);
-    // Opening a document always leaves the library home.
-    useUiStore.getState().setShowHome(false);
     if (opts?.addRecent !== false) {
       useUiStore.getState().addRecent(path);
     }

@@ -7,7 +7,6 @@ import { BacklinksPanel } from "./BacklinksPanel";
 import { GraphPanel } from "./GraphPanel";
 import { TagsPanel } from "./TagsPanel";
 import { CommandPalette } from "./CommandPalette";
-import { LibraryHome } from "./LibraryHome";
 import { FolderTableDialog } from "./FolderTableDialog";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useWikiIndex } from "../hooks/useWikiIndex";
@@ -184,7 +183,6 @@ export function Layout() {
           zIndex: 5,
         })}
       <CommandPalette />
-      <LibraryHome />
       <FolderTableDialog />
     </div>
   );

@@ -156,7 +156,6 @@ export function MenuBar() {
               },
             }]
           : []),
-        { label: t.libraryHome, action: () => { ui.setShowHome(true); close(); } },
         { label: t.insertTemplate, action: () => { ui.setTemplatesOpen(true); close(); }, separatorAfter: true },
         {
           label: t.vaults,
@@ -219,23 +218,11 @@ export function MenuBar() {
       label: t.menuView,
       items: [
         {
-          label: t.editMode,
-          shortcut: "Ctrl+E",
-          checked: mode === "live",
-          action: () => { ui.setEditorMode("live"); close(); },
-        },
-        {
-          label: t.previewMode,
-          shortcut: "Ctrl+Shift+E",
-          checked: mode === "preview",
-          action: () => { ui.setEditorMode("preview"); close(); },
-          separatorAfter: true,
-        },
-        {
           label: t.focusMode,
           shortcut: "Ctrl+Shift+L",
           checked: focusMode,
           action: () => { ui.setFocusMode(!focusMode); close(); },
+          separatorAfter: true,
         },
         { label: t.theme, submenu: themeSubmenu },
         { label: t.language, submenu: languageSubmenu },

@@ -119,24 +119,6 @@ export const MarkdownEditor = forwardRef<EditorHandle, EditorViewProps>(
     return (
       <div style={{ position: "relative", height: "100%" }}>
         <div ref={containerRef} className="markdown-editor" style={{ height: "100%" }} />
-        <div style={{ position: "absolute", top: 6, right: 8, display: "flex", gap: 4, zIndex: 10 }}>
-          <button
-            className="markion-mode-btn"
-            style={{ padding: "2px 10px", fontSize: 12, cursor: "pointer", border: "1px solid var(--border)", borderRadius: 5, background: mode === "live" ? "var(--accent)" : "var(--bg)", color: mode === "live" ? "var(--accent-fg)" : "var(--fg)" }}
-            onClick={() => setEditorModeUi("live")}
-            title="Edit mode (Ctrl+E)"
-          >
-            ✏️ Edit
-          </button>
-          <button
-            className="markion-mode-btn"
-            style={{ padding: "2px 10px", fontSize: 12, cursor: "pointer", border: "1px solid var(--border)", borderRadius: 5, background: mode === "preview" ? "var(--accent)" : "var(--bg)", color: mode === "preview" ? "var(--accent-fg)" : "var(--fg)" }}
-            onClick={() => setEditorModeUi("preview")}
-            title="Preview mode (Ctrl+E)"
-          >
-            👁️ Preview
-          </button>
-        </div>
         {menu && menuView && (
           <ContextMenu
             x={menu.x}
