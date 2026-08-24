@@ -323,7 +323,7 @@ const zh: typeof en = {
   slideshowCommand: "开始幻灯片放映",
   slidesHint: "切换",
   slidesExit: "退出",
-  saveAsExport: "另存为 / 导出",
+  saveAsExport: "导出",
   showDailyNote: "显示\"今日笔记\"入口",
   containerListView: "以列表显示",
   settingsTemplateFolderHint:
