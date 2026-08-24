@@ -27,6 +27,18 @@ for (const [path, mod] of Object.entries(langModules)) {
   }
 }
 
+// highlight.js ships some languages with EMPTY alias arrays that people
+// routinely type in fences. Notably Verilog has no aliases at all, so
+// ```systemverilog / ```sv would render unhighlighted without this map.
+const EXTRA_ALIASES: Record<string, string[]> = {
+  verilog: ["systemverilog", "sv", "v"],
+};
+for (const [base, aliases] of Object.entries(EXTRA_ALIASES)) {
+  const mod =
+    langModules[`../../node_modules/highlight.js/lib/languages/${base}.js`];
+  if (mod) for (const alias of aliases) lowlight.register({ [alias]: mod.default });
+}
+
 const md = new MarkdownIt({ html: false, linkify: true });
 md.enable(["table", "strikethrough"]);
 // GFM task lists (`- [ ]`). `enabled: false` renders a disabled checkbox —

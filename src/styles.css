@@ -828,6 +828,19 @@ option {
   background: var(--bg);
   color: var(--fg);
 }
+
+/* Editable widget surfaces (code block body, table cells): suppress the
+   browser's default black focus outline — the card border already signals
+   the active block. */
+.cm-codeblock-editable:focus,
+.cm-codeblock-editable:focus-visible,
+.cm-table-wrap [contenteditable]:focus,
+[contenteditable="true"]:focus {
+  outline: none;
+}
+.cm-codeblock:has(.cm-codeblock-editable:focus) {
+  border-color: var(--accent);
+}
 button {
   color: var(--fg);
 }

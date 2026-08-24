@@ -10,6 +10,8 @@ import {
 } from "@codemirror/view";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { Table, TaskList, Strikethrough } from "@lezer/markdown";
+import { languages as codeLanguages } from "@codemirror/language-data";
+import { LanguageDescription } from "@codemirror/language";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { syntaxHighlighting, defaultHighlightStyle, foldGutter, foldKeymap } from "@codemirror/language";
 import { search, searchKeymap, highlightSelectionMatches } from "@codemirror/search";
@@ -21,6 +23,31 @@ import { autocompletion } from "@codemirror/autocomplete";
 
 const themeCompartment = new Compartment();
 const livePreviewCompartment = new Compartment();
+
+/** Fence-info aliases that language-data does not resolve on its own.
+ *  SystemVerilog is the big one: its CM mode lives under "verilog". */
+const CODE_LANG_ALIAS: Record<string, string> = {
+  systemverilog: "verilog",
+  sv: "verilog",
+  v: "verilog",
+  vhdl: "vhdl",
+  systemc: "cpp",
+  proto3: "protobuf",
+  tf: "terraform",
+  zsh: "shell",
+};
+
+/** codeLanguages resolver for the markdown parser: match by alias with a
+ *  small manual fallback table, so ```systemverilog fences highlight too. */
+export function codeLanguagesWithAliases(
+  info: string,
+): LanguageDescription | null {
+  const name = info.trim().toLowerCase();
+  const alias = CODE_LANG_ALIAS[name];
+  return (
+    LanguageDescription.matchLanguageName(codeLanguages, alias ?? name) ?? null
+  );
+}
 
 /** Single autocompletion extension hosting both sources. Two separate
  *  `autocompletion()` extensions would each carry a config facet that CM6
@@ -143,7 +170,13 @@ export function createEditorState(
       EditorView.lineWrapping,
       lineNumbers(),
       foldGutter(),
-      markdown({ base: markdownLanguage, extensions: [Table, TaskList, Strikethrough] }),
+      markdown({
+        base: markdownLanguage,
+        extensions: [Table, TaskList, Strikethrough],
+        // Real syntax highlighting for fence contents while editing source
+        // (languages load on demand from @codemirror/language-data).
+        codeLanguages: codeLanguagesWithAliases,
+      }),
       keymap.of(defaultKeymap),
       keymap.of(foldKeymap),
       history(),

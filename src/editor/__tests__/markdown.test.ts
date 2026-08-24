@@ -82,4 +82,11 @@ describe("renderMarkdown", () => {
     expect(html).toContain("<sup>mc2</sup>");
     expect(html).toContain("<sub>2</sub>");
   });
+
+  it("highlights systemverilog fences via the verilog alias", () => {
+    const html = renderMarkdown(
+      "```systemverilog\nmodule m; endmodule\n```\n",
+    );
+    expect(html).toContain("hljs-");
+  });
 });
