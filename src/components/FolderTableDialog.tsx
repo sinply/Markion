@@ -13,16 +13,11 @@ import {
 import { writeFrontmatterKey } from "../lib/noteProps";
 import { TableView } from "./BaseTable";
 
-/**
- * Folder table view — the Yuque-style "folder as database" mapping:
- * rows are the folder's direct `.md` notes, columns are the union of their
- * frontmatter keys with auto-inferred types (number/date/tags/text). No
- * `.base` file required; cell edits write back to the note's frontmatter.
- */
-export function FolderTableDialog() {
-  const open = useUiStore((s) => s.folderTableOpen);
-  const setOpen = useUiStore((s) => s.setFolderTableOpen);
-  const folder = useUiStore((s) => s.folderTableFolder);
+/** The table body itself: rows = direct `.md` children of `folder`, columns =
+ *  frontmatter keys with auto-inferred types. Sortable / filterable /
+ *  double-click-to-edit (writes back to the note's YAML). Shared by the
+ *  standalone dialog AND the folder-container inline view. */
+export function FolderTableView({ folder }: { folder: string }) {
   const vaultRoot = useVaultStore((s) => s.vaultRoot);
   const t = useI18n();
 
@@ -34,7 +29,7 @@ export function FolderTableDialog() {
   const [editing, setEditing] = useState<{ row: string; field: string } | null>(null);
 
   useEffect(() => {
-    if (!open || folder === null || !vaultRoot) {
+    if (!vaultRoot) {
       setTable(null);
       setRows([]);
       setErr("");
@@ -46,7 +41,7 @@ export function FolderTableDialog() {
     let cancelled = false;
     (async () => {
       try {
-        const out = await queryFolderTable(vaultRoot, folder ?? "");
+        const out = await queryFolderTable(vaultRoot, folder);
         if (cancelled) return;
         setTable(out);
         setRows(out.rows);
@@ -61,7 +56,7 @@ export function FolderTableDialog() {
     return () => {
       cancelled = true;
     };
-  }, [open, folder, vaultRoot]);
+  }, [folder, vaultRoot]);
 
   const view = useMemo(() => sortAndFilterRows(rows, sort, filters), [rows, sort, filters]);
 
@@ -72,6 +67,56 @@ export function FolderTableDialog() {
     },
     [vaultRoot],
   );
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", minHeight: 0, flex: 1 }}>
+      <TableView
+        fields={table?.columns ?? []}
+        rows={view}
+        err={err}
+        sort={sort}
+        filters={filters}
+        editing={editing}
+        t={t}
+        onHeaderClick={(field) => {
+          setSort((s) =>
+            s.field === field ? { field, dir: nextSortDir(s.dir) } : { field, dir: "asc" },
+          );
+        }}
+        onFilterChange={(field, value) => setFilters((f) => ({ ...f, [field]: value }))}
+        onCellStartEdit={(row, field) => setEditing({ row, field })}
+        onCellCommit={async (rowPath, field, value) => {
+          setEditing(null);
+          if (!vaultRoot) return;
+          const result = await writeFrontmatterKey(vaultRoot, rowPath, field, value);
+          if (!result.ok) {
+            setErr(result.error);
+            return;
+          }
+          // Patch the local row so the table reflects the edit immediately.
+          setRows((rs) =>
+            rs.map((r) =>
+              r.path === rowPath ? { ...r, values: { ...r.values, [field]: value } } : r,
+            ),
+          );
+          setErr("");
+        }}
+        onCellCancel={() => setEditing(null)}
+        onRowOpen={openRow}
+      />
+    </div>
+  );
+}
+
+/**
+ * Standalone modal wrapper around {@link FolderTableView}, opened from the
+ * folder context menu ("View as Table").
+ */
+export function FolderTableDialog() {
+  const open = useUiStore((s) => s.folderTableOpen);
+  const setOpen = useUiStore((s) => s.setFolderTableOpen);
+  const folder = useUiStore((s) => s.folderTableFolder);
+  const t = useI18n();
 
   if (!open || folder === null) return null;
 
@@ -131,46 +176,7 @@ export function FolderTableDialog() {
             {t.close}
           </button>
         </div>
-        <TableView
-          fields={table?.columns ?? []}
-          rows={view}
-          err={err}
-          sort={sort}
-          filters={filters}
-          editing={editing}
-          t={t}
-          onHeaderClick={(field) => {
-            setSort((s) =>
-              s.field === field
-                ? { field, dir: nextSortDir(s.dir) }
-                : { field, dir: "asc" },
-            );
-          }}
-          onFilterChange={(field, value) =>
-            setFilters((f) => ({ ...f, [field]: value }))
-          }
-          onCellStartEdit={(row, field) => setEditing({ row, field })}
-          onCellCommit={async (rowPath, field, value) => {
-            setEditing(null);
-            if (!vaultRoot) return;
-            const result = await writeFrontmatterKey(vaultRoot, rowPath, field, value);
-            if (!result.ok) {
-              setErr(result.error);
-              return;
-            }
-            // Patch the local row so the table reflects the edit immediately.
-            setRows((rs) =>
-              rs.map((r) =>
-                r.path === rowPath
-                  ? { ...r, values: { ...r.values, [field]: value } }
-                  : r,
-              ),
-            );
-            setErr("");
-          }}
-          onCellCancel={() => setEditing(null)}
-          onRowOpen={openRow}
-        />
+        <FolderTableView folder={folder} />
       </div>
     </div>
   );

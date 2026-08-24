@@ -35,6 +35,9 @@ export interface Settings {
   /** Vault-relative folder holding note templates ("" = none). */
   templateFolder: string;
   showHiddenFiles: boolean;
+  /** Show the "Open Today's Note" menu entry / palette command (off by
+   *  default — not everyone journals). */
+  showDailyNote: boolean;
   livePreview: boolean;
   language: Language;
   font: FontChoice;
@@ -53,6 +56,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: "system",
   templateFolder: "Templates",
   showHiddenFiles: false,
+  showDailyNote: false,
   livePreview: true,
   language: "zh",
   font: "system",

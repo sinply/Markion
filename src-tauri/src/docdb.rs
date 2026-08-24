@@ -386,7 +386,10 @@ fn parse_document(rel_path: &str, text: &str, mtime_secs: i64) -> DocRecord {
         .filter(|(k, _)| k == "tags")
         .flat_map(|(_, v)| v.split(','))
         .map(|t| t.trim().to_string())
-        .filter(|t| !t.is_empty())
+        .filter(|t| {
+            !t.is_empty()
+                && !t.chars().all(|c| c.is_numeric()) // "tags: 2024, 8" is not tags
+        })
         .collect();
     DocRecord {
         path: rel_path.to_string(),

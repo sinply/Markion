@@ -175,17 +175,19 @@ export function buildCommands(t: Dict): Command[] {
         if (name && name.trim()) void createAndOpenNote(name.trim());
       },
     },
-    {
-      id: "note:daily",
-      title: t.newDailyNote,
-      keywords: ["daily", "today", "journal", "每日", "日记"],
-      run: () => {
-        void import("../stores/vaultStore").then((m) => {
-          const root = m.useVaultStore.getState().vaultRoot;
-          if (root) void import("./templates").then((mod) => mod.openDailyNote(root));
-        });
-      },
-    },
+    ...(useSettingsStore.getState().showDailyNote
+      ? [{
+          id: "note:daily",
+          title: t.newDailyNote,
+          keywords: ["daily", "today", "journal", "每日", "日记"],
+          run: () => {
+            void import("../stores/vaultStore").then((m) => {
+              const root = m.useVaultStore.getState().vaultRoot;
+              if (root) void import("./templates").then((mod) => mod.openDailyNote(root));
+            });
+          },
+        }]
+      : []),
     {
       id: "view:library",
       title: t.libraryHome,

@@ -68,18 +68,6 @@ function chevron(label: string, title: string, onClick: () => void, style?: Reac
 export function Layout() {
   useWikiIndex();
   const [editorState, setEditorState] = useState<EditorState | null>(null);
-  const showHome = useUiStore((s) => s.showHome);
-  const setShowHome = useUiStore((s) => s.setShowHome);
-  // Startup: with a vault open and no documents open, greet the user with the
-  // Yuque-style library home (once per session; reopenable via menu/command).
-  const vaultRoot = useVaultStore((s) => s.vaultRoot);
-  const openDocCount = useDocStore((s) => s.openDocs.length);
-  const homeChecked = useRef(false);
-  useEffect(() => {
-    if (homeChecked.current || !vaultRoot) return;
-    homeChecked.current = true;
-    if (openDocCount === 0) setShowHome(true);
-  }, [vaultRoot, openDocCount, setShowHome]);
   const showOutline = useSettingsStore((s) => s.showOutline);
   const showBacklinks = useSettingsStore((s) => s.showBacklinks);
   const showGraph = useSettingsStore((s) => s.showGraph);

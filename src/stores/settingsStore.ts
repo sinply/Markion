@@ -10,6 +10,7 @@ interface SettingsState extends Settings {
   setPathStyle: (p: Settings["pathStyle"]) => void;
   setTemplateFolder: (v: string) => void;
   setShowHiddenFiles: (v: boolean) => void;
+  setShowDailyNote: (v: boolean) => void;
   setLivePreview: (v: boolean) => void;
   setLanguage: (l: Settings["language"]) => void;
   setFont: (f: Settings["font"]) => void;
@@ -45,7 +46,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   save: async (vaultRoot) => {
     try {
       const { saveConfig } = await import("../lib/ipc");
-      const { load, save, setTheme, setAssetsStrategy, setPathStyle, setTemplateFolder, setShowHiddenFiles, setLivePreview, setLanguage, setFont, setShowOutline, setShowBacklinks, setShowGraph, setShowTags, setShowWordCount, setShortcut, resetShortcuts, ...settings } = get();
+      const { load, save, setTheme, setAssetsStrategy, setPathStyle, setTemplateFolder, setShowHiddenFiles, setShowDailyNote, setLivePreview, setLanguage, setFont, setShowOutline, setShowBacklinks, setShowGraph, setShowTags, setShowWordCount, setShortcut, resetShortcuts, ...settings } = get();
       await saveConfig(vaultRoot, settings as Settings);
     } catch {
       // IPC not available yet
@@ -57,6 +58,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setPathStyle: (pathStyle) => set({ pathStyle }),
   setTemplateFolder: (templateFolder) => set({ templateFolder }),
   setShowHiddenFiles: (showHiddenFiles) => set({ showHiddenFiles }),
+  setShowDailyNote: (showDailyNote) => set({ showDailyNote }),
   setLivePreview: (livePreview) => set({ livePreview }),
   setLanguage: (language) => set({ language }),
   setFont: (font) => set({ font }),

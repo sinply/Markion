@@ -70,8 +70,11 @@ fn is_tag_char(c: char) -> bool {
     c.is_alphanumeric() || c == '_' || c == '-' || c == '/'
 }
 
+/// A tag's FIRST character: letters, CJK, or `_` — never a digit. This is the
+/// Obsidian rule and it keeps years/serial numbers (`#2024`, `#1`, `#365`) out
+/// of the tag list.
 fn starts_tag(c: char) -> bool {
-    c.is_alphanumeric() || c == '_'
+    (c.is_alphabetic() || c == '_')
 }
 
 /// Extract unique-in-order `#tag` names from markdown text, skipping fenced
@@ -148,9 +151,12 @@ pub fn extract_tags(text: &str) -> Vec<String> {
                     end += 1;
                 }
                 // A trailing '/' means an incomplete nested tag (`#a/`) —
-                // drop it entirely rather than trimming to `#a`.
+                // drop it entirely rather than trimming to `#a`. A purely
+                // numeric body can no longer occur (first char is checked),
+                // but guard anyway against odd unicode numerics.
                 let body: String = chars[start..end].iter().collect();
-                if !body.is_empty() && !body.ends_with('/') {
+                let all_digits = !body.is_empty() && body.chars().all(|c| c.is_numeric());
+                if !body.is_empty() && !body.ends_with('/') && !all_digits {
                     tags.push(body);
                 }
                 i = end;
@@ -199,6 +205,13 @@ mod tests {
         // extract_tags reports every occurrence; dedup happens per-file in scan.
         let tags = extract_tags("#same #same #a/ #b\n");
         assert_eq!(tags, vec!["same", "same", "b"]);
+    }
+
+    #[test]
+    fn numeric_tags_are_rejected() {
+        // Years, serial numbers, issue refs — never tags.
+        let tags = extract_tags("#2024 #1 #365project v2 #a1\n");
+        assert_eq!(tags, vec!["a1"]);
     }
 
     #[test]

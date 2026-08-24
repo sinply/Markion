@@ -156,6 +156,17 @@ export function SettingsDialog() {
         </label>
       </div>
 
+      <div style={{ margin: "8px 0" }}>
+        <label>
+          <input
+            type="checkbox"
+            checked={settings.showDailyNote}
+            onChange={(e) => settings.setShowDailyNote(e.target.checked)}
+          />
+          {" "}{t.showDailyNote}
+        </label>
+      </div>
+
       <div style={{ marginTop: 10, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
         <div style={{ fontWeight: 600, marginBottom: 6 }}>Panels</div>
         <div style={{ margin: "4px 0" }}>
