@@ -23,6 +23,20 @@ interface SettingsState extends Settings {
   resetShortcuts: () => void;
 }
 
+/** Write the current settings to the active vault's config.json. Called after
+ *  EVERY mutation — settings used to live only in memory and were lost on
+ *  restart, because nothing ever invoked `save`. */
+async function persistSettings(): Promise<void> {
+  try {
+    const { useVaultStore } = await import("./vaultStore");
+    const root = useVaultStore.getState().vaultRoot;
+    if (!root) return; // no vault open yet (e.g. first-run picker) — skip
+    await useSettingsStore.getState().save(root);
+  } catch {
+    // persistence is best-effort; never block a UI toggle
+  }
+}
+
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   ...DEFAULT_SETTINGS,
 
@@ -53,21 +67,26 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     }
   },
 
-  setTheme: (theme) => set({ theme }),
-  setAssetsStrategy: (assetsStrategy) => set({ assetsStrategy }),
-  setPathStyle: (pathStyle) => set({ pathStyle }),
-  setTemplateFolder: (templateFolder) => set({ templateFolder }),
-  setShowHiddenFiles: (showHiddenFiles) => set({ showHiddenFiles }),
-  setShowDailyNote: (showDailyNote) => set({ showDailyNote }),
-  setLivePreview: (livePreview) => set({ livePreview }),
-  setLanguage: (language) => set({ language }),
-  setFont: (font) => set({ font }),
-  setShowOutline: (showOutline) => set({ showOutline }),
-  setShowBacklinks: (showBacklinks) => set({ showBacklinks }),
-  setShowGraph: (showGraph) => set({ showGraph }),
-  setShowTags: (showTags) => set({ showTags }),
-  setShowWordCount: (showWordCount) => set({ showWordCount }),
-  setShortcut: (id, combo) =>
-    set((s) => ({ shortcuts: { ...s.shortcuts, [id]: combo } })),
-  resetShortcuts: () => set({ shortcuts: {} }),
+  setTheme: (theme) => { set({ theme }); void persistSettings(); },
+  setAssetsStrategy: (assetsStrategy) => { set({ assetsStrategy }); void persistSettings(); },
+  setPathStyle: (pathStyle) => { set({ pathStyle }); void persistSettings(); },
+  setTemplateFolder: (templateFolder) => { set({ templateFolder }); void persistSettings(); },
+  setShowHiddenFiles: (showHiddenFiles) => { set({ showHiddenFiles }); void persistSettings(); },
+  setShowDailyNote: (showDailyNote) => { set({ showDailyNote }); void persistSettings(); },
+  setLivePreview: (livePreview) => { set({ livePreview }); void persistSettings(); },
+  setLanguage: (language) => { set({ language }); void persistSettings(); },
+  setFont: (font) => { set({ font }); void persistSettings(); },
+  setShowOutline: (showOutline) => { set({ showOutline }); void persistSettings(); },
+  setShowBacklinks: (showBacklinks) => { set({ showBacklinks }); void persistSettings(); },
+  setShowGraph: (showGraph) => { set({ showGraph }); void persistSettings(); },
+  setShowTags: (showTags) => { set({ showTags }); void persistSettings(); },
+  setShowWordCount: (showWordCount) => { set({ showWordCount }); void persistSettings(); },
+  setShortcut: (id, combo) => {
+    set((s) => ({ shortcuts: { ...s.shortcuts, [id]: combo } }));
+    void persistSettings();
+  },
+  resetShortcuts: () => {
+    set({ shortcuts: {} });
+    void persistSettings();
+  },
 }));

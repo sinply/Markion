@@ -92,7 +92,7 @@ const en = {
   slideshowCommand: "Start Slideshow",
   slidesHint: "to navigate",
   slidesExit: "to exit",
-  saveAsExport: "Save As / Export",
+  saveAsExport: "Export",
   showDailyNote: "Show \"Today's Note\" entry",
   containerListView: "Show as list",
   settingsTemplateFolderHint:
@@ -211,7 +211,7 @@ const en = {
     `Replaced ${count} occurrence(s) in ${files} file(s).`,
   aboutVersion: "Version",
   aboutDesc:
-    "A fast, local-first Markdown editor for Windows, macOS, and Linux. Obsidian-style live preview, Yuque-style hierarchical document tree, and plain .md files you own.",
+    "A fast, local-first Markdown knowledge base for Windows, macOS, and Linux. One seamless Yuque-style view: the document always renders and you type straight into it. Folders can act as containers or auto-derived data tables, tags come from note properties, and every byte stays in plain .md files you own.",
   aboutCredits: "Tauri 2 · CodeMirror 6 · React 18 · Rust — MIT licensed.",
   helpSections: [
     {
@@ -224,39 +224,40 @@ const en = {
     {
       title: "Editing",
       body: [
-        "Markion has two view modes (View menu or Ctrl+E): Edit (live preview as you type) and Preview (full rendered document).",
+        "There is just ONE view, Yuque-style: the document always renders (headings, tables, code cards) and you type directly into it — no edit/preview switching.",
         "Select text and use Edit → Format (or Ctrl+B, Ctrl+I, Ctrl+1..3) to apply bold, italic, headings, lists, links, and more.",
         "Type - [ ] to create a task item; click the checkbox to toggle it. Tables, code blocks, images, and math render live.",
+        "View → Focus Mode dims everything except the paragraph under the cursor and collapses the side panels for distraction-free writing.",
       ],
     },
     {
       title: "Markdown supported",
       body: [
-        "Headings (# .. ######), bold/italic/strikethrough, inline code, fenced code blocks with syntax highlighting.",
+        "Headings (# .. ######), bold/italic/strikethrough, inline code, fenced code blocks with syntax highlighting — while rendering AND while editing the source. SystemVerilog (```systemverilog / ```sv), Verilog, Python, Rust, C++ and ~140 more languages.",
         "GFM tables, task lists, blockquotes, ordered/bullet lists, links, images, horizontal rules.",
         "$$...$$ block math and $...$ inline math (KaTeX). ```mermaid code blocks render as diagrams.",
-        "YAML frontmatter at the top of a note (---...---) renders as a Properties panel.",
+        "YAML frontmatter at the top of a note renders as a Properties panel; its tags: values are the note's tags.",
       ],
     },
     {
       title: "Document tree & links",
       body: [
-        "Drag files to reorder (within a folder) or move (across folders). A folder containing index.md opens it when you click the folder name.",
+        "Drag files to reorder (within a folder) or move (across folders). A folder containing index.md opens it when you click the folder name; its children show below the editor as a list or an auto-derived data table (▦).",
         "Link notes with [[note-name]]. The backlinks panel shows what links to the current note; the graph view maps all connections.",
       ],
     },
     {
       title: "Settings",
       body: [
-        "File → Preferences opens settings: assets directory strategy, image path style, live-preview toggle, theme, and language.",
-        "8 themes are available (View → Theme). Settings persist to .markion/config.json inside your vault.",
+        "File → Preferences opens settings: assets directory strategy, image path style, theme, language, hidden files, and the Today's-Note entry toggle.",
+        "11 themes are available (View → Theme). Every change saves instantly to .markion/config.json inside your vault.",
       ],
     },
     {
       title: "Shortcuts",
       body: [
-        "File: Ctrl+O open file · Ctrl+Shift+O open folder · Ctrl+S save · Ctrl+Shift+S save as.",
-        "Edit: Ctrl+Z undo · Ctrl+Y redo · Ctrl+X/C/V cut/copy/paste · Ctrl+A select all · Ctrl+E toggle edit/preview.",
+        "File: Ctrl+O open file · Ctrl+Shift+O open folder · Ctrl+S save · Ctrl+Shift+S save as · File → Export for HTML/Markdown/PDF/PNG.",
+        "Edit: Ctrl+Z undo · Ctrl+Y redo · Ctrl+X/C/V cut/copy/paste · Ctrl+A select all.",
         "Search: Ctrl+F find in the current note · Ctrl+Shift+F search the whole vault.",
         "Format: Ctrl+B bold · Ctrl+I italic · Ctrl+1/2/3 headings · (Format menu for the rest).",
         "Other: F1 documentation.",
@@ -359,7 +360,7 @@ const zh: typeof en = {
   link: "链接",
   image: "图片",
   editMode: "编辑模式",
-  focusMode: "聚焦模式",
+  focusMode: "专注模式",
   previewMode: "预览模式",
   theme: "主题",
   language: "语言",
@@ -440,7 +441,7 @@ const zh: typeof en = {
     `已在 ${files} 个文件中替换 ${count} 处。`,
   aboutVersion: "版本",
   aboutDesc:
-    "一款快速、本地优先的 Markdown 编辑器，支持 Windows / macOS / Linux。Obsidian 式实时预览、语雀式多级文档树，笔记就是你能掌控的普通 .md 文件。",
+    "一款快速、本地优先的 Markdown 知识库，支持 Windows / macOS / Linux。语雀式单一视图：文档始终以渲染后的样子呈现，点上去直接写。文件夹可作容器或自动数据表，标签来自笔记属性，所有内容都是你能掌控的普通 .md 文件。",
   aboutCredits: "Tauri 2 · CodeMirror 6 · React 18 · Rust —— MIT 许可。",
   helpSections: [
     {

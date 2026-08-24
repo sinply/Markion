@@ -3,10 +3,12 @@ use std::collections::HashMap;
 use std::path::Path;
 
 /// User settings, persisted to `.markion/config.json`.
-/// Field names are snake_case on the Rust side; Tauri auto-converts the
-/// frontend's camelCase keys (`assetsStrategy` -> `assets_strategy`, etc.).
+/// Serialized as camelCase to match the frontend's `Settings` interface
+/// exactly: Tauri converts invoke ARGUMENTS (camelCase -> snake_case), but
+/// RETURN VALUES are plain serde — without this rename, read_config handed
+/// the frontend snake_case keys that its store silently ignored.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(default)]
+#[serde(default, rename_all = "camelCase")]
 pub struct Settings {
     /// "vault-assets" | "doc-assets" | "custom:<path>"
     pub assets_strategy: String,
@@ -17,6 +19,7 @@ pub struct Settings {
     /// Vault-relative folder holding note templates ("" = none).
     pub template_folder: String,
     pub show_hidden_files: bool,
+    pub show_daily_note: bool,
     pub live_preview: bool,
     /// "zh" | "en"
     pub language: String,
@@ -40,6 +43,7 @@ impl Default for Settings {
             theme: "system".to_string(),
             template_folder: "Templates".to_string(),
             show_hidden_files: false,
+            show_daily_note: false,
             live_preview: true,
             language: "zh".to_string(),
             font: "system".to_string(),

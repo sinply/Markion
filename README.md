@@ -2,7 +2,7 @@
 
 # Markion
 
-A fast, local-first Markdown editor for **Windows**. It combines Obsidian-style live preview with a Yuque-style hierarchical document tree, storing everything as plain `.md` files on disk — no database, no lock-in, easy to back up and sync with whatever tool you already use. macOS and Linux builds are planned (the app is built on the cross-platform Tauri 2 shell).
+A fast, local-first Markdown **knowledge base** for **Windows**, built the Yuque way: one seamless view where the document always renders and you type straight into it — no edit/preview mode switching. Folders can act as document containers or auto-derived data tables, tags live in note properties, and every byte stays in plain `.md` files on disk. No database lock-in, easy to back up and sync with whatever tool you already use. macOS and Linux builds are planned (the app is built on the cross-platform Tauri 2 shell).
 
 ![MIT License](https://img.shields.io/badge/license-MIT-green)
 ![Tauri 2](https://img.shields.io/badge/Shell-Tauri%202-blue)
@@ -22,10 +22,10 @@ A fast, local-first Markdown editor for **Windows**. It combines Obsidian-style 
 
 | | |
 |---|---|
-| 🪄 **Live Preview** | Obsidian-style: other lines render as you type; the line your cursor is on shows the markdown source so you can edit directly. Edit ⇄ Preview modes. |
+| 🪄 **One seamless view** | Yuque-style: the document always renders — headings, tables, code cards — and you type directly into it. No Edit ⇄ Preview toggling; the cursor reveals source only where you're working. |
 | 🖱️ **Multi-cursor & Column select** | Alt+click to add cursors, Shift+Alt+drag for column selection. |
 | 🎯 **`[[note#heading]]` anchors** | Wikilinks with a `#heading` anchor resolve correctly and scroll to the target heading on open. |
-| 🧘 **Focus mode** | Active-line highlight + typewriter centering (Typora-style). |
+| 🧘 **Focus mode** | The paragraph under the cursor stays lit with an accent bar, everything else in view fades, and the side panels collapse for distraction-free writing. |
 | 📑 **Heading folding** | Fold gutters + keyboard shortcuts to collapse/expand sections. |
 | 🎛️ **Editor context menu** | Cut / copy / paste / select-all on right-click. |
 
@@ -37,17 +37,19 @@ A fast, local-first Markdown editor for **Windows**. It combines Obsidian-style 
 | 📊 **Mermaid** | Full diagram support: `mermaid`, `gantt`, `sequenceDiagram`, `flowchart`, `classDiagram`, `erDiagram`, `pie`, `journey`, `mindmap` and more. Click a diagram to flip back to source. |
 | 🧮 **KaTeX math** | Block `$$..$$` and inline `$..$` formulas. |
 | 💬 **Callouts** | `> [!note]` / `[!tip]` / `[!warning]` / … — 16 types rendered as colored cards. |
-| 🎨 **Syntax highlighting** | 190+ languages via highlight.js. |
+| 🎨 **Syntax highlighting** | 190+ languages while rendering (highlight.js) AND while editing fence source (CodeMirror language packages, loaded on demand) — including SystemVerilog / Verilog. |
 | 🔗 **Paste URL as link** | Pasting a bare URL becomes `[selected](url)` automatically. |
 
 ### 🗂️ Notes & Organization
 
 | | |
 |---|---|
-| 🌲 **Hierarchical document tree** | Yuque-style nested folders, drag-and-drop reorder / cross-folder moves, context menu (new/rename/delete → trash), hide dotfiles. |
-| 🏷️ **Tags** | Clickable `#tag` highlighting in the editor + a tag panel that filters notes. |
+| 🌲 **Hierarchical document tree** | Yuque-style nested folders, drag-and-drop reorder / cross-folder moves, context menu (new/rename/delete → trash), hide dotfiles (toggle in settings). |
+| 🏢 **Document containers** | A folder with an `index.md` opens as one page; its children list below the editor — switchable to a table view. |
+| 🗃️ **Folder-as-database** | Any folder renders its notes as a data table: columns auto-inferred from frontmatter keys (number/date/tags/text), sortable, filterable, double-click a cell to write back to the note's YAML. Also available via right-click → "View as Table". |
+| 🏷️ **Tags from properties** | Tags are note metadata: `tags:` in the YAML header. The tag panel filters by them — body `#fragments` never pollute the list. |
 | 🧭 **Outline / Backlinks / Graph** | Toggleable right panels: live outline (drag headings to reorder), `[[wikilink]]` backlinks, zoomable note graph. |
-| 🏢 **Multi-vault** | Switch between recently opened vaults from the File menu. |
+| 🏢 **Multi-vault** | Switch between recently opened vaults from the File menu; pin a default vault to auto-open. |
 | 🔤 **Smart rename** | Renaming a file/folder rewrites every `[[wikilink]]` reference vault-wide. |
 | 📑 **Tab management** | Drag tabs to reorder, reopen recently closed tabs (Ctrl+Shift+T). |
 
@@ -57,7 +59,7 @@ A fast, local-first Markdown editor for **Windows**. It combines Obsidian-style 
 |---|---|
 | ⌨️ **Command palette** | Every action searchable (Ctrl+P). |
 | ✨ **Slash commands** | `/` opens 19 markdown insertions. |
-| 📝 **Templates & Daily notes** | Configurable template folder + "Open Today's Note" with a daily template. |
+| 📝 **Templates & Daily notes** | Configurable template folder; "Open Today's Note" entry is opt-in (Settings). |
 | 🏷️ **Properties editor** | Visual editor for YAML frontmatter (title, tags, dates, custom keys). |
 | 📋 **Table of Contents** | Insert a clickable, indented TOC generated from your headings. |
 | 🔧 **Customizable shortcuts** | Rebind any shortcut in Preferences; stored per-vault, applies instantly. |

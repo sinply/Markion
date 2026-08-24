@@ -3,8 +3,9 @@ import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder, EditorState, StateField, Text } from "@codemirror/state";
 import type { SyntaxNode } from "@lezer/common";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget, MathInlineWidget, PreviewWidget, WikiLinkWidget, CalloutWidget, EmbedWidget } from "./widgets";
+import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget, MathInlineWidget, PreviewWidget, WikiLinkWidget, CalloutWidget, EmbedWidget, FrontmatterWidget } from "./widgets";
 import { markdownContextFacet, type MarkdownContext } from "./media";
+import { extractFrontmatter, parseFrontmatter } from "../lib/frontmatter";
 import { resolveWikiLink, wikiHeading } from "./wikiIndex";
 
 interface DecoEntry {
@@ -756,9 +757,14 @@ function decideEntries(state: EditorState, blocks: Block[]): DecoEntry[] {
       }
 
       case "frontmatter": {
+        // Render as an Obsidian-style Properties card. When the cursor is
+        // inside the block, fall back to the raw YAML so it stays editable.
+        if (isOnActiveLine(state, b.from, b.to, activeLine)) break; // keep source editable
+        const fm = extractFrontmatter(state.doc.toString());
+        if (!fm || !fm.body.trim()) break;
         entries.push({
           from: b.from, to: b.to,
-          decoration: Decoration.mark({ attributes: { class: "cm-frontmatter-bar" } }),
+          decoration: Decoration.replace({ widget: new FrontmatterWidget(parseFrontmatter(fm.body)), block: true }),
         });
         break;
       }
