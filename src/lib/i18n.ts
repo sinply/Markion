@@ -235,6 +235,7 @@ const en = {
       body: [
         "Headings (# .. ######), bold/italic/strikethrough, inline code, fenced code blocks with syntax highlighting — while rendering AND while editing the source. SystemVerilog (```systemverilog / ```sv), Verilog, Python, Rust, C++ and ~140 more languages.",
         "GFM tables, task lists, blockquotes, ordered/bullet lists, links, images, horizontal rules.",
+        "Dataview table queries: a ```dataview block with 'table <cols> from \"folder\" [sort <field> asc|desc]' executes against the vault and renders a result table — file.name/mtime/size or frontmatter keys as columns, rows click through to notes.",
         "$$...$$ block math and $...$ inline math (KaTeX). ```mermaid code blocks render as diagrams.",
         "YAML frontmatter at the top of a note renders as a Properties panel; its tags: values are the note's tags.",
       ],
@@ -464,6 +465,7 @@ const zh: typeof en = {
       body: [
         "标题（# .. ######）、粗体/斜体/删除线、行内代码、带语法高亮的围栏代码块。",
         "GFM 表格、任务列表、引用、有序/无序列表、链接、图片、分割线。",
+        "Dataview 表格查询：```dataview 块写 'table <列> from \"文件夹\" [sort 字段 asc|desc]' 会直接执行并渲染结果表——列为 file.name/mtime/size 或 frontmatter 键，点击行打开对应笔记。",
         "$$...$$ 块级数学和 $...$ 行内数学（KaTeX）。```mermaid 代码块渲染为图表。",
         "笔记顶部的 YAML frontmatter（---...---）渲染为属性面板。",
       ],

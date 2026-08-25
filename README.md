@@ -38,6 +38,7 @@ A fast, local-first Markdown **knowledge base** for **Windows**, built the Yuque
 | 🧮 **KaTeX math** | Block `$$..$$` and inline `$..$` formulas. |
 | 💬 **Callouts** | `> [!note]` / `[!tip]` / `[!warning]` / … — 16 types rendered as colored cards. |
 | 🎨 **Syntax highlighting** | 190+ languages while rendering (highlight.js) AND while editing fence source (CodeMirror language packages, loaded on demand) — including SystemVerilog / Verilog. |
+| 📊 **Dataview table queries** | ` ```dataview ` blocks execute against the vault: columns from file metadata (`file.name/mtime/size`) or frontmatter keys with `AS "alias"`, recursive `from "folder"`, `sort`. Rows click through to their notes. |
 | 🔗 **Paste URL as link** | Pasting a bare URL becomes `[selected](url)` automatically. |
 
 ### 🗂️ Notes & Organization

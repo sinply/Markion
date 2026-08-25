@@ -38,6 +38,7 @@
 | 🧮 **KaTeX 公式** | 块级 `$$..$$` 与行内 `$..$`。 |
 | 💬 **Callouts 标注** | `> [!note]` / `[!tip]` / `[!warning]` / … 共 16 种类型渲染为彩色卡片。 |
 | 🎨 **代码高亮** | 渲染时 190+ 语言（highlight.js）；编辑围栏源码时同样高亮（CodeMirror 语言包按需加载）——含 SystemVerilog / Verilog。 |
+| 📊 **Dataview 表格查询** | ` ```dataview ` 代码块直接执行：支持 `file.name/mtime/size` 与 frontmatter 字段列（`AS "别名"`）、`from "文件夹"`（递归）、`sort` 排序；点击行打开对应笔记。 |
 | 🔗 **粘贴 URL 转链接** | 粘贴纯 URL 自动变成 `[选中文本](url)`。 |
 
 ### 🗂️ 笔记与组织

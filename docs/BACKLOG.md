@@ -126,7 +126,64 @@
 - 团队协作评论、@提及、关注订阅(需要账号体系)
 - 白板实时协同
 
-## 技术备忘(踩坑记录)
+## 已实现功能(v0.12.1 → v0.15.2 补记,2026-08-25)
+
+### 体验与交互
+- **语雀式单一视图定稿**(v0.12.x~v0.14.x):移除编辑/预览双模式与知识库首页;
+  行内语法改为**节点粒度**渲染——光标在某个语法节点内才露源码,移开立即成型
+  (Typora 式);装饰 StateField 每事务无条件重算(修复"### 残留到下一次点击")
+- **专注模式重做**(v0.13.0,更名"聚焦"→"专注"):光标段落清晰+主题色侧条,
+  其余可见行淡出至 30%,两侧面板自动收起/恢复;此前只是挂了个无样式类名
+- **frontmatter 属性卡片**(v0.13.0/v0.14.1):打开即渲染 Obsidian 式 Properties
+  卡片;`skipFrontmatterCursor` 让新开文档光标落在正文(否则永远看到裸 YAML);
+  点击卡片区域露出可编辑 YAML;YAML `null` 值显示为空
+- **Dataview 表格查询**(v0.15.0):```dataview 块执行 DQL(`table <列> AS "别名"
+  / from "文件夹"(递归) / sort 字段 asc|desc`)渲染结果表,行点击打开笔记;
+  后端 `query_dataview_rows`(递归+跳过隐藏+mtime/size);DQL 解析在
+  `src/editor/dataview.ts`
+- 导出子菜单、最近文件子菜单、每日笔记入口开关(设置)、隐藏 dotfiles 开关
+- 启动零空白:index.html 内联纯 CSS splash 第一帧即显示,React 接管后移除
+  (JS 包大——190 个 hljs 语法全量打包)
+
+### 渲染正确性(v0.14.0 全语法审计 + 后续)
+- ~~删除线~~此前从未实现(标记永久裸露);==高亮==的 == 标记不隐藏;
+  ^上标^/~下标~ 缺 Lezer 扩展(Superscript/Subscript);--- 无渲染处理
+  ——均已补齐并加用户可见级断言测试(inlineSyntaxRegression +
+  fullSyntaxAudit:挂载真实视图检查最终 DOM 文本)
+- 链接 URL 不再作为文字出现(光标敏感范围含整个节点含 URL 部分)
+- SystemVerilog/sv/sv→verilog 别名(highlight.js Verilog 官方别名为空!)
+- 编辑态围栏代码高亮:`markdown({ codeLanguages })` + @codemirror/language-data
+  (~140 语言按需加载),别名归一表在 codemirror.ts
+
+### 数据与持久化
+- **设置持久化双端修复**(v0.13.0):前端 settingsStore.save 从未被调用(改动
+  只在内存);Rust Settings 缺 serde(rename_all = camelCase)(read_config 返回
+  snake_case 键被前端忽略)且缺 show_daily_note 字段——两头都断,已修并测试
+- 保存/自动保存/导出的数据丢失修复 + 路径逃逸 + 解析器边界(v0.15.1,另一会话)
+- frontmatter 文档标题/代码/表格消失、--- 误判、长文档 >100 行裸源码
+  (scanBlocks 前 100 行 head 截断相关,v0.15.1 后续,另一会话)
+
+## 技术备忘(踩坑记录)(续)
+
+- **Tauri 返回值不会自动转 camelCase**:invoke 参数会(snake↔camel 自动),
+  返回值走原生 serde——struct 必须显式 `#[serde(rename_all = "camelCase")]`,
+  否则前端拿到 snake_case 键静默丢弃(config.rs 曾因此整条读配置链路失效)。
+- **PowerShell 管道改写 UTF-8 源文件会写坏编码**(Set-Content 默认 GBK):
+  改文件一律用文件编辑工具,不用 shell 内联替换。
+- **RangeSetBuilder 排序/重叠冲突会炸掉整个装饰集**:块级 replace 装饰重叠
+  (如 hr 与 frontmatter 双替换)表现为全部 live preview 失效裸奔;
+  scanBlocks 对 frontmatter 先检测并隔离内部所有解析。
+- **Lezer 没有 frontmatter 概念**:首尾 --- 会被解析为 HorizontalRule,
+  自定义块扫描必须先于语法树处理排除。
+- **vitest 并发 flaky 治理**:jsdom+CM6 在满负荷 worker 池下时序竞争,
+  maxWorkers=2 + fileParallelism=false + timeout 20s 后连续全绿;
+  测试断言要查"用户可见结果"(过滤 .cm-hidden 后的 textContent),
+  jsdom 不做布局,opacity:0 元素仍在 textContent 里。
+- **i18n 双语改名必须两边同步并有 MenuBar 渲染级回归测试**
+  (menuBar.test.tsx),否则漏改的语言只有用户会发现。
+- **版本 bump 四件套**(package.json / Cargo.toml / tauri.conf.json /
+  AboutDialog):曾因替换模式笔误漏改两个文件导致构建产物版本错位;
+  bump 后用 grep 校验四处一致。
 
 - **CM6 reconfigure 陷阱**:对 `createEditorState` 构建的 state,任何
   Compartment reconfigure 都会抛 "Config merge conflict for field override"
