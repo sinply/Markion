@@ -38,7 +38,8 @@ function yamlScalar(value: string): string {
   return needsQuote ? `"${value.replace(/"/g, '\\"')}"` : value;
 }
 
-/** Serialize properties into a `---...---` YAML block (trailing newline). */
+/** Serialize properties into a `---...---` YAML block (trailing newline).
+ *  Values are trimmed and YAML-escaped as needed. */
 export function serializeFrontmatter(props: [string, string][]): string {
   const lines = ["---"];
   for (const [key, value] of props) {
@@ -51,10 +52,119 @@ export function serializeFrontmatter(props: [string, string][]): string {
   return lines.join("\n") + "\n";
 }
 
+/** Offset of the first non-whitespace char in a line, or line.length when blank. */
+function leadWhitespace(line: string): number {
+  const m = /^\s*/.exec(line);
+  return m ? m[0].length : line.length;
+}
+
+/**
+ * Patch an existing frontmatter body with `props`, preserving structure that
+ * `parseFrontmatter` cannot round-trip — multi-line list/object values,
+ * comments, and blank lines. Only the top-level `key:` lines are rewritten;
+ * every other line passes through verbatim, so opening the Properties dialog
+ * (or editing a Base-table cell) no longer silently deletes a block-style
+ * `tags:` list.
+ *
+ * A key that is missing from the body (added) is appended at the end; a key
+ * whose value would be empty is removed along with its indented continuation
+ * lines (that is how the dialog deletes a row).
+ */
+function patchFrontmatterBody(body: string, props: [string, string][]): string {
+  const wanted = new Map<string, string>();
+  for (const [k, v] of props) {
+    const key = k.trim();
+    if (!key) continue;
+    wanted.set(key, v.trim());
+  }
+
+  const lines = body.split("\n");
+  const seen = new Set<string>();
+  const out: string[] = [];
+  let skipIndented = 0; // >0 while dropping a deleted key's continuation lines
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const indent = leadWhitespace(line);
+    if (indent > 0) {
+      if (skipIndented > 0) {
+        skipIndented--;
+        continue;
+      }
+      // Indented continuation belongs to the previous top-level key; the key's
+      // line already wrote it out (or it passed through untouched above).
+      out.push(line);
+      continue;
+    }
+    skipIndented = 0;
+    const idx = line.indexOf(":");
+    if (idx <= 0) {
+      // Comment / blank / unparseable top-level line: keep as-is.
+      out.push(line);
+      continue;
+    }
+    const key = line.slice(0, idx).trim();
+    if (!key || seen.has(key)) {
+      // Unknown key or duplicate — preserve the original line.
+      out.push(line);
+      continue;
+    }
+    seen.add(key);
+    if (!wanted.has(key)) {
+      // Deleted key (the row was removed from the dialog): drop it AND its
+      // indented continuation lines (list items / nested keys).
+      skipIndented = countContinuation(lines, i);
+      continue;
+    }
+    const val = wanted.get(key)!;
+    const currentVal = line.slice(idx + 1).trim();
+    if (currentVal === "" && hasContinuation(lines, i)) {
+      // The key holds a multiline structure that parseFrontmatter flattens
+      // to "" — an untouched block. Preserve it verbatim so a no-op Properties
+      // save (or a Base-cell edit elsewhere) can't delete the list.
+      out.push(line);
+      continue;
+    }
+    if (val === currentVal || (val === "" && currentVal !== "")) {
+      // Unchanged value (or the dialog cleared it but the body holds a value):
+      // keep the original line so formatting survives.
+      out.push(line);
+      continue;
+    }
+    out.push(`${key}: ${yamlScalar(val)}`);
+  }
+
+  // Append any added keys (present in props but not in the body).
+  for (const [key, val] of wanted) {
+    if (!seen.has(key) && val !== "") {
+      out.push(`${key}: ${yamlScalar(val)}`);
+    }
+  }
+  return out.join("\n");
+}
+
+/** True when the line after index `i` is indented (a multiline value follows). */
+function hasContinuation(lines: string[], i: number): boolean {
+  return i + 1 < lines.length && leadWhitespace(lines[i + 1]) > 0;
+}
+
+/** Number of immediately-following indented lines after index `i`. */
+function countContinuation(lines: string[], i: number): number {
+  let n = 0;
+  for (let j = i + 1; j < lines.length; j++) {
+    if (leadWhitespace(lines[j]) > 0) n++;
+    else break;
+  }
+  return n;
+}
+
 /** Return the document with `props` written as its frontmatter: replaces an
- *  existing leading block, or inserts one at the top. */
+ *  existing leading block, or inserts one at the top. Preserves multiline
+ *  frontmatter structure (see patchFrontmatterBody). */
 export function replaceFrontmatter(doc: string, props: [string, string][]): string {
-  const block = serializeFrontmatter(props);
   const fm = extractFrontmatter(doc);
-  return fm ? block + doc.slice(fm.end) : block + doc;
+  if (!fm) return serializeFrontmatter(props) + doc;
+  const body = patchFrontmatterBody(fm.body, props);
+  const block = body.trim() ? `---\n${body}\n---\n` : `---\n---\n`;
+  return block + doc.slice(fm.end);
 }

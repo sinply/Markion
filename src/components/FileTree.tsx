@@ -8,6 +8,7 @@ import { useUiStore } from "../stores/uiStore";
 import { createFile, createFolder, trashPath, readFile, renameWithLinks } from "../lib/ipc";
 import { useI18n } from "../lib/i18n";
 import { docTitle, titleForPath } from "../lib/docTitle";
+import { markAppChange } from "../hooks/useExternalChanges";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 
 interface RowData {
@@ -324,6 +325,9 @@ export function FileTree() {
         // to the new name (Obsidian-style). Returns the number of files whose
         // links were updated.
         await renameWithLinks(vaultRoot, path, newPath);
+        // The watcher will emit a "deleted" event for the OLD path; ignore it
+        // so the active tab isn't mistaken for an externally-deleted file.
+        markAppChange(path);
         if (kind === "file") {
           renameDoc(path, newPath, docTitle(newName));
         } else {
@@ -357,6 +361,7 @@ export function FileTree() {
         await trashPath(vaultRoot, path);
         // Close tabs for the deleted node (and everything under it) before
         // the watcher event arrives, so no conflict dialog can appear.
+        markAppChange(path);
         closeDocsUnder(path);
         await loadTree(vaultRoot);
       } catch {

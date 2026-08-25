@@ -6,6 +6,24 @@ use crate::link_index::LinkIndex;
 use crate::tree_index::{self, TreeNode};
 use std::path::{Path, PathBuf};
 
+/// Join a vault-relative path onto the root, refusing anything that would
+/// escape it: absolute paths, `..` segments, or a resolved path outside root.
+/// Guards every frontend-supplied path so a crafted `path` / `new_path`
+/// (rename target, delete, trash, save) cannot touch files outside the vault.
+fn safe_join(root: &Path, rel: &str) -> Result<PathBuf, String> {
+    if rel.is_empty() {
+        return Err("empty path".into());
+    }
+    let joined = root.join(rel);
+    if !joined.starts_with(root) {
+        return Err(format!("path escapes vault root: {rel}"));
+    }
+    if rel.split(['/', '\\']).any(|seg| seg == "..") {
+        return Err(format!("path escapes vault root: {rel}"));
+    }
+    Ok(joined)
+}
+
 /// Best-effort projection refresh after an in-app write (only `.md` files are
 /// indexed). Failures are logged and ignored — the cache is rebuildable.
 fn project_upsert(vault_root: &str, path: &str) {
@@ -49,12 +67,14 @@ fn ensure_index<'a>(
 
 #[tauri::command]
 pub fn read_file(vault_root: String, path: String) -> Result<String, String> {
-    file_io::read_file(&Path::new(&vault_root).join(&path)).map_err(|e| e.to_string())
+    let root = Path::new(&vault_root);
+    file_io::read_file(&safe_join(root, &path)?).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn write_file_atomic(vault_root: String, path: String, content: String) -> Result<(), String> {
-    file_io::write_file_atomic(&Path::new(&vault_root).join(&path), &content)
+    let root = Path::new(&vault_root);
+    file_io::write_file_atomic(&safe_join(root, &path)?, &content)
         .map_err(|e| e.to_string())?;
     // Write-through projection refresh (md files only; best-effort).
     project_upsert(&vault_root, &path);
@@ -99,8 +119,14 @@ pub fn move_node(
     to_name: String,
 ) -> Result<(), String> {
     let root = Path::new(&vault_root);
-    let from_path = root.join(&from_folder).join(&from_name);
-    let to_path = root.join(&to_folder).join(&to_name);
+    let from_rel = format!("{}/{}", from_folder.trim_end_matches('/'), from_name)
+        .trim_start_matches('/')
+        .to_string();
+    let to_rel = format!("{}/{}", to_folder.trim_end_matches('/'), to_name)
+        .trim_start_matches('/')
+        .to_string();
+    let from_path = safe_join(root, &from_rel)?;
+    let to_path = safe_join(root, &to_rel)?;
     if let Some(parent) = to_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -375,9 +401,15 @@ pub fn scan_tags(vault_root: String) -> Result<Vec<crate::tags::TagEntry>, Strin
 /// directories are created as needed. Never overwrites an existing file.
 #[tauri::command]
 pub fn create_file(vault_root: String, path: String) -> Result<(), String> {
-    let full = Path::new(&vault_root).join(&path);
+    let root = Path::new(&vault_root);
+    let full = safe_join(root, &path)?;
     if full.exists() {
-        return Ok(()); // already there — treat as success
+        if full.is_dir() {
+            // A folder with the requested name exists — creating a file there
+            // would be a silent no-op reported as success.
+            return Err(format!("path is a folder: {path}"));
+        }
+        return Ok(()); // file already there — treat as success
     }
     if let Some(parent) = full.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -391,7 +423,7 @@ pub fn create_file(vault_root: String, path: String) -> Result<(), String> {
 /// an existing folder succeeds, mirroring `create_file` semantics.
 #[tauri::command]
 pub fn create_folder(vault_root: String, path: String) -> Result<(), String> {
-    let full = Path::new(&vault_root).join(&path);
+    let full = safe_join(Path::new(&vault_root), &path)?;
     std::fs::create_dir_all(full).map_err(|e| e.to_string())
 }
 
@@ -399,7 +431,8 @@ pub fn create_folder(vault_root: String, path: String) -> Result<(), String> {
 /// bin. Never hard-deletes: on failure the on-disk data is untouched.
 #[tauri::command]
 pub fn delete_path(vault_root: String, path: String) -> Result<(), String> {
-    let full = Path::new(&vault_root).join(&path);
+    let root = Path::new(&vault_root);
+    let full = safe_join(root, &path)?;
     if !full.exists() {
         return Err(format!("path does not exist: {}", path));
     }
@@ -419,7 +452,7 @@ fn trash_dir(root: &Path) -> PathBuf {
 #[tauri::command]
 pub fn trash_path(vault_root: String, path: String) -> Result<(), String> {
     let root = Path::new(&vault_root);
-    let full = root.join(&path);
+    let full = safe_join(root, &path)?;
     if !full.exists() {
         return Err(format!("path does not exist: {}", path));
     }
@@ -512,6 +545,10 @@ pub fn list_trash(vault_root: String) -> Result<Vec<TrashEntry>, String> {
 #[tauri::command]
 pub fn restore_trash(vault_root: String, rel_path: String) -> Result<(), String> {
     let root = Path::new(&vault_root);
+    // Guard the destination (and thus the trash path it reads from) against
+    // `..` escapes — restore reads `.markion/trash/{rel_path}` and writes
+    // back to `{root}/{rel_path}`.
+    let _ = safe_join(root, &rel_path)?;
     let src = trash_dir(root).join(&rel_path);
     if !src.exists() {
         return Err(format!("not in trash: {}", rel_path));
@@ -542,8 +579,11 @@ pub fn rename_with_links(
         // referrer lookup is still O(referrers) instead of a full scan.
         *idx = LinkIndex::build(Path::new(&vault_root)).map_err(|e| e.to_string())?;
     }
+    let root = Path::new(&vault_root);
+    let _ = safe_join(root, &old_path)?;
+    let _ = safe_join(root, &new_path)?;
     let count = idx
-        .rename_with_links(Path::new(&vault_root), &old_path, &new_path)
+        .rename_with_links(root, &old_path, &new_path)
         .map_err(|e| e.to_string())?;
     // Projection sync: drop the old path (prefix-aware for folders), then
     // re-index the new location — walking the subtree when a folder moved.
@@ -577,7 +617,7 @@ pub fn export_file(path: String, content: String) -> Result<(), String> {
 /// Size in bytes of a vault-relative file (for the large-file open warning).
 #[tauri::command]
 pub fn file_size(vault_root: String, path: String) -> Result<u64, String> {
-    let full = Path::new(&vault_root).join(&path);
+    let full = safe_join(Path::new(&vault_root), &path)?;
     std::fs::metadata(&full)
         .map(|m| m.len())
         .map_err(|e| e.to_string())

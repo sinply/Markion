@@ -789,11 +789,15 @@ function decideEntries(state: EditorState, blocks: Block[]): DecoEntry[] {
         if (isOnActiveLine(state, b.from, b.to, activeLine)) break; // keep source editable
         const w = new TaskCheckboxWidget(b.checked ?? false);
         // Source range of the `[ ]`/`[x]` marker, so the widget can toggle it.
+        // NOT block:true — a block widget renders on its own line, which
+        // would split `- [ ] task text` into a lone checkbox tile plus a
+        // second .cm-line for the task text. Inline replacement keeps the
+        // checkbox and its label on the same line.
         w.from = b.from;
         w.to = b.to;
         entries.push({
           from: b.from, to: b.to,
-          decoration: Decoration.replace({ widget: w, block: true }),
+          decoration: Decoration.replace({ widget: w }),
         });
         break;
       }
@@ -998,6 +1002,9 @@ async function createAndOpenWikiNote(ctx: MarkdownContext, raw: string): Promise
   const { useVaultStore } = await import("../stores/vaultStore");
   const target = raw.split("|")[0].split("#")[0].trim();
   if (!target) return;
+  // A target containing `..` or an absolute path must not escape the vault
+  // root (createFile would happily write `../outside.md`).
+  if (/\.\./.test(target) || target.startsWith("/") || /^[a-zA-Z]:/.test(target)) return;
   const docDir = ctx.docRel.includes("/")
     ? ctx.docRel.slice(0, ctx.docRel.lastIndexOf("/"))
     : "";

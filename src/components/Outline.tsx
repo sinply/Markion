@@ -78,7 +78,11 @@ export function moveHeadingBlock(state: EditorState, from: number, to: number): 
   // Insert AFTER the target block (drop-on-target = place after it). When
   // moving down, the deletion shifts the target's end left by blockLen, which
   // is exactly where the insert should go in the post-delete document.
-  const insertAt = to > from ? toRange.to - blockLen : toRange.to;
+  // Clamp to the post-delete length: a target block reaching the end of the
+  // doc makes toRange.to == doc length, and after deleting blockLen the doc is
+  // shorter — an insertAt past it would throw "Position out of range".
+  const postDeleteLen = state.doc.length - blockLen;
+  const insertAt = Math.min(to > from ? toRange.to - blockLen : toRange.to, postDeleteLen);
   return {
     delete: { from: src.from, to: src.to },
     insertAt,

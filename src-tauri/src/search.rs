@@ -111,12 +111,52 @@ fn match_offsets(
             .map(|(i, m)| (i, i + m.len()))
             .collect())
     } else {
-        let needle = query.to_lowercase();
-        let hay = text.to_lowercase();
-        Ok(hay
-            .match_indices(&needle)
-            .map(|(i, m)| (i, i + m.len()))
-            .collect())
+        // Case-insensitive literal match. Lowercasing can change BYTE lengths
+        // for some code points (e.g. U+212A KELVIN SIGN → k, or İ → i + dot),
+        // so offsets computed on the lowercased haystack may not be char
+        // boundaries in the raw text — slicing raw_line[..idx] would panic.
+        // Lowercase per CHAR instead, which preserves 1:1 char boundaries.
+        // Build a char-indexed copy of the text, tracking each char's byte
+        // offset, then match the lowercased needle against it. Slicing the
+        // RAW text at the stored byte offsets is always a char boundary, so
+        // code points whose lowercase form changes byte length (U+212A K → k,
+        // İ → i+dot) can never desync the offsets and panic scan_text.
+        let hay: Vec<char> = text.chars().collect();
+        let byte_at: Vec<usize> = {
+            let mut v = Vec::with_capacity(hay.len() + 1);
+            let mut b = 0usize;
+            for c in &hay {
+                v.push(b);
+                b += c.len_utf8();
+            }
+            v.push(b);
+            v
+        };
+        let lowered: Vec<char> = hay.iter().map(|c| c.to_lowercase().next().unwrap_or(*c)).collect();
+        let needle: Vec<char> = query.to_lowercase().chars().collect();
+        if needle.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut out = Vec::new();
+        if needle.len() == 1 {
+            let n = needle[0];
+            for (i, c) in lowered.iter().enumerate() {
+                if *c == n {
+                    out.push((byte_at[i], byte_at[i + 1]));
+                }
+            }
+        } else {
+            let mut start = 0;
+            while start + needle.len() <= lowered.len() {
+                if lowered[start..start + needle.len()] == needle[..] {
+                    out.push((byte_at[start], byte_at[start + needle.len()]));
+                    start += needle.len();
+                } else {
+                    start += 1;
+                }
+            }
+        }
+        Ok(out)
     }
 }
 
@@ -469,6 +509,19 @@ mod tests {
         assert_eq!(hits[1].line, 2);
         assert_eq!(hits[1].column, 3); // 关于设计: 设计 starts at the 3rd char
         assert!(hits.iter().all(|h| h.snippet.contains("设计")));
+    }
+
+    #[test]
+    fn case_insensitive_match_with_length_changing_lowercase_does_not_panic() {
+        // U+212A KELVIN SIGN (3 bytes) lowercases to 'k' (1 byte). The old
+        // whole-string to_lowercase() desynced byte offsets and panicked when
+        // slicing the raw line. Search "k" case-insensitively must return the
+        // match without panicking, and the column must be computed on chars.
+        let dir = tempdir().unwrap();
+        write_vault(dir.path(), &[("a.md", "x\u{212A}y")]);
+        let hits = search_vault(dir.path(), "k", false, false, 100).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].column, 2); // x, KELVIN => 2nd char
     }
 
     #[test]

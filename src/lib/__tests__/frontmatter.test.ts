@@ -70,4 +70,46 @@ describe("serializeFrontmatter / replaceFrontmatter", () => {
     const props = parseFrontmatter(fm.body);
     expect(replaceFrontmatter(doc, props)).toBe(doc);
   });
+
+  it("preserves multiline list values untouched when other keys are edited", () => {
+    const doc =
+      "---\ntitle: A\ninbox: 2026-01-01\ntags:\n  - one\n  - two\nalias: x\n---\n\nbody\n";
+    const fm = extractFrontmatter(doc)!;
+    // Simulate the Properties dialog: parse -> edit title -> save.
+    const props = parseFrontmatter(fm.body).map(([k, v]) =>
+      k === "title" ? [k, "New"] : [k, v],
+    ) as [string, string][];
+    const out = replaceFrontmatter(doc, props);
+    expect(out).toBe(
+      "---\ntitle: New\ninbox: 2026-01-01\ntags:\n  - one\n  - two\nalias: x\n---\n\nbody\n",
+    );
+  });
+
+  it("removes a key and its indented children when the row is deleted", () => {
+    const doc = "---\ntags:\n  - one\n  - two\ntitle: A\n---\n\nbody\n";
+    const fm = extractFrontmatter(doc)!;
+    const out = replaceFrontmatter(doc, [["title", "A"]]);
+    expect(out).toBe("---\ntitle: A\n---\n\nbody\n");
+  });
+
+  it("appends newly-added keys after existing multiline blocks", () => {
+    const doc = "---\ntags:\n  - one\ntitle: A\n---\n\nbody\n";
+    // The dialog deletes a row by omitting it from the props entirely.
+    const out = replaceFrontmatter(doc, [
+      ["title", "A"],
+      ["date", "2026-02-02"],
+    ]);
+    expect(out).toBe("---\ntitle: A\ndate: 2026-02-02\n---\n\nbody\n");
+  });
+
+  it("a dialog row with a parse-flattened multiline value stays intact", () => {
+    // parseFrontmatter("tags:\\n  - one") yields ["tags", ""]; saving that
+    // back unchanged must NOT drop the list.
+    const doc = "---\ntags:\n  - one\ntitle: A\n---\n\nbody\n";
+    const out = replaceFrontmatter(doc, [
+      ["tags", ""],
+      ["title", "A"],
+    ]);
+    expect(out).toBe("---\ntags:\n  - one\ntitle: A\n---\n\nbody\n");
+  });
 });

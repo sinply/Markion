@@ -29,8 +29,12 @@ function runShortcut(id: string): void {
       uiStore.requestOpenFolder();
       break;
     case "app:closeTab": {
-      const docId = useDocStore.getState().activeDocId;
-      if (docId) useDocStore.getState().closeDoc(docId);
+      const store = useDocStore.getState();
+      const docId = store.activeDocId;
+      if (!docId) break;
+      const doc = store.openDocs.find((d) => d.id === docId);
+      if (doc) useUiStore.getState().addRecentlyClosed({ title: doc.title, path: doc.path });
+      store.closeDoc(docId);
       break;
     }
     case "app:find": {
@@ -237,7 +241,13 @@ async function saveActive(asNew: boolean) {
       : pickedNorm.split("/").pop() ?? doc.title;
   }
 
-  const content = docStore.activeContent;
+  // Read the editor's live text, not the (possibly stale) store snapshot:
+  // activeContent is only refreshed on open/switch/load, so a manual save
+  // right after typing would otherwise rewrite the file with the open-time
+  // content and silently discard the edits. Fall back to the store content
+  // only when the editor isn't mounted.
+  const view = getEditorView();
+  const content = view ? view.state.doc.toString() : docStore.activeContent;
   try {
     await writeFileAtomic(root, targetRel, content);
     docStore.markSaved(id, content);

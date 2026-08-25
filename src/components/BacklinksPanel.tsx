@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 import { useVaultStore } from "../stores/vaultStore";
 import { useDocStore } from "../stores/docStore";
-import { readFile, findBacklinks, type Backlink } from "../lib/ipc";
+import { findBacklinks, type Backlink } from "../lib/ipc";
+import { openNote } from "../lib/openNote";
 
 export function BacklinksPanel() {
   const vaultRoot = useVaultStore((s) => s.vaultRoot);
   const activeDocId = useDocStore((s) => s.activeDocId);
-  const openDoc = useDocStore((s) => s.openDoc);
-  const setActiveContent = useDocStore((s) => s.setActiveContent);
   const [backlinks, setBacklinks] = useState<Backlink[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -34,16 +33,9 @@ export function BacklinksPanel() {
     };
   }, [vaultRoot, activeDocId]);
 
-  const openLink = async (path: string) => {
+  const openLink = (path: string) => {
     if (!vaultRoot) return;
-    try {
-      const content = await readFile(vaultRoot, path);
-      const title = path.split("/").pop() ?? path;
-      openDoc(title, path);
-      setActiveContent(content);
-    } catch {
-      // ignore read errors
-    }
+    void openNote(vaultRoot, path);
   };
 
   return (

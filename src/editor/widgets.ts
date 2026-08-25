@@ -21,7 +21,19 @@ export class CodeBlockWidget extends WidgetType {
   }
 
   eq(other: CodeBlockWidget): boolean {
-    return other.code === this.code && other.language === this.language;
+    // Content AND position must match. Position is part of correctness, not
+    // just layout: CM6 reuses the existing DOM (and its event handlers,
+    // which close over THIS instance's blockFrom/blockTo) whenever eq()
+    // returns true. livePreviewField rebuilds the decoration set on EVERY
+    // transaction, so a text insert above the block shifts the range while
+    // the content stays identical — comparing content alone would reuse the
+    // stale DOM and commit edits at the OLD offset, corrupting the document.
+    return (
+      other.code === this.code &&
+      other.language === this.language &&
+      other.blockFrom === this.blockFrom &&
+      other.blockTo === this.blockTo
+    );
   }
 
   toDOM(view: EditorView): HTMLElement {
@@ -422,7 +434,13 @@ export class TableWidget extends WidgetType {
   }
 
   eq(other: TableWidget): boolean {
-    return other.raw === this.raw;
+    // Position is part of equality: see CodeBlockWidget.eq — stale block
+    // positions in a reused DOM would commit table edits at the wrong range.
+    return (
+      other.raw === this.raw &&
+      other.blockFrom === this.blockFrom &&
+      other.blockTo === this.blockTo
+    );
   }
 
   toDOM(view: EditorView): HTMLElement {
@@ -586,7 +604,9 @@ export class TaskCheckboxWidget extends WidgetType {
   }
 
   eq(other: TaskCheckboxWidget): boolean {
-    return other.checked === this.checked;
+    // Position is part of equality: stale marker ranges in a reused DOM would
+    // toggle the WRONG `[ ]`/`[x]` token after text is inserted above it.
+    return other.checked === this.checked && other.from === this.from && other.to === this.to;
   }
 
   toDOM(view: EditorView): HTMLElement {

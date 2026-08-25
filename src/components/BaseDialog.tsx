@@ -39,39 +39,41 @@ function collectBaseFiles(
   return out;
 }
 
-/** Walk the tree and collect `.md` rows directly inside the configured folder.
- *  We do NOT recurse into subfolders (matches Obsidian Base: rows are the
- *  folder's immediate .md files). */
+/** Walk the tree and collect `.md` rows directly inside the configured folder
+ *  (which may be nested anywhere under the vault root). Rows are the folder's
+ *  immediate .md files; subfolders are not descended into (Obsidian Base). */
 function collectRows(
   node: { name: string; path: string; kind: string; children: any[] },
   target: string,
   rows: BaseRow[],
 ) {
-  if (node.kind === "file") {
-    if (!node.name.toLowerCase().endsWith(".md")) return;
-    if (parentOf(node.path) === target) {
-      rows.push({
-        path: node.path,
-        name: node.name.replace(/\.md$/i, ""),
-        values: {},
-      });
-    }
-    return;
+  // Descend to the target folder first: `target` is vault-root-relative
+  // (e.g. "notes/inbox"), and the cached tree mirrors that structure. If the
+  // target is the vault root (""), collect from the root level directly.
+  const targetNode = target === "" ? node : findNode(node, target);
+  if (!targetNode || targetNode.kind !== "folder") return;
+  for (const c of targetNode.children ?? []) {
+    if (c.kind !== "file" || !c.name.toLowerCase().endsWith(".md")) continue;
+    rows.push({
+      path: c.path,
+      name: c.name.replace(/\.md$/i, ""),
+      values: {},
+    });
   }
+}
+
+/** Find a folder node by exact vault-relative path in a cached tree. */
+function findNode(
+  node: { name: string; path: string; kind: string; children: any[] } | null,
+  path: string,
+): { name: string; path: string; kind: string; children: any[] } | null {
+  if (!node) return null;
+  if (node.path === path) return node;
   for (const c of node.children ?? []) {
-    if (c.kind === "file") {
-      if (!c.name.toLowerCase().endsWith(".md")) continue;
-      if (parentOf(c.path) === target) {
-        rows.push({
-          path: c.path,
-          name: c.name.replace(/\.md$/i, ""),
-          values: {},
-        });
-      }
-    }
-    // Intentionally do NOT descend into nested folders — the spec limits
-    // rows to files directly under `folder`.
+    const hit = findNode(c, path);
+    if (hit) return hit;
   }
+  return null;
 }
 
 /** Parent folder of a vault-relative path ("" for top level). */

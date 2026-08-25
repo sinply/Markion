@@ -285,8 +285,24 @@ impl LinkIndex {
                     }
                 }
             }
-            if self.path_by_stem.get(&file_stem(&path)) == Some(&path) {
-                self.path_by_stem.remove(&file_stem(&path));
+            // If this file was the stem->path owner, re-point it at another
+            // surviving file with the same stem (e.g. deleting top-level
+            // `a.md` while `notes/a.md` exists must keep `[[a]]` resolving).
+            let stem = file_stem(&path);
+            if !stem.is_empty() && self.path_by_stem.get(&stem) == Some(&path) {
+                let replacement = self
+                    .forward
+                    .keys()
+                    .find(|p| file_stem(p) == stem && *p != &path)
+                    .cloned();
+                match replacement {
+                    Some(p) => {
+                        self.path_by_stem.insert(stem, p);
+                    }
+                    None => {
+                        self.path_by_stem.remove(&stem);
+                    }
+                }
             }
         }
     }
@@ -342,9 +358,30 @@ pub(crate) fn rewrite_links(text: &str, old_stem: &str, new_stem: &str) -> Strin
     }
     let mut out = String::with_capacity(text.len());
     let mut in_fence = false;
+    let mut fence_marker: Option<char> = None; // ` or ~
+    let mut fence_len = 0usize;
     for line in text.split_inclusive('\n') {
-        if line.trim_start().starts_with("```") {
-            in_fence = !in_fence;
+        let trimmed = line.trim_start();
+        let rest = trimmed.trim_end_matches(['\r', '\n']);
+        // A fence toggles only when the marker run is at the START of the
+        // line (whitespace allowed) and >= 3 chars — the actual Markdown
+        // syntax. `` `foo ```code``` ` `` is inline code: its runs are not at
+        // the line start, so they never toggle state and the whole line is
+        // still scanned for links.
+        if let Some((ch, run_len)) = fence_at_start(rest) {
+            if fence_len == 0 {
+                // Opening fence (any marker).
+                fence_marker = Some(ch);
+                fence_len = run_len;
+                in_fence = true;
+            } else if ch == fence_marker.unwrap_or(ch) && run_len >= fence_len {
+                // Closing fence: same marker, run at least the opener's length.
+                fence_len = 0;
+                fence_marker = None;
+                in_fence = false;
+            }
+            // The fence line itself (markers + optional info) is emitted
+            // verbatim — links on it are literal code, not references.
             out.push_str(line);
             continue;
         }
@@ -355,6 +392,23 @@ pub(crate) fn rewrite_links(text: &str, old_stem: &str, new_stem: &str) -> Strin
         out.push_str(&rewrite_line(line, old_stem, new_stem));
     }
     out
+}
+
+/// If the trimmed line starts with a ``` or ~~~ run of >= 3 chars, return the
+/// marker char and run length. An info string after the run (` ```js `) is
+/// allowed. Text before the run disqualifies the line (inline code).
+fn fence_at_start(line: &str) -> Option<(char, usize)> {
+    let mut chars = line.chars();
+    let ch = chars.next()?;
+    if ch != '`' && ch != '~' {
+        return None;
+    }
+    let run_len = line.chars().take_while(|&c| c == ch).count();
+    if run_len >= 3 {
+        Some((ch, run_len))
+    } else {
+        None
+    }
 }
 
 /// Rewrite `[[...]]` links on a single non-fence line.
@@ -634,6 +688,43 @@ mod tests {
         assert_eq!(
             rewrite_links(src, "b", "c"),
             "See [[c]]\n\n```\n[[b]]\n```\n\n[[c]]\n"
+        );
+    }
+
+    #[test]
+    fn rewrite_skips_tilde_fences() {
+        let src = "See [[b]]\n\n~~~\n[[b]]\n~~~\n\n[[b]]\n";
+        assert_eq!(
+            rewrite_links(src, "b", "c"),
+            "See [[c]]\n\n~~~\n[[b]]\n~~~\n\n[[c]]\n"
+        );
+    }
+
+    #[test]
+    fn rewrite_skips_fence_with_language_info() {
+        let src = "```python\n[[b]]\n```\n\n[[b]]\n";
+        assert_eq!(
+            rewrite_links(src, "b", "c"),
+            "```python\n[[b]]\n```\n\n[[c]]\n"
+        );
+    }
+
+    #[test]
+    fn rewrite_inline_triple_backticks_do_not_toggle_fence() {
+        // `` `x ```y``` ` `` is inline code, not a fence: the second run is
+        // not at the line start, so it must NOT open a fence that swallows the
+        // link below it.
+        let src = "`code ```b``` `\n\n[[b]]\n";
+        assert_eq!(rewrite_links(src, "b", "c"), "`code ```b``` `\n\n[[c]]\n");
+    }
+
+    #[test]
+    fn rewrite_mixed_fence_markers_do_not_close() {
+        // A ~~~ closer must not close a ``` fence (different marker).
+        let src = "```\n[[b]]\n~~~\n[[b]]\n```\n\n[[b]]\n";
+        assert_eq!(
+            rewrite_links(src, "b", "c"),
+            "```\n[[b]]\n~~~\n[[b]]\n```\n\n[[c]]\n"
         );
     }
 

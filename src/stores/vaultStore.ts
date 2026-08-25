@@ -89,6 +89,10 @@ interface VaultState {
   setCollapsed: (folderRel: string, collapsed: boolean) => Promise<void>;
 }
 
+/** Monotonic request id so a slow earlier loadTree can't overwrite a newer
+ *  tree (out-of-order async responses after rapid renames/deletes). */
+let loadTreeSeq = 0;
+
 export const useVaultStore = create<VaultState>((set, get) => ({
   vaultRoot: null,
   tree: null,
@@ -96,7 +100,9 @@ export const useVaultStore = create<VaultState>((set, get) => ({
   recentVaults: loadRecentVaults(),
 
   loadTree: async (root) => {
+    const seq = ++loadTreeSeq;
     const raw = await buildTree(root);
+    if (seq !== loadTreeSeq) return; // a newer request superseded this one
     // Honor the "show hidden files" setting (defaults to off). Read lazily to
     // avoid a static import cycle with settingsStore.
     let showHidden = false;

@@ -1,6 +1,7 @@
 import { renderMarkdown } from "../editor/markdown";
 import { useDocStore } from "../stores/docStore";
 import { useVaultStore } from "../stores/vaultStore";
+import { getEditorView } from "../editor/registry";
 import { exportFile, readFileBase64, writeFileBase64 } from "./ipc";
 import { save } from "@tauri-apps/plugin-dialog";
 // Inline the KaTeX stylesheet so the exported HTML renders formulas without
@@ -126,7 +127,12 @@ export async function inlineImages(
   const docDir = ctx.docRel.includes("/") ? ctx.docRel.slice(0, ctx.docRel.lastIndexOf("/")) : "";
   const toAbsolute = (src: string): string | null => {
     if (/^(https?:|data:)/i.test(src) || !src) return null;
-    const decoded = decodeURIComponent(src);
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(src);
+    } catch {
+      decoded = src; // literal `%` in a filename is not an escape sequence
+    }
     if (/^[a-zA-Z]:[\\/]/.test(decoded)) return decoded; // Windows drive path
     const normalized = decoded.replace(/\\/g, "/").replace(/^\/+/, "");
     if (decoded.startsWith("/")) return `${ctx.vaultRoot}/${normalized}`; // vault-root path
@@ -201,6 +207,16 @@ export function printHtml(html: string): void {
   }, 30000);
 }
 
+/** Live editor text for the active doc (falls back to the store snapshot
+ *  when the editor isn't mounted). Exports and manual saves must use the
+ *  current buffer — the store's activeContent is only refreshed on open. */
+export function activeEditorText(): string {
+  const store = useDocStore.getState();
+  const view = getEditorView();
+  if (view) return view.state.doc.toString();
+  return store.activeContent;
+}
+
 /** Export the active note: HTML (fully rendered) or raw Markdown. Uses the
  *  save dialog to pick the destination, then writes via the backend. */
 export async function exportActiveNote(asHtml: boolean): Promise<void> {
@@ -208,7 +224,7 @@ export async function exportActiveNote(asHtml: boolean): Promise<void> {
   const vaultRoot = useVaultStore.getState().vaultRoot;
   const active = docStore.openDocs.find((d) => d.id === docStore.activeDocId);
   if (!vaultRoot || !active) return;
-  const content = docStore.activeContent;
+  const content = activeEditorText();
   const base = active.title.replace(/\.md$/i, "");
   const picked = await save({
     defaultPath: `${base}.${asHtml ? "html" : "md"}`,
@@ -230,8 +246,7 @@ export async function exportActivePdf(): Promise<void> {
   const vaultRoot = useVaultStore.getState().vaultRoot;
   const active = docStore.openDocs.find((d) => d.id === docStore.activeDocId);
   if (!vaultRoot || !active) return;
-  const content = docStore.activeContent;
-  const html = await buildExportHtml(content, active.title, {
+  const html = await buildExportHtml(activeEditorText(), active.title, {
     vaultRoot,
     docRel: active.path,
   });
@@ -279,7 +294,7 @@ export async function exportActivePdfFile(): Promise<void> {
     filters: [{ name: "PDF", extensions: ["pdf"] }],
   });
   if (typeof picked !== "string") return;
-  const html = await buildExportHtml(docStore.activeContent, active.title, {
+  const html = await buildExportHtml(activeEditorText(), active.title, {
     vaultRoot,
     docRel: active.path,
   });
@@ -315,7 +330,7 @@ export async function exportActiveImage(): Promise<void> {
     filters: [{ name: "PNG", extensions: ["png"] }],
   });
   if (typeof picked !== "string") return;
-  const html = await buildExportHtml(docStore.activeContent, active.title, {
+  const html = await buildExportHtml(activeEditorText(), active.title, {
     vaultRoot,
     docRel: active.path,
   });

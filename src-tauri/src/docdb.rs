@@ -474,17 +474,20 @@ pub fn remove_path(vault_root: &Path, rel_path: &str) -> Result<(), String> {
         return Ok(()); // nothing to remove in a foreign/empty db
     }
     let prefix = format!("{}/%", rel_path.trim_end_matches('/'));
+    // ESCAPE '\' so literal %/_ in a folder name are not SQL wildcards:
+    // trashing `my_notes/` must not also delete rows under `my-notes/`.
+    let prefix_escaped = prefix.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     for table in ["properties", "tags"] {
         tx.execute(
-            &format!("DELETE FROM {table} WHERE path = ?1 OR path LIKE ?2"),
-            rusqlite::params![rel_path, prefix],
+            &format!("DELETE FROM {table} WHERE path = ?1 OR path LIKE ?2 ESCAPE '\\'"),
+            rusqlite::params![rel_path, prefix_escaped],
         )
         .map_err(|e| e.to_string())?;
     }
     tx.execute(
-        "DELETE FROM documents WHERE path = ?1 OR path LIKE ?2",
-        rusqlite::params![rel_path, prefix],
+        "DELETE FROM documents WHERE path = ?1 OR path LIKE ?2 ESCAPE '\\'",
+        rusqlite::params![rel_path, prefix_escaped],
     )
     .map_err(|e| e.to_string())?;
     tx.commit().map_err(|e| e.to_string())
@@ -580,12 +583,20 @@ pub fn query_library_ready(
 ) -> Result<Vec<LibraryEntry>, String> {
     let conn = open_conn(vault_root).map_err(|e| e.to_string())?;
     // Folder filter = exact folder OR anything under it ("folder/%").
-    let prefix = folder.as_ref().map(|f| format!("{f}/%"));
+    // Literal %/_ in the folder name are escaped so `my_notes` does not also
+    // match `my-notes`; the trailing `/%` wildcard is what we keep.
+    let prefix = folder.as_ref().map(|f| {
+        let esc = f
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_");
+        format!("{esc}/%")
+    });
     let mut stmt = conn
         .prepare(
             "SELECT d.path, d.title, d.mtime_secs, d.word_count, d.summary
              FROM documents d
-             WHERE (?1 IS NULL OR d.folder = ?1 OR d.folder LIKE ?2)
+             WHERE (?1 IS NULL OR d.folder = ?1 OR d.folder LIKE ?2 ESCAPE '\\')
              ORDER BY d.mtime_secs DESC",
         )
         .map_err(|e| e.to_string())?;

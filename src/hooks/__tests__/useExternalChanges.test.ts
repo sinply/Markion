@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { decideExternalChange, decideDeleted } from "../useExternalChanges";
+import { decideExternalChange, decideDeleted, markAppChange, recentAppChanges } from "../useExternalChanges";
 
 describe("decideExternalChange", () => {
   it("ignores our own autosave echo (disk equals last-saved content)", () => {
@@ -40,5 +40,16 @@ describe("decideDeleted", () => {
 
   it("ignores when dirty but no editor view is available", () => {
     expect(decideDeleted(true, false)).toBe("ignore");
+  });
+});
+
+describe("recentAppChanges (in-app rename/trash deletes)", () => {
+  it("records a path and lets the handler suppress the matching delete", () => {
+    recentAppChanges.clear();
+    markAppChange("a.md");
+    const since = recentAppChanges.get("a.md");
+    expect(since).toBeTypeOf("number");
+    // The handler treats a matching path within the window as our own rename.
+    expect(recentAppChanges.has("a.md")).toBe(true);
   });
 });

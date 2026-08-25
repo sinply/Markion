@@ -29,7 +29,11 @@ export function EditorPane({
   const showWordCount = useSettingsStore((s) => s.showWordCount);
 
   const editorRef = useRef<EditorHandle>(null);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Per-doc autosave timer. Switching tabs (or closing a tab) within the
+  // debounce window must not cancel a pending save for another doc — the
+  // timer closure already captured that doc's path and content. Only a
+  // further keystroke in the SAME doc supersedes it.
+  const saveTimer = useRef<{ docId: string; timer: ReturnType<typeof setTimeout> } | null>(null);
 
   const activeDoc = openDocs.find((d) => d.id === activeDocId);
 
@@ -70,25 +74,41 @@ export function EditorPane({
 
   const handleChange = useCallback(
     (doc: string) => {
-      if (!activeDocId) return;
-      markDirty(activeDocId);
-      // Debounce auto-save: 1s after last keystroke
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(async () => {
-        if (!vaultRoot || !activeDocId) return;
-        try {
-          const docPath = useDocStore.getState().openDocs.find((d) => d.id === activeDocId)?.path;
-          if (docPath) {
-            await writeFileAtomic(vaultRoot, docPath, doc);
-            markSaved(activeDocId, doc);
-            markClean(activeDocId);
+      const id = activeDocId;
+      if (!id) return;
+      markDirty(id);
+      // Keep the store's activeContent in sync with live edits so manual
+      // Save / Save As / exports / word count read the CURRENT text, not the
+      // open-time snapshot. setActiveContent captures activeDocId (== id).
+      setActiveContent(doc);
+      // Debounce auto-save: 1s after last keystroke IN THE SAME DOC. A
+      // different doc's pending timer is left alone (its closure owns the
+      // path + content it will write).
+      if (saveTimer.current?.docId === id) clearTimeout(saveTimer.current.timer);
+      const docPath = useDocStore.getState().openDocs.find((d) => d.id === id)?.path;
+      saveTimer.current = {
+        docId: id,
+        timer: setTimeout(async () => {
+          const state = useDocStore.getState();
+          const path = state.openDocs.find((d) => d.id === id)?.path;
+          // Skip the write while an external-change conflict is open for this
+          // doc: overwriting the file would clobber the very change the user
+          // is deciding about (last-writer-wins destroys external edits).
+          const conflict = useUiStore.getState().conflict;
+          if (conflict && conflict.path === path) return;
+          if (!vaultRoot || !path) return;
+          const content = state.activeContentDocId === id ? state.activeContent : doc;
+          try {
+            await writeFileAtomic(vaultRoot, path, content);
+            markSaved(id, content);
+            markClean(id);
+          } catch {
+            // save failed — mark stays dirty, toast on next error UI cycle
           }
-        } catch {
-          // save failed — mark stays dirty, toast on next error UI cycle
-        }
-      }, 1000);
+        }, 1000),
+      };
     },
-    [activeDocId, vaultRoot, markDirty, markClean],
+    [activeDocId, vaultRoot, markDirty, markClean, setActiveContent],
   );
 
   // Jump to a search result: when the pendingJump targets the active doc and

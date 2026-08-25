@@ -6,6 +6,18 @@ import { useUiStore } from "../stores/uiStore";
 import { getEditorView } from "../editor/registry";
 import { readFile } from "../lib/ipc";
 
+/** Paths that the app itself renamed/trashed a moment ago. The watcher emits a
+ *  "deleted" event for the OLD path after an in-app rename, and that event can
+ *  beat the store's renameDoc remap — without this, useExternalChanges would
+ *  misread the active doc as externally deleted and close it / pop the Save-As
+ *  dialog. FileTree records the old path here right after a successful rename
+ *  or trash; the handler ignores matching deletes for a short window. */
+export const recentAppChanges = new Map<string, number>();
+export function markAppChange(path: string): void {
+  recentAppChanges.set(path, Date.now());
+}
+const IGNORE_WINDOW_MS = 3000;
+
 /** Pure decision for how to react to a disk change of the active doc. Exported
  *  for tests. */
 export function decideExternalChange(opts: {
@@ -59,6 +71,14 @@ export function useExternalChanges() {
           disk = await readFile(vaultRoot, active.path);
         } catch {
           // The active file was deleted (or is unreadable) on disk.
+          // The app itself may have renamed/trashed this path a moment ago
+          // (its watcher event beat the store remap) — that is not an external
+          // deletion, so do not close the tab or offer Save As.
+          const since = recentAppChanges.get(active.path);
+          if (since !== undefined && Date.now() - since < IGNORE_WINDOW_MS) {
+            recentAppChanges.delete(active.path);
+            return;
+          }
           const view = getEditorView();
           const editor = view?.state.doc.toString();
           const dirty = !!useDocStore.getState().dirtyMap[active.id];
@@ -92,11 +112,16 @@ export function useExternalChanges() {
           useUiStore.getState().setConflict({ path: active.path, diskContent: disk });
         } else {
           // Clean: reload the mounted editor directly (setActiveContent alone
-          // does not refresh a mounted CM6 view) and sync the store.
+          // does not refresh a mounted CM6 view) and sync the store. The
+          // dispatch fires onChange, which would mark the doc dirty and arm an
+          // autosave of the very content we just loaded — clear that: the
+          // editor now matches disk.
           const view = getEditorView();
           if (view) {
             view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: disk } });
           }
+          docStore.markClean(active.id);
+          docStore.markSaved(active.id, disk);
           docStore.setActiveContent(disk);
         }
       });

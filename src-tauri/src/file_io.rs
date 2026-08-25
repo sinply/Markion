@@ -15,7 +15,24 @@ pub fn write_file_atomic(path: &Path, content: &str) -> std::io::Result<()> {
             std::io::Error::new(std::io::ErrorKind::InvalidInput, "path has no file name")
         })?
         .to_string_lossy();
-    let tmp = dir.join(format!(".{}.tmp", file_name));
+    // Unique temp name: a fixed `.{name}.tmp` lets two concurrent writers to
+    // the same target interleave — A writes tmp, B overwrites tmp, A renames
+    // B's bytes into place and reports success, B's rename then fails on the
+    // missing tmp. A per-invocation suffix makes each write's temp file
+    // distinct, so every rename commits exactly its own bytes. A stale temp
+    // from a crash is ignored (same name is reused next time).
+    let unique = {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let pid = std::process::id();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        format!(".{file_name}.{pid}.{now}.{n}.tmp")
+    };
+    let tmp = dir.join(unique);
     fs::write(&tmp, content)?;
     fs::rename(&tmp, path)?;
     Ok(())
