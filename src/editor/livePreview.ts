@@ -485,7 +485,11 @@ function scanBlocks(state: EditorState): Block[] {
           styleAttr: `font-size:${sizes[level - 1]};font-weight:600;`,
           markList: collectMarks(node.node, "HeaderMark"),
         });
-        return false;
+        // Deliberately do NOT return false: inline syntax INSIDE the heading
+        // (**bold**, `code`, [links], [[wikilinks]]) must still be processed,
+        // otherwise the raw markers show through (a heading title renders as
+        // literal **bold**). The heading's own mark decoration nests around
+        // the children's marks/replacements, which RangeSet allows.
       }
 
       // --- Blockquote: hide the `>` mark(s), then style the content ---

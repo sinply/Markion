@@ -208,6 +208,32 @@ describe("frontmatter", () => {
   });
 });
 
+describe("inline syntax inside headings", () => {
+  it("styles **bold** inside a heading instead of showing literal markers", () => {
+    // Regression: the heading branch used to `return false`, which skipped
+    // its child inline nodes — `## **加粗**` rendered the literal `**`.
+    const doc = "## **加粗** 标题\n";
+    const state = stateOf(doc);
+    const moved = state.update({ selection: { anchor: doc.length } }).state;
+    const decos = buildDecorations(moved);
+    let heading = 0;
+    let emphasis = 0;
+    let hiddenMarks = 0;
+    const iter = decos.iter();
+    while (iter.value) {
+      const spec = iter.value.spec;
+      const cls = spec?.attributes?.class ?? "";
+      if (cls.includes("cm-heading")) heading++;
+      if (cls.includes("cm-emphasis")) emphasis++;
+      if (cls.includes("cm-hidden")) hiddenMarks++;
+      iter.next();
+    }
+    expect(heading).toBeGreaterThanOrEqual(1);
+    expect(emphasis).toBeGreaterThanOrEqual(1);
+    expect(hiddenMarks).toBeGreaterThanOrEqual(2); // the two ** markers
+  });
+});
+
 describe("inline math", () => {
   it("replaces $...$ with an inline math widget", () => {
     const decos = buildDecorations(stateOfEnd("Euler: $e^{i\pi} = -1$ is neat.\n\nsecond line\n"));

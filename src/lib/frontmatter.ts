@@ -48,8 +48,14 @@ export function extractFrontmatter(doc: string): FrontmatterBlock | null {
   const closeRe = /(?:^|\r?\n)---[ \t]*(?:\r?\n|$)/;
   const m = closeRe.exec(rest);
   if (m) {
+    const body = doc.slice(openEnd, openEnd + m.index);
+    // The body must look like YAML — otherwise the closing `---` is just a
+    // LATER thematic break in the note and the leading `---` was a break too
+    // (a doc that opens with `---\n\n## Heading ... \n\n---` must render the
+    // markers as rules, not swallow everything into a properties card).
+    if (!bodyLooksYaml(body)) return null;
     const end = openEnd + m.index + m[0].length;
-    return { body: doc.slice(openEnd, openEnd + m.index), start, end, closed: true };
+    return { body, start, end, closed: true };
   }
   // Unclosed: span the YAML run up to the first blank line (or end of doc).
   // Only treat it as frontmatter when the run looks like YAML (`key:` lines) —
@@ -66,9 +72,21 @@ export function extractFrontmatter(doc: string): FrontmatterBlock | null {
     end++;
   }
   const body = doc.slice(openEnd, end);
-  const looksYaml = /^\s*[A-Za-z_][\w.-]*\s*:/.test(body);
-  if (!looksYaml) return null;
+  if (!bodyLooksYaml(body)) return null;
   return { body, start, end, closed: false };
+}
+
+/** True when a frontmatter body is valid YAML properties: empty (empty block)
+ *  or containing at least one `key:` line. Rejects markdown bodies like
+ *  headings/list items whose first `---` line is a thematic break. */
+function bodyLooksYaml(body: string): boolean {
+  if (body.trim() === "") return true; // `---\n---` empty block
+  for (const line of body.split("\n")) {
+    const t = line.trim();
+    if (!t || t.startsWith("#")) continue; // blank / comment
+    if (/^[A-Za-z_][\w.-]*\s*:/.test(t)) return true;
+  }
+  return false;
 }
 
 /** Parse a YAML frontmatter body into [key, value] pairs (top-level only). */

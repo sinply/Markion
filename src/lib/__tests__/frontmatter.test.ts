@@ -64,6 +64,20 @@ describe("extractFrontmatter", () => {
     expect(extractFrontmatter("---\nSome paragraph\n")).toBeNull();
     expect(extractFrontmatter("---\n\n# Heading\n")).toBeNull();
   });
+
+  it("does NOT treat `---` ... `---` around markdown body as frontmatter", () => {
+    // A later `---` must not close a block whose body is markdown (headings,
+    // lists) instead of YAML — the whole note would collapse into a card.
+    const doc = "---\n\n## 八、后续建议\n\n1. 第一项\n2. 第二项\n\n---\n\n正文\n";
+    expect(extractFrontmatter(doc)).toBeNull();
+  });
+
+  it("still accepts a real YAML body with a later hr", () => {
+    const doc = "---\ntags: FPGA\n---\n\n---\n\n正文\n";
+    const fm = extractFrontmatter(doc);
+    expect(fm).not.toBeNull();
+    expect(fm!.body).toBe("tags: FPGA");
+  });
 });
 
 describe("parseFrontmatter", () => {
