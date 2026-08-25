@@ -345,7 +345,11 @@ function scanBlocks(state: EditorState): Block[] {
     enter(node) {
       const { name: type } = node.type;
 
-      if (insideFrontmatter(node.from)) return false;
+      // Skip everything inside the frontmatter block — BUT never prune the
+      // Document root: its from==0 sits inside the block, and returning false
+      // there skips the ENTIRE tree (headings, code blocks, tables all
+      // vanish). Only real content nodes are guarded.
+      if (type !== "Document" && insideFrontmatter(node.from)) return false;
 
       // --- Inline: Emphasis + StrongEmphasis (hide markers, style content) ---
       if (type === "Emphasis" || type === "StrongEmphasis") {

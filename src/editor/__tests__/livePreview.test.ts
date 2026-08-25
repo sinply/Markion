@@ -185,6 +185,27 @@ describe("frontmatter", () => {
     }
     expect(foundFrontmatter).toBe(false);
   });
+
+  it("renders headings AFTER the frontmatter when the cursor is past the block", () => {
+    // Regression: the frontmatter guard pruned the Document root, so every
+    // decoration after the block (headings, code blocks, tables) vanished.
+    const doc = "---\nauthor: x\n---\n\n## Heading\n\n### Sub\n";
+    const state = stateOf(doc);
+    // Cursor past the closing --- (headings visible, frontmatter shows card).
+    const moved = state.update({ selection: { anchor: doc.length } }).state;
+    const decos = buildDecorations(moved);
+    let headingCount = 0;
+    let frontmatterCard = false;
+    const iter = decos.iter();
+    while (iter.value) {
+      const spec = iter.value.spec;
+      if (spec?.attributes?.class === "cm-heading") headingCount++;
+      if (spec?.widget && spec.widget.constructor.name === "FrontmatterWidget") frontmatterCard = true;
+      iter.next();
+    }
+    expect(headingCount).toBeGreaterThanOrEqual(2);
+    expect(frontmatterCard).toBe(true);
+  });
 });
 
 describe("inline math", () => {
