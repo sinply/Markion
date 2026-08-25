@@ -1,7 +1,7 @@
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view";
-import { syntaxTree } from "@codemirror/language";
+import { syntaxTree, ensureSyntaxTree } from "@codemirror/language";
 import { RangeSetBuilder, EditorState, StateField, Text } from "@codemirror/state";
-import type { SyntaxNode } from "@lezer/common";
+import type { SyntaxNode, Tree } from "@lezer/common";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget, MathInlineWidget, PreviewWidget, WikiLinkWidget, CalloutWidget, EmbedWidget, FrontmatterWidget, HrWidget, DataviewWidget } from "./widgets";
 import { markdownContextFacet, type MarkdownContext } from "./media";
@@ -191,14 +191,18 @@ function normalizeRel(rel: string): string {
  *  entirely.
  */
 export function buildDecorations(state: EditorState): DecorationSet {
-  // Key the cache by the document Text object: EditorState is immutable, so a
-  // selection-only update creates a NEW state object but keeps the SAME Text;
-  // only a real doc change swaps the Text. That makes the key exactly match
-  // "did the scanned content change?".
+  // Cache key: document Text AND the fully-expanded syntax tree. Text is
+  // immutable so selection-only updates reuse the scan. The tree object is
+  // the one ensureSyntaxTree returns — it reflects how far the lazy parser
+  // has expanded. On a fresh doc the first scan forces a full parse; once the
+  // tree reaches doc.length its identity stops changing and the cache hits.
+  // (Keying on Text alone froze decorations at the first viewport-sized parse
+  // window, leaving everything past ~100 lines as raw source.)
   const doc = state.doc;
+  const tree = ensureSyntaxTree(state, doc.length, 1500) ?? syntaxTree(state);
   let cache = scanCache.get(doc);
-  if (!cache) {
-    cache = { blocks: scanBlocks(state), lastHead: -1, lastSet: null };
+  if (!cache || cache.tree !== tree) {
+    cache = { tree, blocks: scanBlocks(state, tree), lastHead: -1, lastSet: null };
     scanCache.set(doc, cache);
   }
   // Node-granularity rule: markers show/hide per CURSOR POSITION now (inside
@@ -219,6 +223,7 @@ export function buildDecorations(state: EditorState): DecorationSet {
 // ---- Scan / decide split ----
 
 interface ScanCache {
+  tree: Tree;
   blocks: Block[];
   lastHead: number;
   lastSet: DecorationSet | null;
@@ -309,10 +314,12 @@ export function parseCallout(raw: string): { type: string; body: string } | null
 }
 
 /** Walk the Lezer tree + regex-scan the doc once, producing a flat block list
- *  with no view-state (active line) baked in. */
-function scanBlocks(state: EditorState): Block[] {
+ *  with no view-state (active line) baked in. `tree` is the FULLY-EXPANDED
+ *  parse (see buildDecorations): scanBlocks never uses syntaxTree(state) on
+ *  its own, because a long note's viewport-only tree would skip everything
+ *  past the first screenful (headings/code/tables render as raw source). */
+export function scanBlocks(state: EditorState, tree: Tree): Block[] {
   const blocks: Block[] = [];
-  const tree = syntaxTree(state);
   const docText = state.doc.toString();
 
   // Frontmatter FIRST: everything inside the leading ---...--- block is

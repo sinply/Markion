@@ -234,6 +234,32 @@ describe("inline syntax inside headings", () => {
   });
 });
 
+describe("long-document coverage", () => {
+  it("renders headings past the viewport (not raw source)", () => {
+    // Regression: scanBlocks used syntaxTree(state), which on a long note only
+    // covers the visible region + lookahead — headings beyond ~100 lines never
+    // got a decoration and stayed raw source. ensureSyntaxTree forces a full
+    // parse so the whole document renders.
+    const doc =
+      Array.from({ length: 150 }, (_, i) => `## 标题 ${i + 1}\n\n段落 ${i}\n`).join("") + "\n";
+    const state = stateOf(doc);
+    const moved = state.update({ selection: { anchor: doc.length } }).state;
+    const decos = buildDecorations(moved);
+    let headingCount = 0;
+    let maxTo = 0;
+    const iter = decos.iter();
+    while (iter.value) {
+      if (iter.to > maxTo) maxTo = iter.to;
+      if (iter.value.spec?.attributes?.class?.includes("cm-heading")) headingCount++;
+      iter.next();
+    }
+    expect(headingCount).toBeGreaterThanOrEqual(150);
+    // Decorations must reach the last heading (the doc's final line), not
+    // stop at the initial parse window.
+    expect(maxTo).toBeGreaterThan(doc.length * 0.9);
+  });
+});
+
 describe("inline math", () => {
   it("replaces $...$ with an inline math widget", () => {
     const decos = buildDecorations(stateOfEnd("Euler: $e^{i\pi} = -1$ is neat.\n\nsecond line\n"));
