@@ -403,6 +403,38 @@ body {
   margin: 10px 0;
 }
 
+/* --- Dataview table-query widget --- */
+.cm-dataview { margin: 6px 0; }
+.cm-dataview-loading,
+.cm-dataview-error {
+  color: var(--fg-muted, #888);
+  font-size: 13px;
+  padding: 8px 10px;
+}
+.cm-dataview-error { color: #d1242f; }
+.cm-dataview-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13.5px;
+}
+.cm-dataview-table th,
+.cm-dataview-table td {
+  border: 1px solid var(--border);
+  padding: 5px 10px;
+  text-align: left;
+}
+.cm-dataview-table th {
+  background: var(--panel-bg, rgba(127, 127, 127, 0.08));
+  font-weight: 600;
+}
+.cm-dataview-row { cursor: pointer; }
+.cm-dataview-row:hover td { background: var(--hover-bg, rgba(127, 127, 127, 0.12)); }
+.cm-dataview-count {
+  color: var(--fg-muted, #888);
+  font-size: 12px;
+  margin-top: 3px;
+}
+
 /* Code block widget */
 .cm-codeblock {
   background: var(--code-bg);

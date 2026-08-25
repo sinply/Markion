@@ -49,13 +49,17 @@ describe("user doc: headings + consecutive dataview fences", () => {
       await waitFor(() => {
         // Headings render
         expect(parent.querySelectorAll(".cm-heading").length).toBeGreaterThanOrEqual(3);
-        // Every dataview fence renders as a code card (4 of them)
-        expect(parent.querySelectorAll(".cm-codeblock").length).toBe(4);
+        // Every dataview fence renders as a dataview widget (jsdom has no
+        // Tauri IPC, so the widget settles into its error/loading card —
+        // what matters is that it is a WIDGET, not bare source).
+        expect(parent.querySelectorAll(".cm-dataview").length).toBe(4);
       }, { timeout: 8000 });
       const text = visibleText(parent);
       expect(text).toContain("SDR软件无线电");
-      expect(text).toContain("file.mtime");       // fence content visible inside cards
-      expect(text).not.toContain("```");          // no bare backtick fences anywhere
+      // The DQL source is replaced by the widget — no bare query text/fences.
+      expect(text).not.toContain("```");
+      expect(text).not.toContain("file.mtime");
+      expect(text).not.toContain("sort");
     } finally {
       view.destroy();
       parent.remove();

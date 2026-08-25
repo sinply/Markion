@@ -696,3 +696,10 @@ pub fn query_library(
 pub fn query_folder_table(vault_root: String, folder: String) -> Result<docdb::FolderTable, String> {
     docdb::query_folder_table(Path::new(&vault_root), &folder)
 }
+
+/// Dataview ```table queries: recursive .md walk under a folder with
+/// mtime/size plus frontmatter pairs per row.
+#[tauri::command]
+pub fn query_dataview_rows(vault_root: String, folder: String) -> Result<Vec<docdb::DataviewRow>, String> {
+    docdb::query_dataview_rows(Path::new(&vault_root), &folder)
+}

@@ -3,7 +3,7 @@ import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder, EditorState, StateField, Text } from "@codemirror/state";
 import type { SyntaxNode } from "@lezer/common";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget, MathInlineWidget, PreviewWidget, WikiLinkWidget, CalloutWidget, EmbedWidget, FrontmatterWidget, HrWidget } from "./widgets";
+import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget, MathInlineWidget, PreviewWidget, WikiLinkWidget, CalloutWidget, EmbedWidget, FrontmatterWidget, HrWidget, DataviewWidget } from "./widgets";
 import { markdownContextFacet, type MarkdownContext } from "./media";
 import { extractFrontmatter, parseFrontmatter } from "../lib/frontmatter";
 import { resolveWikiLink, wikiHeading } from "./wikiIndex";
@@ -232,6 +232,7 @@ type BlockKind =
   | "link"        // link text span with fixed-hidden brackets
   | "image"       // image widget (skipped on active line)
   | "hr"          // horizontal rule widget
+  | "dataview"    // dataview table-query widget
   | "code"        // fenced code widget (skipped on active line)
   | "table"       // GFM table widget (skipped on active line)
   | "task"        // task checkbox widget (skipped on active line)
@@ -550,6 +551,16 @@ function scanBlocks(state: EditorState): Block[] {
             .replace(/\n+$/, "")
             .replace(/\n {4}/g, "\n");
         }
+        if (lang.toLowerCase() === "dataview") {
+          // Dataview query: render as a live result table, not a code card.
+          blocks.push({
+            kind: "dataview",
+            from: node.from, to: node.to,
+            code: codeText.replace(/^\n+/, "").replace(/\n+$/, ""),
+          });
+          codeRanges.push({ from: node.from, to: node.to });
+          return false;
+        }
         blocks.push({
           kind: "code",
           from: node.from, to: node.to,
@@ -836,6 +847,16 @@ function decideEntries(state: EditorState, blocks: Block[]): DecoEntry[] {
         entries.push({
           from: b.from, to: b.to,
           decoration: Decoration.replace({ widget: new HrWidget(), block: true }),
+        });
+        break;
+      }
+
+      case "dataview": {
+        // Same rule as code blocks: cursor inside = raw DQL for editing.
+        if (isOnActiveLine(state, b.from, b.to, activeLine)) break;
+        entries.push({
+          from: b.from, to: b.to,
+          decoration: Decoration.replace({ widget: new DataviewWidget(b.code ?? ""), block: true }),
         });
         break;
       }

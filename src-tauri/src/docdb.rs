@@ -657,6 +657,76 @@ pub fn query_folder_table(vault_root: &Path, folder: &str) -> Result<FolderTable
     Ok(build_folder_table(&entries))
 }
 
+/// Dataview query row: file metadata + frontmatter pairs for ```dataview
+/// table queries. Unlike [`query_folder_table`] this walks the folder
+/// RECURSIVELY (Obsidian semantics) and carries mtime/size.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DataviewRow {
+    pub path: String,
+    pub name: String,
+    pub mtime_secs: i64,
+    pub size_bytes: u64,
+    pub values: Vec<(String, String)>,
+}
+
+/// Recursive `.md` walk under `folder` for dataview queries. Hidden entries
+/// are pruned at every depth.
+pub fn query_dataview_rows(vault_root: &Path, folder: &str) -> Result<Vec<DataviewRow>, String> {
+    let dir_abs = if folder.is_empty() {
+        vault_root.to_path_buf()
+    } else {
+        vault_root.join(folder)
+    };
+    if !dir_abs.is_dir() {
+        return Err(format!("folder not found: {folder}"));
+    }
+    let mut out: Vec<DataviewRow> = Vec::new();
+    let mut stack = vec![dir_abs];
+    while let Some(dir) = stack.pop() {
+        let rd = match std::fs::read_dir(&dir) {
+            Ok(rd) => rd,
+            Err(_) => continue,
+        };
+        for e in rd.filter_map(|e| e.ok()) {
+            let name = e.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') {
+                continue;
+            }
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+                continue;
+            }
+            if !name.to_lowercase().ends_with(".md") {
+                continue;
+            }
+            let meta = match e.metadata() {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
+            let rel = p
+                .strip_prefix(vault_root)
+                .unwrap_or(&p)
+                .to_string_lossy()
+                .replace('\\', "/");
+            let values = std::fs::read_to_string(&p)
+                .ok()
+                .and_then(|text| extract_frontmatter(&text))
+                .map(|fm| fm.props)
+                .unwrap_or_default();
+            out.push(DataviewRow {
+                path: rel,
+                name: strip_title_ext(&name),
+                mtime_secs: mtime_of(&p),
+                size_bytes: meta.len(),
+                values,
+            });
+        }
+    }
+    Ok(out)
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -691,6 +761,30 @@ mod tests {
     fn frontmatter_absent_or_unterminated_returns_none() {
         assert!(extract_frontmatter("no fence here").is_none());
         assert!(extract_frontmatter("---\ntitle: x").is_none()); // never closed
+    }
+
+    #[test]
+    fn dataview_rows_walk_recursively_and_skip_hidden() {
+        let dir = tempdir().unwrap();
+        write(dir.path(), "a.md", "---\ntags: x\n---\nbody");
+        write(dir.path(), "sub/b.md", "no frontmatter");
+        write(dir.path(), ".hidden/h.md", "hidden note");
+        write(dir.path(), "sub/.draft.md", "hidden draft");
+
+        let rows = query_dataview_rows(dir.path(), "").unwrap();
+        let mut paths: Vec<&str> = rows.iter().map(|r| r.path.as_str()).collect();
+        paths.sort();
+        assert_eq!(paths, vec!["a.md", "sub/b.md"]);
+        let a = rows.iter().find(|r| r.path == "a.md").unwrap();
+        assert_eq!(a.values, vec![("tags".to_string(), "x".to_string())]);
+        assert!(a.mtime_secs > 0);
+        assert!(a.size_bytes > 0);
+    }
+
+    #[test]
+    fn dataview_rows_missing_folder_is_an_error() {
+        let dir = tempdir().unwrap();
+        assert!(query_dataview_rows(dir.path(), "nope").is_err());
     }
 
     #[test]

@@ -4,6 +4,7 @@ import { renderMarkdown, renderMarkdownWithTableSource, highlightCode, isMermaid
 import { markdownContextFacet, imageToSrc, isRemoteSrc } from "./media";
 import { wikiLabel } from "./wikiIndex";
 import { parseFrontmatter } from "../lib/frontmatter";
+import { parseDataviewQuery, fieldValue, compareByField } from "./dataview";
 
 export class CodeBlockWidget extends WidgetType {
   readonly language: string;
@@ -329,7 +330,7 @@ export class FrontmatterWidget extends WidgetType {
       keyEl.textContent = key;
       row.appendChild(keyEl);
 
-      if (value !== "") {
+      if (value !== "" && value.toLowerCase() !== "null") {
         const valEl = document.createElement("span");
         valEl.className = "cm-frontmatter-value";
         valEl.textContent = value;
@@ -749,6 +750,94 @@ export class HrWidget extends WidgetType {
     const div = document.createElement("div");
     div.className = "cm-hr";
     return div;
+  }
+}
+
+/** Obsidian-Dataview ```table query: runs the DQL against the vault and
+ *  renders the result as a table. Rows click through to their notes. */
+export class DataviewWidget extends WidgetType {
+  view: EditorView | null = null;
+
+  constructor(readonly code: string) {
+    super();
+  }
+
+  eq(other: DataviewWidget): boolean {
+    return other.code === this.code;
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    this.view = view;
+    const div = document.createElement("div");
+    div.className = "cm-dataview cm-dataview-loading";
+    div.textContent = "dataview …";
+    void this.load(div);
+    return div;
+  }
+
+  private async load(div: HTMLElement): Promise<void> {
+    const query = parseDataviewQuery(this.code);
+    if (!query) {
+      div.className = "cm-dataview cm-dataview-error";
+      div.textContent = "dataview: unsupported query (expected table/from lines)";
+      return;
+    }
+    const ctx = this.view?.state.facet(markdownContextFacet)[0];
+    if (!ctx) return;
+    try {
+      const { queryDataviewRows } = await import("../lib/ipc");
+      let rows = await queryDataviewRows(ctx.vaultRoot, query.from);
+      if (query.sortField) {
+        const f = query.sortField;
+        rows = [...rows].sort((a, b) =>
+          query.sortDir === "desc" ? compareByField(b, a, f) : compareByField(a, b, f),
+        );
+      }
+      div.className = "cm-dataview";
+      div.textContent = "";
+
+      const table = document.createElement("table");
+      table.className = "cm-dataview-table";
+      const thead = document.createElement("thead");
+      const headRow = document.createElement("tr");
+      for (const col of query.columns) {
+        const th = document.createElement("th");
+        th.textContent = col.label;
+        headRow.appendChild(th);
+      }
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+      for (const row of rows) {
+        const tr = document.createElement("tr");
+        tr.className = "cm-dataview-row";
+        tr.title = row.path;
+        tr.addEventListener("click", () => {
+          void import("../lib/openNote").then((m) => m.openNote(ctx.vaultRoot, row.path));
+        });
+        for (const col of query.columns) {
+          const td = document.createElement("td");
+          td.textContent = fieldValue(row, col.field);
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+      div.appendChild(table);
+
+      const count = document.createElement("div");
+      count.className = "cm-dataview-count";
+      count.textContent = `${rows.length} notes`;
+      div.appendChild(count);
+    } catch (e) {
+      div.className = "cm-dataview cm-dataview-error";
+      div.textContent = `dataview: ${String(e)}`;
+    }
+  }
+
+  ignoreEvent(): boolean {
+    return false;
   }
 }
 

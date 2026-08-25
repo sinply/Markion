@@ -223,3 +223,19 @@ export interface FolderTable {
 export async function queryFolderTable(vaultRoot: string, folder: string): Promise<FolderTable> {
   return invoke<FolderTable>("query_folder_table", { vaultRoot, folder });
 }
+
+// --- Dataview ```table queries ----------------------------------------------
+
+export interface DataviewRow {
+  path: string;
+  name: string;
+  mtimeSecs: number;
+  sizeBytes: number;
+  values: [string, string][];
+}
+
+/** Recursive .md walk under `folder` with mtime/size + frontmatter per row
+ *  (backend for ```dataview table queries). */
+export async function queryDataviewRows(vaultRoot: string, folder: string): Promise<DataviewRow[]> {
+  return invoke<DataviewRow[]>("query_dataview_rows", { vaultRoot, folder });
+}

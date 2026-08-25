@@ -48,6 +48,7 @@ pub fn run() {
             commands::start_vault_watch,
             commands::query_library,
             commands::query_folder_table,
+            commands::query_dataview_rows,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
