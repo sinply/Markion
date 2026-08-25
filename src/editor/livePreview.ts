@@ -23,16 +23,14 @@ export const livePreviewField = StateField.define<DecorationSet>({
     return buildDecorations(state);
   },
   update(decos: DecorationSet, tr) {
-    // Rebuild synchronously on selection or doc changes so the block under the
-    // cursor switches to editable source immediately. (The old approach — the
-    // ViewPlugin dispatching a setDecorations effect — never reached this field,
-    // so code blocks / images stayed read-only widgets after the cursor moved.)
-    // `buildDecorations` itself is incremental: selection-only updates reuse
-    // the cached scan and only re-run the cheap decide pass.
-    if (tr.docChanged || tr.selection) {
-      return buildDecorations(tr.state);
-    }
-    return decos.map(tr.changes);
+    // Rebuild on EVERY transaction — selection moves, folds, theme/focus
+    // reconfigures, plugin effects. Gating on docChanged||selection left a
+    // hole: any other transaction kept the OLD decoration set, which showed
+    // up as "### (and other markers) stay until the next click". Cost is
+    // fine: buildDecorations reuses the per-doc scan cache and only re-runs
+    // the linear decide pass.
+    void decos;
+    return buildDecorations(tr.state);
   },
   provide: (f) => EditorView.decorations.from(f),
 });
