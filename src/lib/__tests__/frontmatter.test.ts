@@ -19,6 +19,51 @@ describe("extractFrontmatter", () => {
     expect(extractFrontmatter("just a note\n")).toBeNull();
     expect(extractFrontmatter("--- not at start\n")).toBeNull();
   });
+
+  it("matches an EMPTY frontmatter block", () => {
+    const doc = "---\n---\n\nbody\n";
+    const fm = extractFrontmatter(doc);
+    expect(fm).not.toBeNull();
+    expect(fm!.body).toBe("");
+    expect(fm!.closed).toBe(true);
+    expect(doc.slice(fm!.start, fm!.end)).toBe("---\n---\n");
+  });
+
+  it("tolerates trailing whitespace on the closing marker", () => {
+    const doc = "---\nauthor: x\n--- \n\nbody\n";
+    const fm = extractFrontmatter(doc);
+    expect(fm).not.toBeNull();
+    expect(fm!.body).toBe("author: x");
+  });
+
+  it("tolerates a leading UTF-8 BOM", () => {
+    const doc = "﻿---\nauthor: x\n---\n\nbody\n";
+    const fm = extractFrontmatter(doc);
+    expect(fm).not.toBeNull();
+    expect(fm!.body).toBe("author: x");
+  });
+
+  it("tolerates leading blank lines", () => {
+    const doc = "\n\n---\nauthor: x\n---\n\nbody\n";
+    const fm = extractFrontmatter(doc);
+    expect(fm).not.toBeNull();
+    expect(fm!.body).toBe("author: x");
+  });
+
+  it("treats an unclosed YAML run as frontmatter while typing", () => {
+    const doc = "---\nauthor: sinply\ntags: FPGA";
+    const fm = extractFrontmatter(doc);
+    expect(fm).not.toBeNull();
+    expect(fm!.closed).toBe(false);
+    expect(fm!.body).toBe("author: sinply\ntags: FPGA");
+  });
+
+  it("does NOT treat a leading hr followed by a paragraph as frontmatter", () => {
+    // `---` as a thematic break: no YAML `key:` line, so it must stay an hr.
+    expect(extractFrontmatter("---\n\nSome paragraph\n")).toBeNull();
+    expect(extractFrontmatter("---\nSome paragraph\n")).toBeNull();
+    expect(extractFrontmatter("---\n\n# Heading\n")).toBeNull();
+  });
 });
 
 describe("parseFrontmatter", () => {

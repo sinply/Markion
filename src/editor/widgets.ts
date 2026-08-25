@@ -3,7 +3,7 @@ import type { EditorView } from "@codemirror/view";
 import { renderMarkdown, renderMarkdownWithTableSource, highlightCode, isMermaidLang } from "./markdown";
 import { markdownContextFacet, imageToSrc, isRemoteSrc } from "./media";
 import { wikiLabel } from "./wikiIndex";
-import { parseFrontmatter } from "../lib/frontmatter";
+import { extractFrontmatter, parseFrontmatter } from "../lib/frontmatter";
 import { parseDataviewQuery, fieldValue, compareByField } from "./dataview";
 
 export class CodeBlockWidget extends WidgetType {
@@ -244,11 +244,13 @@ export class PreviewWidget extends WidgetType {
     const div = document.createElement("div");
     div.className = "cm-preview";
     // Split off the doc-leading YAML frontmatter so markdown-it doesn't render
-    // it as a broken heading/hr; show it as a properties card instead.
-    const fm = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(this.raw);
-    const body = fm ? this.raw.slice(fm[0].length) : this.raw;
+    // it as a broken heading/hr; show it as a properties card instead. Use the
+    // shared extractFrontmatter so this matches live preview + the Properties
+    // dialog (empty blocks, BOM, leading blank lines included).
+    const fm = extractFrontmatter(this.raw);
+    const body = fm ? this.raw.slice(fm.end) : this.raw;
     if (fm) {
-      const props = parseFrontmatter(fm[1]);
+      const props = parseFrontmatter(fm.body);
       if (props.length > 0) {
         const card = new FrontmatterWidget(props).toDOM(view);
         card.classList.add("cm-preview-frontmatter");

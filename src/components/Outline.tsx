@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { syntaxTree } from "@codemirror/language";
 import type { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import { extractFrontmatter } from "../lib/frontmatter";
 
 interface Heading {
   level: number;
@@ -17,8 +18,8 @@ export function extractHeadings(state: EditorState): Heading[] {
   // SetextHeading, so find its end offset and skip everything inside it.
   let fmEnd = 0;
   const docText = state.doc.toString();
-  const fm = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(docText);
-  if (fm) fmEnd = fm[0].length;
+  const fm = extractFrontmatter(docText);
+  if (fm) fmEnd = fm.end;
 
   tree.iterate({
     enter(node) {

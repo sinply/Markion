@@ -3,11 +3,72 @@
  * (widgets.ts) and the Properties edit dialog (PropertiesDialog.tsx).
  */
 
-/** The doc-leading `---...---` block: its body and its source range, or null. */
-export function extractFrontmatter(doc: string): { body: string; start: number; end: number } | null {
-  const m = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(doc);
-  if (!m) return null;
-  return { body: m[1], start: 0, end: m[0].length };
+export interface FrontmatterBlock {
+  /** YAML body between the markers ("" for an empty frontmatter). */
+  body: string;
+  /** Byte range of the whole block in the doc. */
+  start: number;
+  end: number;
+  /** True when a closing `---` line was found. */
+  closed: boolean;
+}
+
+/** The doc-leading `---...---` frontmatter block, or null.
+ *
+ *  More tolerant than a strict `^---\r?\n...\r?\n---` regex so the opening
+ *  marker is never misrendered as a horizontal rule:
+ *  - a UTF-8 BOM and leading blank lines are skipped (some editors/sync tools
+ *    inject them; frontmatter should still be recognized);
+ *  - an EMPTY frontmatter (`---\n---`) matches (the old regex required at
+ *    least one body char between the newline and the closing marker, because
+ *    the opening marker's newline was consumed);
+ *  - an UNCLOSED block (`---` with no closing line — the mid-edit state) is
+ *    returned with `closed: false`, spanning the YAML run up to the first
+ *    blank line or end of doc, so it renders as a card instead of a rule. */
+export function extractFrontmatter(doc: string): FrontmatterBlock | null {
+  let start = 0;
+  while (start < doc.length) {
+    const ch = doc.charCodeAt(start);
+    if (ch === 0xfeff || ch === 0x0a || ch === 0x0d) start++;
+    else break;
+  }
+  // The first non-blank line must be exactly `---` (trailing whitespace ok) —
+  // `--- not at start` is text, not a frontmatter opener.
+  const lineEnd = doc.indexOf("\n", start);
+  const firstLine = lineEnd === -1 ? doc.slice(start) : doc.slice(start, lineEnd).replace(/\r$/, "");
+  if (!/^---\s*$/.test(firstLine)) return null;
+  const openEnd = lineEnd === -1 ? doc.length : lineEnd + 1;
+
+  // Closing marker: a line that is `---` with optional trailing whitespace.
+  // Allow it to start the remaining text (empty body) or follow a newline
+  // (non-empty body). Some editors/sync tools persist `--- ` with a trailing
+  // space, which the old strict regex refused — sending the marker to the
+  // markdown renderer as a horizontal rule.
+  const rest = doc.slice(openEnd);
+  const closeRe = /(?:^|\r?\n)---[ \t]*(?:\r?\n|$)/;
+  const m = closeRe.exec(rest);
+  if (m) {
+    const end = openEnd + m.index + m[0].length;
+    return { body: doc.slice(openEnd, openEnd + m.index), start, end, closed: true };
+  }
+  // Unclosed: span the YAML run up to the first blank line (or end of doc).
+  // Only treat it as frontmatter when the run looks like YAML (`key:` lines) —
+  // a leading `---` followed by a paragraph or a blank line is a horizontal
+  // rule, and swallowing it would render a whole note as a properties card.
+  let end = openEnd;
+  while (end < doc.length) {
+    if (
+      doc[end] === "\n" &&
+      (doc[end + 1] === "\n" || (doc[end + 1] === "\r" && doc[end + 2] === "\n"))
+    ) {
+      break;
+    }
+    end++;
+  }
+  const body = doc.slice(openEnd, end);
+  const looksYaml = /^\s*[A-Za-z_][\w.-]*\s*:/.test(body);
+  if (!looksYaml) return null;
+  return { body, start, end, closed: false };
 }
 
 /** Parse a YAML frontmatter body into [key, value] pairs (top-level only). */

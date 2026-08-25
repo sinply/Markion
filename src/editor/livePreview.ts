@@ -318,23 +318,17 @@ function scanBlocks(state: EditorState): Block[] {
   // Frontmatter FIRST: everything inside the leading ---...--- block is
   // property metadata, NOT markdown. Detect it up front and skip it in the
   // iterate and regex scans below — otherwise the --- fences would ALSO
-  // parse as HorizontalRule nodes and double-replace the same range.
+  // parse as HorizontalRule nodes and double-replace the same range (the
+  // opening --- then renders as a stray — horizontal rule).
+  // Use the shared extractFrontmatter so live preview, full-doc preview, and
+  // the Properties dialog agree on what a frontmatter block is — a duplicate
+  // regex here used to diverge (empty block, BOM, leading blank lines) and
+  // silently render the marker as a horizontal rule.
   let fmEnd = -1;
-  {
-    // Bound to the first 100 lines: a doc that starts with `---` but never
-    // closes it can't make this scan run to EOF.
-    let pos = 0;
-    for (let i = 0; i < 100; i++) {
-      const nl = docText.indexOf("\n", pos);
-      if (nl < 0) { pos = docText.length; break; }
-      pos = nl + 1;
-    }
-    const head = pos < docText.length ? docText.slice(0, pos) : docText;
-    const fmMatch = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(head);
-    if (fmMatch) {
-      fmEnd = fmMatch[0].length;
-      blocks.push({ kind: "frontmatter", from: 0, to: fmEnd });
-    }
+  const fm = extractFrontmatter(docText);
+  if (fm) {
+    fmEnd = fm.end;
+    blocks.push({ kind: "frontmatter", from: 0, to: fm.end });
   }
   const insideFrontmatter = (pos: number): boolean => fmEnd >= 0 && pos < fmEnd;
 
