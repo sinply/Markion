@@ -23,6 +23,20 @@ pub fn coalesce_paths(events: &[WatchEvent]) -> Vec<String> {
     result
 }
 
+/// True when `rel` (vault-relative, forward slashes) lies inside the
+/// app-state `.markion` directory itself. Matches only the exact directory
+/// component, so sibling names like `.markion-notes.md` stay watched.
+fn is_markion_internal(rel: &str) -> bool {
+    rel == ".markion" || rel.starts_with(".markion/")
+}
+
+/// Flush rule for the debounced sender: emit once the event stream has been
+/// quiet for a whole debounce period, OR when the oldest buffered event has
+/// already waited 4×debounce so a sustained storm cannot starve delivery.
+fn should_flush(quiet_for: Duration, oldest_age: Duration, debounce: Duration) -> bool {
+    quiet_for >= debounce || oldest_age >= debounce * 4
+}
+
 /// Start a recursive watcher on `vault_root`. Returns the watcher handle
 /// (keep it alive) and a receiver of coalesced, debounced path lists.
 pub fn start_watcher(
@@ -35,14 +49,16 @@ pub fn start_watcher(
     let mut watcher = notify::recommended_watcher(move |res: Result<notify::Event, _>| {
         if let Ok(ev) = res {
             for p in &ev.paths {
+                // Normalize separators so the filter matches on every OS.
                 let rel = p
                     .strip_prefix(&root)
                     .unwrap_or(p)
                     .to_string_lossy()
-                    .to_string();
-                if rel.starts_with(".markion") {
-                    // Ignore changes to the index file itself
-                    return;
+                    .replace('\\', "/");
+                if is_markion_internal(&rel) {
+                    // Ignore changes to the app-state dir itself; `continue`
+                    // keeps remaining paths of this multi-path event alive.
+                    continue;
                 }
                 let _ = tx_raw.send(WatchEvent {
                     path: rel,
@@ -61,14 +77,20 @@ pub fn start_watcher(
     std::thread::spawn(move || {
         let mut buffer: Vec<WatchEvent> = Vec::new();
         let mut last = Instant::now();
+        let mut oldest = last;
         loop {
             match rx_raw.recv_timeout(debounce) {
                 Ok(ev) => {
+                    if buffer.is_empty() {
+                        oldest = Instant::now();
+                    }
                     buffer.push(ev);
                     last = Instant::now();
                 }
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                    if !buffer.is_empty() && last.elapsed() >= debounce {
+                    if !buffer.is_empty()
+                        && should_flush(last.elapsed(), oldest.elapsed(), debounce)
+                    {
                         let coalesced = coalesce_paths(&buffer);
                         if tx_debounced.send(coalesced).is_err() {
                             break;
@@ -116,5 +138,37 @@ mod tests {
     #[test]
     fn coalesce_empty_returns_empty() {
         assert!(coalesce_paths(&[]).is_empty());
+    }
+
+    #[test]
+    fn markion_filter_matches_only_the_exact_dir_component() {
+        assert!(is_markion_internal(".markion"));
+        assert!(is_markion_internal(".markion/index.json"));
+        assert!(is_markion_internal(".markion/trash/gone.md"));
+        // Sibling names sharing the prefix must NOT be swallowed.
+        assert!(!is_markion_internal(".markion-notes.md"));
+        assert!(!is_markion_internal(".markionize/x.md"));
+        assert!(!is_markion_internal("notes/.markion-notes.md"));
+    }
+
+    #[test]
+    fn flush_rule_debounces_quiet_streams_and_bounds_storm_latency() {
+        let d = Duration::from_millis(100);
+        // Storm in progress: neither quiet nor max-latency reached -> buffer.
+        assert!(!should_flush(
+            Duration::from_millis(0),
+            Duration::from_millis(0),
+            d
+        ));
+        assert!(!should_flush(
+            Duration::from_millis(50),
+            Duration::from_millis(399),
+            d
+        ));
+        // Quiet for a full debounce period -> flush.
+        assert!(should_flush(d, Duration::ZERO, d));
+        // Sustained storm: oldest buffered event waited >= 4x debounce -> flush.
+        assert!(should_flush(Duration::ZERO, d * 4, d));
+        assert!(should_flush(Duration::from_millis(1), d * 10, d));
     }
 }

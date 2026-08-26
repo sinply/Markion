@@ -34,7 +34,9 @@ const SLASH_COMMANDS: SlashCommand[] = [
   {
     label: "Table",
     insert: "| a | b |\n| - | - |\n|  |  |",
-    cursor: 28,
+    // Insert text is 27 chars; land INSIDE the first header cell of row 1
+    // (offset 2 = after "| "). 28 used to point one char PAST the end.
+    cursor: 2,
   },
   { label: "Callout", insert: "> [!note]\n> ", cursor: 9 },
   { label: "Horizontal Rule", insert: "---\n\n", cursor: 4 },

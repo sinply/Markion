@@ -1,6 +1,6 @@
 {
   "productName": "Markion",
-  "version": "0.15.5",
+  "version": "0.16.0",
   "identifier": "com.markion.app",
   "build": {
     "frontendDist": "../dist",

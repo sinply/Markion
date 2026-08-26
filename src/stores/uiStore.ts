@@ -5,10 +5,27 @@ import type { MarkdownCommand } from "../editor/commands";
 const RECENT_KEY = "markion.recentFiles";
 const MAX_RECENT = 10;
 
-function loadRecent(): string[] {
+/** A recently-opened file, tagged with the vault it lives in so switching
+ *  vaults never offers paths that resolve against the wrong root. */
+export interface RecentFile {
+  vaultRoot: string;
+  path: string;
+}
+
+function loadRecent(): RecentFile[] {
   try {
     const raw = localStorage.getItem(RECENT_KEY);
-    return raw ? (JSON.parse(raw) as string[]) : [];
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    // Migration: pre-0.16 entries were bare vault-relative strings with no
+    // vault attribution — they can't be scoped safely, so drop them.
+    return parsed.filter(
+      (e): e is RecentFile =>
+        !!e && typeof e === "object" &&
+        typeof (e as RecentFile).vaultRoot === "string" &&
+        typeof (e as RecentFile).path === "string",
+    );
   } catch {
     return [];
   }
@@ -36,8 +53,8 @@ interface UiState {
   mdCmd: MarkdownCommand;
   requestMarkdown: (cmd: MarkdownCommand) => void;
 
-  recentFiles: string[];
-  addRecent: (path: string) => void;
+  recentFiles: RecentFile[];
+  addRecent: (vaultRoot: string, path: string) => void;
   clearRecent: () => void;
 
   /** Recently closed tabs (most recent first, capped). Reopened via the
@@ -112,7 +129,15 @@ interface UiState {
    *  `content` is the unsaved editor content so Save As has something to write. */
   deletedDoc: { path: string; title: string; content: string } | null;
   setDeletedDoc: (d: { path: string; title: string; content: string } | null) => void;
+
+  /** Transient error/notification toast (auto-dismisses). Mutation failures
+   *  used to be swallowed by empty catch blocks — surface them here. */
+  toast: { id: number; message: string } | null;
+  showToast: (message: string) => void;
+  dismissToast: () => void;
 }
+
+let toastSeq = 0;
 
 export const useUiStore = create<UiState>((set, get) => ({
   editorMode: "live",
@@ -136,9 +161,11 @@ export const useUiStore = create<UiState>((set, get) => ({
   requestMarkdown: (mdCmd) => set((s) => ({ mdTick: s.mdTick + 1, mdCmd })),
 
   recentFiles: loadRecent(),
-  addRecent: (path) => {
-    const cur = get().recentFiles.filter((p) => p !== path);
-    const next = [path, ...cur].slice(0, MAX_RECENT);
+  addRecent: (vaultRoot, path) => {
+    const cur = get().recentFiles.filter(
+      (e) => !(e.vaultRoot === vaultRoot && e.path === path),
+    );
+    const next = [{ vaultRoot, path }, ...cur].slice(0, MAX_RECENT);
     try {
       localStorage.setItem(RECENT_KEY, JSON.stringify(next));
     } catch {
@@ -220,4 +247,15 @@ export const useUiStore = create<UiState>((set, get) => ({
 
   deletedDoc: null,
   setDeletedDoc: (deletedDoc) => set({ deletedDoc }),
+
+  toast: null,
+  showToast: (message) => {
+    const id = ++toastSeq;
+    set({ toast: { id, message } });
+    setTimeout(() => {
+      const cur = get().toast;
+      if (cur && cur.id === id) set({ toast: null });
+    }, 6000);
+  },
+  dismissToast: () => set({ toast: null }),
 }));

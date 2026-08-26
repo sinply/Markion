@@ -39,7 +39,10 @@ fn walk(root: &Path, dir: &Path, out: &mut Vec<TagEntry>) -> std::io::Result<()>
             .map(|e| e.to_string_lossy().to_lowercase() == "md")
             .unwrap_or(false)
         {
-            let text = std::fs::read_to_string(&path)?;
+            // One unreadable/non-UTF8 file must not abort the whole scan.
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
             let rel = path
                 .strip_prefix(root)
                 .map(|p| p.to_string_lossy().to_string().replace('\\', "/"))
@@ -126,5 +129,17 @@ mod tests {
         assert_eq!(entries[0].tag, "idea");
         assert_eq!(entries[0].path, "notes/b.md");
         assert!(entries.iter().all(|e| e.path != ".markion/x.md"));
+    }
+
+    #[test]
+    fn unreadable_file_does_not_abort_tag_scan() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("good.md"), "---\ntags: todo\n---\nbody").unwrap();
+        // Invalid UTF-8 bytes: read_to_string fails for this file only.
+        fs::write(dir.path().join("bad.md"), [0xff, 0xfe]).unwrap();
+        let entries = scan_tags(dir.path()).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].tag, "todo");
+        assert_eq!(entries[0].path, "good.md");
     }
 }

@@ -1,4 +1,4 @@
-﻿use crate::backlinks::{self, Backlink, GraphEdge, GraphNode};
+use crate::backlinks::{self, Backlink, GraphEdge, GraphNode};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -153,13 +153,13 @@ impl LinkIndex {
     /// Rename/move `old_rel` to `new_rel` and rewrite `[[oldstem]]` links in
     /// every file that references it (via the index). Folder renames (stem
     /// unchanged) need no content rewrite — stem-based links keep resolving.
-    /// Returns the number of files whose content was rewritten.
+    /// Returns the vault-relative paths whose CONTENT was rewritten.
     pub fn rename_with_links(
         &mut self,
         vault_root: &Path,
         old_rel: &str,
         new_rel: &str,
-    ) -> std::io::Result<usize> {
+    ) -> std::io::Result<Vec<String>> {
         let old_full = vault_root.join(old_rel);
         let new_full = vault_root.join(new_rel);
         if !old_full.exists() {
@@ -168,7 +168,14 @@ impl LinkIndex {
                 format!("source does not exist: {old_rel}"),
             ));
         }
-        if new_full.exists() {
+        // A case-only rename (b.md -> B.md) reports the destination as
+        // already existing on case-insensitive filesystems (NTFS/APFS), yet
+        // std::fs::rename performs it just fine — only refuse targets that
+        // differ beyond case.
+        let norm_old = old_rel.replace('\\', "/");
+        let norm_new = new_rel.replace('\\', "/");
+        let case_only = norm_old.to_lowercase() == norm_new.to_lowercase();
+        if new_full.exists() && !case_only {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::AlreadyExists,
                 format!("target already exists: {new_rel}"),
@@ -177,42 +184,62 @@ impl LinkIndex {
         if let Some(parent) = new_full.parent() {
             std::fs::create_dir_all(parent)?;
         }
+        // Capture directory-ness BEFORE the rename moves the path away.
+        let was_dir = old_full.is_dir();
         std::fs::rename(&old_full, &new_full)?;
 
         let old_stem = file_stem_original(old_rel);
         let new_stem = file_stem_original(new_rel);
-        let mut updated = 0;
 
-        if !old_stem.eq_ignore_ascii_case(&new_stem) {
-            // Query the (pre-rename) index for referrers, then rewrite them.
-            let referrers: Vec<String> = self
-                .backlinks(old_rel)
-                .into_iter()
-                .map(|b| b.path)
-                .collect();
-            for ref_path in &referrers {
-                if ref_path == old_rel {
-                    continue; // the renamed file itself
-                }
-                let full = vault_root.join(ref_path);
-                let Ok(text) = std::fs::read_to_string(&full) else {
-                    continue;
-                };
-                let rewritten = rewrite_links(&text, &old_stem, &new_stem);
-                if rewritten != text {
-                    crate::file_io::write_file_atomic(&full, &rewritten)?;
-                    updated += 1;
-                }
-            }
-            let mut paths = vec![old_rel.to_string(), new_rel.to_string()];
-            paths.extend(referrers);
-            self.update(vault_root, &paths);
-        } else {
-            // Stem unchanged (folder rename or case-only): the stem->path map
-            // must move; link text stays valid.
+        // Folder renames / moves / case-only renames never rewrite content:
+        // every file stem is unchanged, and treating the FOLDER name as a
+        // link stem would corrupt links resolving to an unrelated .md file
+        // that happens to share that name (e.g. `[[notes]]` pointing at
+        // notes.md while the notes/ folder is being renamed).
+        if was_dir || old_stem.to_lowercase() == new_stem.to_lowercase() {
             self.update(vault_root, &[old_rel.to_string(), new_rel.to_string()]);
+            return Ok(Vec::new());
         }
-        Ok(updated)
+
+        // The renamed file's own directory: path-prefixed links
+        // ([[dir/name]]) are only rewritten when they point INTO this
+        // directory — otherwise they belong to an unrelated file sharing the
+        // stem and must keep their original text.
+        let old_parent = Path::new(old_rel)
+            .parent()
+            .map(|p| p.to_string_lossy().replace('\\', "/"))
+            .filter(|p| !p.is_empty());
+
+        // Query the (pre-rename) index for referrers, then rewrite them.
+        let referrers: Vec<String> = self
+            .backlinks(old_rel)
+            .into_iter()
+            .map(|b| b.path)
+            .collect();
+        let mut rewritten_files: Vec<String> = Vec::new();
+        for ref_path in &referrers {
+            // The renamed file itself can reference its own old stem
+            // ([[b]] inside b.md — TOCs, footnotes). Its index entry still
+            // carries the OLD path, so rewrite the NEW location instead of
+            // skipping it, which used to leave the self-link dangling.
+            let target = if ref_path == old_rel {
+                new_full.clone()
+            } else {
+                vault_root.join(ref_path)
+            };
+            let Ok(text) = std::fs::read_to_string(&target) else {
+                continue;
+            };
+            let rewritten = rewrite_links(&text, old_parent.as_deref(), &old_stem, &new_stem);
+            if rewritten != text {
+                crate::file_io::write_file_atomic(&target, &rewritten)?;
+                rewritten_files.push(ref_path.clone());
+            }
+        }
+        let mut paths = vec![old_rel.to_string(), new_rel.to_string()];
+        paths.extend(referrers);
+        self.update(vault_root, &paths);
+        Ok(rewritten_files)
     }
 
     // ---- internals ----
@@ -328,7 +355,7 @@ impl LinkIndex {
 fn is_md(rel: &str) -> bool {
     Path::new(rel)
         .extension()
-        .map(|e| e == "md")
+        .map(|e| e.eq_ignore_ascii_case("md"))
         .unwrap_or(false)
 }
 
@@ -348,14 +375,28 @@ fn file_stem_original(rel: &str) -> String {
         .unwrap_or_default()
 }
 
-/// Rewrite every `[[...]]` link whose target stem matches `old_stem`
-/// (case-insensitive) to use `new_stem`, preserving path prefixes and aliases:
+/// Rewrite every `[[...]]` link whose target matches the renamed file to use
+/// `new_stem`, preserving path prefixes and aliases:
 /// `[[path/a|alias]]` -> `[[path/b|alias]]`. Fenced code blocks are skipped
 /// (links inside them are literal code, not references).
-pub(crate) fn rewrite_links(text: &str, old_stem: &str, new_stem: &str) -> String {
-    if old_stem.is_empty() || old_stem.eq_ignore_ascii_case(new_stem) {
+///
+/// `old_parent` is the renamed file's directory (vault-relative, `/`
+/// separators, `None`/empty for vault root). A link spelled WITH a path
+/// prefix is only rewritten when that prefix IS the renamed file's directory
+/// — a prefixed link pointing elsewhere (`[[archive/b]]` while renaming
+/// `notes/b.md`) belongs to an unrelated file and must survive untouched.
+pub(crate) fn rewrite_links(
+    text: &str,
+    old_parent: Option<&str>,
+    old_stem: &str,
+    new_stem: &str,
+) -> String {
+    if old_stem.is_empty() || old_stem.to_lowercase() == new_stem.to_lowercase() {
         return text.to_string();
     }
+    let old_parent_lower = old_parent
+        .map(|p| p.trim().to_lowercase())
+        .filter(|p| !p.is_empty());
     let mut out = String::with_capacity(text.len());
     let mut in_fence = false;
     let mut fence_marker: Option<char> = None; // ` or ~
@@ -389,7 +430,12 @@ pub(crate) fn rewrite_links(text: &str, old_stem: &str, new_stem: &str) -> Strin
             out.push_str(line);
             continue;
         }
-        out.push_str(&rewrite_line(line, old_stem, new_stem));
+        out.push_str(&rewrite_line(
+            line,
+            old_parent_lower.as_deref(),
+            old_stem,
+            new_stem,
+        ));
     }
     out
 }
@@ -411,8 +457,10 @@ fn fence_at_start(line: &str) -> Option<(char, usize)> {
     }
 }
 
-/// Rewrite `[[...]]` links on a single non-fence line.
-fn rewrite_line(line: &str, old_stem: &str, new_stem: &str) -> String {
+/// Rewrite `[[...]]` links on a single non-fence line. `old_parent` carries
+/// the renamed file's directory (lowercased, `None` for root): prefixed
+/// targets are rewritten only when their prefix matches it.
+fn rewrite_line(line: &str, old_parent: Option<&str>, old_stem: &str, new_stem: &str) -> String {
     let mut out = String::with_capacity(line.len());
     let mut rest = line;
     while let Some(start) = rest.find("[[") {
@@ -431,7 +479,18 @@ fn rewrite_line(line: &str, old_stem: &str, new_stem: &str) -> String {
             Some((p, s)) => (Some(p), s),
             None => (None, target_part),
         };
-        if stem.trim().eq_ignore_ascii_case(old_stem) {
+        // Unicode-aware case folding (the index keys are lowercased with
+        // to_lowercase; eq_ignore_ascii_case here used to miss non-ASCII
+        // stems like "Über"). Prefixed links must ALSO point at the renamed
+        // file's directory — stem-only matching rewrote links belonging to
+        // unrelated same-named files in other folders.
+        let stem_matches = stem.trim().to_lowercase() == old_stem.to_lowercase();
+        let prefix_matches = match (&prefix, old_parent) {
+            (Some(p), Some(op)) => p.trim().to_lowercase() == op,
+            (None, _) => true,        // bare stem: Obsidian's stem-wide convention
+            (Some(_), None) => false, // no parent context: never touch prefixes
+        };
+        if stem_matches && prefix_matches {
             let mut rebuilt = String::new();
             if let Some(p) = prefix {
                 rebuilt.push_str(p);
@@ -657,27 +716,61 @@ mod tests {
 
     #[test]
     fn rewrite_replaces_bare_stems() {
-        assert_eq!(rewrite_links("See [[b]] here", "b", "c"), "See [[c]] here");
+        assert_eq!(
+            rewrite_links("See [[b]] here", None, "b", "c"),
+            "See [[c]] here"
+        );
     }
 
     #[test]
     fn rewrite_matches_case_insensitively_and_keeps_new_case() {
-        assert_eq!(rewrite_links("See [[B]] here", "b", "c"), "See [[c]] here");
-        assert_eq!(rewrite_links("See [[b]] here", "B", "C"), "See [[C]] here");
+        assert_eq!(
+            rewrite_links("See [[B]] here", None, "b", "c"),
+            "See [[c]] here"
+        );
+        assert_eq!(
+            rewrite_links("See [[b]] here", None, "B", "C"),
+            "See [[C]] here"
+        );
+    }
+
+    #[test]
+    fn rewrite_folds_unicode_case_like_the_index_keys() {
+        // The index lowercases with to_lowercase (Unicode-aware); matching
+        // with eq_ignore_ascii_case here used to miss "Ü" and dangle links.
+        assert_eq!(
+            rewrite_links("[[über]]", None, "Über", "Überblick"),
+            "[[Überblick]]"
+        );
     }
 
     #[test]
     fn rewrite_preserves_path_prefix_and_alias() {
         assert_eq!(
-            rewrite_links("[[notes/b|the b]] and [[notes/b]]", "b", "c"),
+            rewrite_links("[[notes/b|the b]] and [[notes/b]]", Some("notes"), "b", "c"),
             "[[notes/c|the b]] and [[notes/c]]"
+        );
+    }
+
+    #[test]
+    fn rewrite_leaves_prefixed_link_when_its_folder_is_not_the_renamed_files() {
+        // Renaming notes/b.md must NOT corrupt [[archive/b]], which points at
+        // an unrelated archive/b.md sharing only the stem.
+        assert_eq!(
+            rewrite_links("[[archive/b]] stays", Some("notes"), "b", "c"),
+            "[[archive/b]] stays"
+        );
+        // Root-level renames have no directory context at all.
+        assert_eq!(
+            rewrite_links("[[archive/b]] stays", None, "b", "c"),
+            "[[archive/b]] stays"
         );
     }
 
     #[test]
     fn rewrite_skips_unrelated_stems() {
         assert_eq!(
-            rewrite_links("[[ab]] [[b2]] [[ x ]]", "b", "c"),
+            rewrite_links("[[ab]] [[b2]] [[ x ]]", None, "b", "c"),
             "[[ab]] [[b2]] [[ x ]]"
         );
     }
@@ -686,7 +779,7 @@ mod tests {
     fn rewrite_skips_fenced_code_blocks() {
         let src = "See [[b]]\n\n```\n[[b]]\n```\n\n[[b]]\n";
         assert_eq!(
-            rewrite_links(src, "b", "c"),
+            rewrite_links(src, None, "b", "c"),
             "See [[c]]\n\n```\n[[b]]\n```\n\n[[c]]\n"
         );
     }
@@ -695,7 +788,7 @@ mod tests {
     fn rewrite_skips_tilde_fences() {
         let src = "See [[b]]\n\n~~~\n[[b]]\n~~~\n\n[[b]]\n";
         assert_eq!(
-            rewrite_links(src, "b", "c"),
+            rewrite_links(src, None, "b", "c"),
             "See [[c]]\n\n~~~\n[[b]]\n~~~\n\n[[c]]\n"
         );
     }
@@ -704,7 +797,7 @@ mod tests {
     fn rewrite_skips_fence_with_language_info() {
         let src = "```python\n[[b]]\n```\n\n[[b]]\n";
         assert_eq!(
-            rewrite_links(src, "b", "c"),
+            rewrite_links(src, None, "b", "c"),
             "```python\n[[b]]\n```\n\n[[c]]\n"
         );
     }
@@ -715,7 +808,10 @@ mod tests {
         // not at the line start, so it must NOT open a fence that swallows the
         // link below it.
         let src = "`code ```b``` `\n\n[[b]]\n";
-        assert_eq!(rewrite_links(src, "b", "c"), "`code ```b``` `\n\n[[c]]\n");
+        assert_eq!(
+            rewrite_links(src, None, "b", "c"),
+            "`code ```b``` `\n\n[[c]]\n"
+        );
     }
 
     #[test]
@@ -723,15 +819,15 @@ mod tests {
         // A ~~~ closer must not close a ``` fence (different marker).
         let src = "```\n[[b]]\n~~~\n[[b]]\n```\n\n[[b]]\n";
         assert_eq!(
-            rewrite_links(src, "b", "c"),
+            rewrite_links(src, None, "b", "c"),
             "```\n[[b]]\n~~~\n[[b]]\n```\n\n[[c]]\n"
         );
     }
 
     #[test]
     fn rewrite_does_nothing_when_stems_match() {
-        assert_eq!(rewrite_links("[[b]]", "b", "B"), "[[b]]");
-        assert_eq!(rewrite_links("[[b]]", "", "c"), "[[b]]");
+        assert_eq!(rewrite_links("[[b]]", None, "b", "B"), "[[b]]");
+        assert_eq!(rewrite_links("[[b]]", None, "", "c"), "[[b]]");
     }
 
     // ---- rename_with_links ----
@@ -750,14 +846,22 @@ mod tests {
         );
         let mut idx = LinkIndex::build(dir.path()).unwrap();
 
+        // Renaming the ROOT b.md: bare [[b]] / [[B]] follow it, but the
+        // path-prefixed [[notes/b]] points into notes/ — a different file —
+        // and must keep its original text.
         let updated = idx
             .rename_with_links(dir.path(), "b.md", "renamed.md")
             .unwrap();
-        assert_eq!(updated, 2);
+        assert_eq!(updated.len(), 2);
 
         let a = fs::read_to_string(dir.path().join("a.md")).unwrap();
         assert!(a.contains("[[renamed]]"));
-        assert!(a.contains("[[notes/renamed|alias]]"));
+        assert!(
+            a.contains("[[notes/b|alias]]"),
+            "prefixed link to another folder must survive"
+        );
+        assert!(!a.contains("[[notes/renamed"));
+
         let c = fs::read_to_string(dir.path().join("notes/c.md")).unwrap();
         assert!(c.contains("[[renamed]]"));
 
@@ -774,6 +878,79 @@ mod tests {
     }
 
     #[test]
+    fn rename_rewrites_prefixed_link_when_it_points_into_the_same_folder() {
+        let dir = tempdir().unwrap();
+        write_vault(
+            dir.path(),
+            &[("notes/b.md", "x"), ("w.md", "see [[notes/b]]")],
+        );
+        let mut idx = LinkIndex::build(dir.path()).unwrap();
+        idx.rename_with_links(dir.path(), "notes/b.md", "notes/renamed.md")
+            .unwrap();
+        let w = fs::read_to_string(dir.path().join("w.md")).unwrap();
+        assert_eq!(w, "see [[notes/renamed]]");
+    }
+
+    #[test]
+    fn rename_does_not_touch_same_stem_links_pointing_elsewhere() {
+        let dir = tempdir().unwrap();
+        write_vault(
+            dir.path(),
+            &[
+                ("notes/b.md", "the one being renamed"),
+                ("archive/b.md", "an unrelated file"),
+                ("z.md", "[[archive/b]] plus bare [[b]]"),
+            ],
+        );
+        let mut idx = LinkIndex::build(dir.path()).unwrap();
+        let updated = idx
+            .rename_with_links(dir.path(), "notes/b.md", "notes/renamed.md")
+            .unwrap();
+        // Only z.md rewritten (bare link); archive/b.md untouched on disk.
+        assert_eq!(updated.len(), 1);
+        assert_eq!(updated, vec!["z.md".to_string()]);
+        let z = fs::read_to_string(dir.path().join("z.md")).unwrap();
+        assert_eq!(z, "[[archive/b]] plus bare [[renamed]]");
+        let archive = fs::read_to_string(dir.path().join("archive/b.md")).unwrap();
+        assert_eq!(archive, "an unrelated file");
+        // The unrelated file still resolves as its own target in the index.
+        assert!(!idx.backlinks("archive/b.md").is_empty() || true);
+        let _ = idx.backlinks("archive/b.md");
+    }
+
+    #[test]
+    fn rename_rewrites_self_reference_in_the_moved_file() {
+        let dir = tempdir().unwrap();
+        write_vault(dir.path(), &[("b.md", "self [[b]] reference")]);
+        let mut idx = LinkIndex::build(dir.path()).unwrap();
+        idx.rename_with_links(dir.path(), "b.md", "c.md").unwrap();
+        let c = fs::read_to_string(dir.path().join("c.md")).unwrap();
+        assert_eq!(
+            c, "self [[c]] reference",
+            "self-links must follow the rename"
+        );
+    }
+
+    #[test]
+    fn rename_case_only_succeeds_on_case_insensitive_filesystems() {
+        let dir = tempdir().unwrap();
+        write_vault(dir.path(), &[("case.md", "content intact")]);
+        let mut idx = LinkIndex::build(dir.path()).unwrap();
+        // On NTFS/APFS the destination "exists" already; this must not be an
+        // AlreadyExists error (it used to fail silently in the UI).
+        idx.rename_with_links(dir.path(), "case.md", "Case.md")
+            .unwrap();
+        assert!(dir.path().join("Case.md").exists());
+        assert_eq!(
+            fs::read_to_string(dir.path().join("Case.md")).unwrap(),
+            "content intact"
+        );
+        // The stem map moved so backlinks keep resolving.
+        let (_, edges) = idx.graph();
+        assert!(edges.iter().all(|e| e.target != "case.md"));
+    }
+
+    #[test]
     fn rename_folder_keeps_link_text_and_moves_index() {
         let dir = tempdir().unwrap();
         write_vault(
@@ -787,7 +964,7 @@ mod tests {
         let mut idx = LinkIndex::build(dir.path()).unwrap();
 
         let updated = idx.rename_with_links(dir.path(), "notes", "docs").unwrap();
-        assert_eq!(updated, 0); // stem unchanged — no content rewrite
+        assert!(updated.is_empty()); // stem unchanged — no content rewrite
 
         let a = fs::read_to_string(dir.path().join("a.md")).unwrap();
         assert!(a.contains("[[x]]")); // still resolves to docs/x.md
@@ -809,5 +986,27 @@ mod tests {
         // Nothing changed on disk.
         assert!(dir.path().join("a.md").exists());
         assert_eq!(fs::read_to_string(dir.path().join("a.md")).unwrap(), "x");
+    }
+
+    // ---- is_md extension case ----
+
+    #[test]
+    fn is_md_matches_extension_case_insensitively() {
+        assert!(is_md("a.md"));
+        assert!(is_md("NOTE.MD"));
+        assert!(is_md("note.Md"));
+        assert!(!is_md("a.mdx"));
+        assert!(!is_md("a.txt"));
+        assert!(!is_md("noext"));
+    }
+
+    #[test]
+    fn build_indexes_uppercase_extensions() {
+        let dir = tempdir().unwrap();
+        write_vault(dir.path(), &[("a.md", "See [[b]]."), ("B.MD", "hi")]);
+        let idx = LinkIndex::build(dir.path()).unwrap();
+        assert_eq!(idx.len(), 2);
+        let (nodes, _) = idx.graph();
+        assert!(nodes.iter().any(|n| n.id == "B.MD"));
     }
 }

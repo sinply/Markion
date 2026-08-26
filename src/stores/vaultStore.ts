@@ -143,9 +143,25 @@ export const useVaultStore = create<VaultState>((set, get) => ({
   },
 
   switchVault: async (root) => {
+    // Persist every dirty doc BEFORE dropping the tabs — reset() would
+    // otherwise discard pending edits silently (the autosave timer cannot
+    // save a doc that is no longer open).
+    try {
+      const { flushAllDirty } = await import("../lib/docSave");
+      await flushAllDirty();
+    } catch {
+      // best-effort: a failed flush must not block the vault switch
+    }
     await get().loadTree(root);
     const { useDocStore } = await import("./docStore");
     useDocStore.getState().reset();
+    // Cross-vault leftovers: a pendingJump/conflict/deletedDoc pointing at a
+    // path in the OLD vault must not fire against the new one.
+    const { useUiStore } = await import("./uiStore");
+    const ui = useUiStore.getState();
+    ui.setPendingJump(null);
+    ui.setConflict(null);
+    ui.setDeletedDoc(null);
     const { useSettingsStore } = await import("./settingsStore");
     await useSettingsStore.getState().load(root);
     try {

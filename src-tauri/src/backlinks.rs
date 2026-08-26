@@ -19,7 +19,10 @@ pub(crate) fn target_key(doc_rel: &str) -> String {
 
 /// Find `.md` files in `vault_root` whose `[[...]]` links reference `target`.
 /// Matching is by filename-stem (case-insensitive), the Obsidian convention.
-/// Supports both `[[name]]` and `[[path/name]]` (and `[[name|alias]]`) forms.
+/// Supports `[[name]]`, `[[path/name]]`, `[[name|alias]]`, and anchored
+/// targets (`[[name#section]]`, `[[note#^blockid]]`). Hidden dot-entries
+/// (`.markion/trash/...`) are skipped, and unreadable files never abort the
+/// scan.
 pub fn find_backlinks(vault_root: &Path, target: &str) -> std::io::Result<Vec<Backlink>> {
     let key = target_key(target);
     if key.is_empty() {
@@ -32,37 +35,37 @@ pub fn find_backlinks(vault_root: &Path, target: &str) -> std::io::Result<Vec<Ba
 }
 
 /// Does `text` contain a `[[...]]` link whose target stem equals `key`?
-/// Handles `[[name]]`, `[[path/name]]`, and `[[name|alias]]`; the stem match
-/// is exact-after-slash so `[[mydesign]]` doesn't match key "design".
+/// Handles `[[name]]`, `[[path/name]]`, `[[name|alias]]`, and anchors
+/// (`[[name#section]]`, `[[note#^blockid]]`); the stem match is
+/// exact-after-slash so `[[mydesign]]` doesn't match key "design".
+/// Markdown-aware: links inside fenced code blocks or inline-code spans are
+/// literal code and never count (via [`crate::wikilink`]).
 fn links_to(text: &str, key: &str) -> bool {
-    let lower = text.to_lowercase();
-    let mut rest = lower.as_str();
-    while let Some(start) = rest.find("[[") {
-        rest = &rest[start + 2..];
-        let Some(end) = rest.find("]]") else {
-            break;
-        };
-        let token = &rest[..end];
-        rest = &rest[end + 2..];
-        // strip alias `|...`
-        let target_part = token.split('|').next().unwrap_or(token);
-        // take the stem after the last '/'
-        let stem = target_part.rsplit('/').next().unwrap_or(target_part);
-        if stem.trim() == key {
-            return true;
-        }
-    }
-    false
+    crate::wikilink::extract_wikilink_targets(text)
+        .iter()
+        .any(|stem| stem == key)
 }
 
 fn walk(root: &Path, dir: &Path, key: &str, out: &mut Vec<Backlink>) -> std::io::Result<()> {
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with('.') {
+            continue; // hidden files and dirs (.markion/trash/..., .obsidian/...)
+        }
         let path = entry.path();
         if path.is_dir() {
             walk(root, &path, key, out)?;
-        } else if path.extension().map(|e| e == "md").unwrap_or(false) {
-            let text = std::fs::read_to_string(&path)?;
+        } else if path
+            .extension()
+            .map(|e| e.eq_ignore_ascii_case("md"))
+            .unwrap_or(false)
+        {
+            // One unreadable/non-UTF8 file must not abort the whole walk.
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
             if links_to(&text, key) {
                 let rel = path
                     .strip_prefix(root)
@@ -93,23 +96,13 @@ pub struct GraphEdge {
     pub target: String,
 }
 
-/// Extract all `[[...]]` target stems from `text` (lowercased, alias stripped).
+/// Extract all `[[...]]` target stems from `text` (lowercased, alias and
+/// `#`-anchors stripped, order preserved, no dedup). Markdown-aware: fenced
+/// code blocks and inline-code spans never yield targets. This feeds the
+/// primary `LinkIndex` (`link_index.rs`), so it must agree with
+/// [`crate::wikilink::extract_wikilink_targets`].
 pub(crate) fn link_targets(text: &str) -> Vec<String> {
-    let lower = text.to_lowercase();
-    let mut out = Vec::new();
-    let mut rest = lower.as_str();
-    while let Some(start) = rest.find("[[") {
-        rest = &rest[start + 2..];
-        let Some(end) = rest.find("]]") else { break };
-        let token = &rest[..end];
-        rest = &rest[end + 2..];
-        let target_part = token.split('|').next().unwrap_or(token).trim();
-        let stem = target_part.rsplit('/').next().unwrap_or(target_part);
-        if !stem.is_empty() {
-            out.push(stem.to_string());
-        }
-    }
-    out
+    crate::wikilink::extract_wikilink_targets(text)
 }
 
 /// Scan the whole vault: return every `.md` file as a node, plus one edge for
@@ -125,7 +118,10 @@ pub fn scan_graph(vault_root: &Path) -> std::io::Result<(Vec<GraphNode>, Vec<Gra
     let mut edges: Vec<GraphEdge> = Vec::new();
     let mut seen: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
     for node in &nodes {
-        let text = std::fs::read_to_string(vault_root.join(&node.id))?;
+        // One unreadable/non-UTF8 file must not abort the whole scan.
+        let Ok(text) = std::fs::read_to_string(vault_root.join(&node.id)) else {
+            continue;
+        };
         for target_stem in link_targets(&text) {
             if let Some(target_path) = stem_map.get(&target_stem) {
                 let key = (node.id.clone(), target_path.clone());
@@ -149,10 +145,19 @@ fn collect_files(
 ) -> std::io::Result<()> {
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with('.') {
+            continue; // hidden files and dirs (.markion/trash/..., .obsidian/...)
+        }
         let path = entry.path();
         if path.is_dir() {
             collect_files(root, &path, nodes, stem_map)?;
-        } else if path.extension().map(|e| e == "md").unwrap_or(false) {
+        } else if path
+            .extension()
+            .map(|e| e.eq_ignore_ascii_case("md"))
+            .unwrap_or(false)
+        {
             let rel = path
                 .strip_prefix(root)
                 .map(|p| p.to_string_lossy().to_string().replace('\\', "/"))
@@ -250,5 +255,135 @@ mod tests {
         assert!(has_edge("a.md", "b.md"));
         assert!(has_edge("a.md", "notes/c.md"));
         assert!(has_edge("notes/c.md", "a.md"));
+    }
+
+    // ---- batch 3: anchors, code spans, unreadable files, hidden dirs, case ----
+
+    #[test]
+    fn anchor_and_blockref_links_resolve_to_stem() {
+        assert_eq!(link_targets("[[design#Intro]]"), vec!["design"]);
+        assert_eq!(link_targets("[[note#^abc123]]"), vec!["note"]);
+        assert_eq!(
+            link_targets("[[notes/design#Section Two|Alias]]"),
+            vec!["design"]
+        );
+        assert!(links_to("[[design#Intro]]", "design"));
+        assert!(links_to("[[note#^abc]]", "note"));
+    }
+
+    #[test]
+    fn anchor_links_produce_backlinks_and_graph_edges() {
+        let dir = tempdir().unwrap();
+        write_vault(
+            dir.path(),
+            &[
+                ("a.md", "See [[design#Intro]] for context."),
+                ("b.md", "Block ref: [[design#^abc]]."),
+                ("design.md", "The design doc."),
+            ],
+        );
+        let backlinks = find_backlinks(dir.path(), "design.md").unwrap();
+        let paths: Vec<&String> = backlinks.iter().map(|bl| &bl.path).collect();
+        assert!(paths.contains(&&"a.md".to_string()));
+        assert!(paths.contains(&&"b.md".to_string()));
+
+        let (_, edges) = scan_graph(dir.path()).unwrap();
+        assert!(edges
+            .iter()
+            .any(|e| e.source == "a.md" && e.target == "design.md"));
+        assert!(edges
+            .iter()
+            .any(|e| e.source == "b.md" && e.target == "design.md"));
+    }
+
+    #[test]
+    fn fenced_code_blocks_do_not_count_as_links() {
+        assert!(link_targets("before\n```\n[[x]]\n```\nafter").is_empty());
+        assert!(link_targets("~~~\n[[x]]\n~~~").is_empty());
+        assert!(link_targets("```js\n[[x]]\n```\n").is_empty());
+        // A ~~~ line must not close a ``` fence.
+        assert!(link_targets("```\n[[x]]\n~~~\n[[x]]\n```").is_empty());
+        assert!(!links_to("```\n[[x]]\n```", "x"));
+        // Inline triple backticks are inline code, not a fence opener.
+        assert_eq!(link_targets("`c ```x``` `\n\n[[real]]"), vec!["real"]);
+        // Links outside the fence still count.
+        assert_eq!(
+            link_targets("[[a]]\n```\n[[x]]\n```\n[[b]]"),
+            vec!["a", "b"]
+        );
+    }
+
+    #[test]
+    fn inline_code_spans_are_not_links() {
+        assert!(link_targets("see `[[x]]` here").is_empty());
+        assert!(!links_to("see `[[x]]` here", "x"));
+        // Pairwise spans; real links around them survive.
+        assert_eq!(
+            link_targets("[[pre]] `[[x]]` mid ``p`` [[post]]"),
+            vec!["pre", "post"]
+        );
+        // A longer run inside a short span does not close it.
+        assert!(link_targets("`a ```b [[x]] c`").is_empty());
+    }
+
+    #[test]
+    fn unreadable_files_are_skipped_not_fatal() {
+        let dir = tempdir().unwrap();
+        write_vault(
+            dir.path(),
+            &[("good.md", "Links [[design]]."), ("design.md", "target")],
+        );
+        // Invalid UTF-8 bytes: read_to_string fails for this file only.
+        fs::write(dir.path().join("bad.md"), [0xff, 0xfe, 0x00, 0xd8]).unwrap();
+
+        let backlinks = find_backlinks(dir.path(), "design.md").unwrap();
+        assert_eq!(backlinks.len(), 1);
+        assert_eq!(backlinks[0].path, "good.md");
+
+        // The unreadable file still EXISTS on disk, so it may appear as a
+        // graph node — but its content contributes no links/edges and, most
+        // importantly, neither scan aborts.
+        let (nodes, edges) = scan_graph(dir.path()).unwrap();
+        assert!(nodes.iter().any(|n| n.id == "good.md"));
+        assert!(!edges.iter().any(|e| e.source == "bad.md"));
+        assert!(edges
+            .iter()
+            .any(|e| e.source == "good.md" && e.target == "design.md"));
+    }
+
+    #[test]
+    fn trash_and_dot_entries_are_never_indexed() {
+        let dir = tempdir().unwrap();
+        write_vault(
+            dir.path(),
+            &[
+                ("design.md", "the target"),
+                (".markion/trash/x.md", "Links [[design]] from trash."),
+                (".hidden/y.md", "[[design]]"),
+            ],
+        );
+        let backlinks = find_backlinks(dir.path(), "design.md").unwrap();
+        assert!(backlinks.iter().all(|b| !b.path.starts_with('.')));
+        let (nodes, _) = scan_graph(dir.path()).unwrap();
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].id, "design.md");
+    }
+
+    #[test]
+    fn uppercase_md_extension_is_indexed() {
+        let dir = tempdir().unwrap();
+        write_vault(
+            dir.path(),
+            &[("NOTE.MD", "Links [[design]]."), ("design.md", "t")],
+        );
+        let backlinks = find_backlinks(dir.path(), "design.md").unwrap();
+        let paths: Vec<&String> = backlinks.iter().map(|b| &b.path).collect();
+        assert!(paths.contains(&&"NOTE.MD".to_string()));
+        let (nodes, edges) = scan_graph(dir.path()).unwrap();
+        assert_eq!(nodes.len(), 2);
+        assert!(nodes.iter().any(|n| n.id == "NOTE.MD"));
+        assert!(edges
+            .iter()
+            .any(|e| e.source == "NOTE.MD" && e.target == "design.md"));
     }
 }

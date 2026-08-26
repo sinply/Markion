@@ -105,6 +105,22 @@ describe("parseFrontmatter", () => {
     const fm = extractFrontmatter(doc)!;
     expect(replaceFrontmatter(doc, parseFrontmatter(fm.body))).toBe(doc);
   });
+
+  it("decodes escaped quotes and round-trips without growing them", () => {
+    // yamlScalar emits \" for embedded quotes; parse must decode them back or
+    // every Properties save doubled the backslashes (\" -> \\" -> \\\").
+    const props = parseFrontmatter('title: "a \\"quoted\\" path\\\\end"\n');
+    expect(props[0][1]).toBe('a "quoted" path\\end');
+
+    const out = serializeFrontmatter(props);
+    expect(parseFrontmatter(out)[0][1]).toBe('a "quoted" path\\end');
+    // And the second cycle is a fixpoint (no unbounded escape growth).
+    expect(serializeFrontmatter(parseFrontmatter(out))).toBe(out);
+  });
+
+  it("decodes YAML single-quote doubling ('')", () => {
+    expect(parseFrontmatter("alias: 'it''s fine'\n")).toEqual([["alias", "it's fine"]]);
+  });
 });
 
 describe("serializeFrontmatter / replaceFrontmatter", () => {

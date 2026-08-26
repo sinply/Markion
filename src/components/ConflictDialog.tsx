@@ -1,6 +1,9 @@
 import { useUiStore } from "../stores/uiStore";
 import { useDocStore } from "../stores/docStore";
+import { useVaultStore } from "../stores/vaultStore";
 import { getEditorView } from "../editor/registry";
+import { writeFileAtomic } from "../lib/ipc";
+import { markAppChange } from "../hooks/useExternalChanges";
 import { useI18n } from "../lib/i18n";
 
 /** Two-way choice when a dirty document changes on disk: keep the in-memory
@@ -12,7 +15,35 @@ export function ConflictDialog() {
 
   if (!conflict) return null;
 
-  const keepMine = () => setConflict(null);
+  const keepMine = async () => {
+    const store = useDocStore.getState();
+    const doc = store.openDocs.find((d) => d.path === conflict.path);
+    // Only read the live buffer when it really shows THIS doc; otherwise fall
+    // back to the doc's draft (single-writer: never guess unmounted content).
+    const view =
+      getEditorView() && doc && store.activeDocId === doc.id ? getEditorView() : null;
+    const text = view
+      ? view.state.doc.toString()
+      : doc && store.drafts[doc.id] !== undefined
+        ? store.drafts[doc.id]
+        : null;
+    // Persist OUR version right away so the watcher stops flagging this file
+    // and the next autosave/close has nothing left to reconcile. Just closing
+    // the dialog used to leave disk and memory diverged until some later save.
+    if (text !== null && doc) {
+      const vaultRoot = useVaultStore.getState().vaultRoot;
+      if (vaultRoot) {
+        try {
+          await writeFileAtomic(vaultRoot, conflict.path, text);
+          markSavedAndClean(doc.id, text);
+          markAppChange(conflict.path);
+        } catch (e) {
+          useUiStore.getState().showToast(`${t.saveFailed}: ${String(e)}`);
+        }
+      }
+    }
+    setConflict(null);
+  };
 
   const loadDisk = () => {
     const view = getEditorView();
@@ -64,4 +95,12 @@ export function ConflictDialog() {
       </div>
     </div>
   );
+}
+
+/** Record `text` as the saved state: dirty flag cleared and the draft/snapshot
+ *  aligned so no later flush re-writes the same bytes. */
+function markSavedAndClean(id: string, text: string): void {
+  const store = useDocStore.getState();
+  store.markSaved(id, text);
+  store.markClean(id);
 }

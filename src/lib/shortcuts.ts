@@ -40,7 +40,33 @@ export function parseCombo(spec: string): Combo | null {
   return combo.key ? combo : null;
 }
 
-/** Effective bindings (defaults overridden by user settings). */
+/** Effective bindings (defaults overridden by user settings). An override of
+ *  "" unbinds the command (parseCombo yields no key, so it never fires). */
 export function effectiveShortcuts(overrides: Record<string, string>): Record<string, string> {
   return { ...DEFAULT_SHORTCUTS, ...overrides };
+}
+
+/** Canonical comparable form of a combo ("Ctrl+Shift+K" -> "ctrl+shift+k"),
+ *  or null when the spec is empty/unbind. Used for duplicate detection. */
+export function comboKey(spec: string): string | null {
+  const c = parseCombo(spec);
+  if (!c) return null;
+  return `${c.ctrl ? "ctrl+" : ""}${c.alt ? "alt+" : ""}${c.shift ? "shift+" : ""}${c.key}`;
+}
+
+/** Find a command whose EFFECTIVE binding collides with `spec` (ignoring
+ *  `excludeId` itself). Returns the clashing command id, or null. */
+export function findConflict(
+  overrides: Record<string, string>,
+  excludeId: string,
+  spec: string,
+): string | null {
+  const want = comboKey(spec);
+  if (!want) return null;
+  const effective = effectiveShortcuts(overrides);
+  for (const [id, binding] of Object.entries(effective)) {
+    if (id === excludeId) continue;
+    if (comboKey(binding) === want) return id;
+  }
+  return null;
 }

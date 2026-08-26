@@ -1,5 +1,6 @@
 import { useUiStore } from "../stores/uiStore";
 import { useDocStore } from "../stores/docStore";
+import { useVaultStore } from "../stores/vaultStore";
 import { useI18n } from "../lib/i18n";
 import { save } from "@tauri-apps/plugin-dialog";
 import { exportFile } from "../lib/ipc";
@@ -24,8 +25,12 @@ export function DeletedDialog() {
     // Default filename derives from the real path (keeps the .md extension);
     // `title` is the display title, which no longer carries an extension.
     const fileName = deleted.path.split("/").pop() ?? deleted.title;
+    // Default the dialog to the current vault root — a bare filename made the
+    // OS dialog start in an arbitrary system folder (often a protected one,
+    // which then failed the write silently).
+    const vaultRoot = useVaultStore.getState().vaultRoot;
     const picked = await save({
-      defaultPath: fileName,
+      defaultPath: vaultRoot ? `${vaultRoot}/${fileName}` : fileName,
       filters: [{ name: "Markdown", extensions: ["md"] }],
     });
     if (typeof picked !== "string") return; // cancelled — keep the dialog open
@@ -33,8 +38,9 @@ export function DeletedDialog() {
       await exportFile(picked, deleted.content);
       useDocStore.getState().closeDoc(deleted.path);
       close();
-    } catch {
-      // save failed — leave the dialog open so the user can retry or discard
+    } catch (e) {
+      // save failed — surface it and keep the dialog open for retry/discard
+      useUiStore.getState().showToast(String(e));
     }
   };
 

@@ -167,6 +167,28 @@ export const DEFAULT_SORT: SortState = { field: "", dir: null };
  *  map of field name -> substring query (empty = no filter on that column).
  *  Matching is case-insensitive substring. When `sort.field === ""` we sort by
  *  row title (file name). `sort.dir === null` keeps the input order. */
+/** Numeric-aware comparison: pure numbers sort numerically ("10" after "9",
+ *  not between "1" and "2"); ISO timestamps already compare chronologically
+ *  as strings; everything else falls back to codepoint order on the
+ *  lowercased text. */
+function compareCellValues(a: string, b: string): number {
+  const na = a.trim();
+  const nb = b.trim();
+  const numRe = /^-?\d+(?:\.\d+)?$/;
+  if (numRe.test(na) && numRe.test(nb)) {
+    const fa = Number(na);
+    const fb = Number(nb);
+    if (fa < fb) return -1;
+    if (fa > fb) return 1;
+    return 0;
+  }
+  // ISO timestamps already compare chronologically as strings; text falls
+  // back to CASE-INSENSITIVE order (the previous behavior).
+  const la = a.toLowerCase();
+  const lb = b.toLowerCase();
+  return la < lb ? -1 : la > lb ? 1 : 0;
+}
+
 export function sortAndFilterRows(
   rows: BaseRow[],
   sort: SortState,
@@ -183,15 +205,14 @@ export function sortAndFilterRows(
   });
   if (sort.dir === null) return filtered;
   const field = sort.field;
-  const get = (r: BaseRow) => (field === "" ? lc(r.name) : lc(r.values[field] ?? ""));
+  const get = (r: BaseRow) =>
+    field === "" ? r.name : (r.values[field] ?? "");
   const dir = sort.dir === "asc" ? 1 : -1;
   // stable sort: copy first, then sort by tuple (key, originalIndex)
   const indexed = filtered.map((r, i) => ({ r, i }));
   indexed.sort((a, b) => {
-    const ka = get(a.r);
-    const kb = get(b.r);
-    if (ka < kb) return -dir;
-    if (ka > kb) return dir;
+    const cmp = compareCellValues(get(a.r), get(b.r));
+    if (cmp !== 0) return cmp * dir;
     return a.i - b.i;
   });
   return indexed.map((x) => x.r);

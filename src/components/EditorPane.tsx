@@ -8,6 +8,7 @@ import { getEditorView } from "../editor/registry";
 import { MarkdownEditor, type EditorHandle } from "../editor/EditorView";
 import { Tabs } from "./Tabs";
 import { FolderContainer } from "./FolderContainer";
+import { useI18n } from "../lib/i18n";
 import type { EditorState } from "@codemirror/state";
 
 export function EditorPane({
@@ -22,11 +23,14 @@ export function EditorPane({
   const markDirty = useDocStore((s) => s.markDirty);
   const markClean = useDocStore((s) => s.markClean);
   const markSaved = useDocStore((s) => s.markSaved);
+  const setDraft = useDocStore((s) => s.setDraft);
   const activeContent = useDocStore((s) => s.activeContent);
   const activeContentDocId = useDocStore((s) => s.activeContentDocId);
+  const loadErrorMap = useDocStore((s) => s.loadErrorMap);
   const setActiveContent = useDocStore((s) => s.setActiveContent);
   const dirtyMap = useDocStore((s) => s.dirtyMap);
   const showWordCount = useSettingsStore((s) => s.showWordCount);
+  const t = useI18n();
 
   const editorRef = useRef<EditorHandle>(null);
   // Per-doc autosave timer. Switching tabs (or closing a tab) within the
@@ -53,18 +57,38 @@ export function EditorPane({
 
   // Load the active document's content from disk when the active doc changes
   // and the cached content doesn't belong to it (open / switch / close tab).
+  // A DIRTY doc with a known draft is never re-read from disk: the draft is
+  // newer than disk by definition, and clobbering it with stale file content
+  // used to make the pending autosave write the old text over the user's
+  // keystrokes (silent data loss on tab switch-away-and-back).
   useEffect(() => {
     if (!activeDoc || !vaultRoot) return;
     if (activeContentDocId === activeDoc.id) return; // content already correct
+    const st = useDocStore.getState();
+    if (st.dirtyMap[activeDoc.id]) {
+      const draft = st.drafts[activeDoc.id];
+      if (draft !== undefined) {
+        setActiveContent(draft);
+        return;
+      }
+      // Dirty without a draft (e.g. an earlier save failed): fall through and
+      // read disk — the best content available.
+    }
     let cancelled = false;
     void (async () => {
       try {
         const content = await readFile(vaultRoot, activeDoc.path);
-        if (!cancelled) setActiveContent(content);
+        if (cancelled) return;
+        useDocStore.getState().setLoadError(activeDoc.id, false);
+        setActiveContent(content);
       } catch {
-        // Read failed — set empty content owned by this doc so the editor is
-        // still editable and we don't loop on Loading.
-        if (!cancelled) setActiveContent("");
+        // Read failed — mount this doc READ-ONLY with empty content so the
+        // editor is still visible but an autosave can never overwrite the
+        // real file with typed characters. Switching away and back retries.
+        if (!cancelled) {
+          useDocStore.getState().setLoadError(activeDoc.id, true);
+          setActiveContent("");
+        }
       }
     })();
     return () => {
@@ -72,15 +96,19 @@ export function EditorPane({
     };
   }, [activeDoc, activeDocId, activeContentDocId, vaultRoot, setActiveContent]);
 
+  const loadFailed = activeDoc ? !!loadErrorMap[activeDoc.id] : false;
+
   const handleChange = useCallback(
     (doc: string) => {
       const id = activeDocId;
       if (!id) return;
+      // A doc whose read failed mounts read-only; CM6 won't emit changes, but
+      // guard anyway so no path can arm an autosave for it.
+      if (useDocStore.getState().loadErrorMap[id]) return;
       markDirty(id);
-      // Keep the store's activeContent in sync with live edits so manual
-      // Save / Save As / exports / word count read the CURRENT text, not the
-      // open-time snapshot. setActiveContent captures activeDocId (== id).
-      setActiveContent(doc);
+      // Record the exact edited text as the doc's draft — the single source
+      // the pending autosave will write, immune to tab switches.
+      setDraft(id, doc);
       // Debounce auto-save: 1s after last keystroke IN THE SAME DOC. A
       // different doc's pending timer is left alone (its closure owns the
       // path + content it will write).
@@ -97,18 +125,31 @@ export function EditorPane({
           const conflict = useUiStore.getState().conflict;
           if (conflict && conflict.path === path) return;
           if (!vaultRoot || !path) return;
-          const content = state.activeContentDocId === id ? state.activeContent : doc;
+          if (state.loadErrorMap[id]) return;
+          // The draft was updated synchronously on every keystroke, so it is
+          // always the newest known text for this doc (the timer closure's
+          // `doc` is only a fallback for edits made before any draft existed).
+          const content = state.drafts[id] ?? doc;
           try {
             await writeFileAtomic(vaultRoot, path, content);
-            markSaved(id, content);
-            markClean(id);
-          } catch {
-            // save failed — mark stays dirty, toast on next error UI cycle
+            // Only report "saved" if nothing newer was typed while the write
+            // was in flight — otherwise those keystrokes are still unsaved
+            // and their own timer will save them shortly.
+            const after = useDocStore.getState();
+            if ((after.drafts[id] ?? content) === content) {
+              markSaved(id, content);
+              markClean(id);
+            }
+          } catch (e) {
+            // save failed — keep the dirty mark AND tell the user; silent
+            // failures made disk-full/permission errors look like nothing
+            // happened while the user kept typing.
+            useUiStore.getState().showToast(`${t.saveFailed}: ${String(e)}`);
           }
         }, 1000),
       };
     },
-    [activeDocId, vaultRoot, markDirty, markClean, setActiveContent],
+    [activeDocId, vaultRoot, markDirty, markClean, markSaved, setDraft],
   );
 
   // Jump to a search result: when the pendingJump targets the active doc and
@@ -135,15 +176,30 @@ export function EditorPane({
       <div style={{ flex: 1, overflow: "auto" }}>
         {activeDoc ? (
           activeContentDocId === activeDoc.id ? (
-            <MarkdownEditor
-              key={activeDoc.id}
-              ref={editorRef}
-              doc={activeContent}
-              vaultRoot={vaultRoot ?? undefined}
-              docRel={activeDoc?.path}
-              onChange={handleChange}
-              onStateChange={(state) => onHeadingsChange(state)}
-            />
+            <>
+              <MarkdownEditor
+                key={activeDoc.id}
+                ref={editorRef}
+                doc={activeContent}
+                vaultRoot={vaultRoot ?? undefined}
+                docRel={activeDoc?.path}
+                editable={!loadFailed}
+                onChange={handleChange}
+                onStateChange={(state) => onHeadingsChange(state)}
+              />
+              {loadFailed && (
+                <div
+                  style={{
+                    padding: "4px 12px",
+                    fontSize: 12,
+                    color: "var(--fg-muted)",
+                    borderTop: "1px solid var(--border)",
+                  }}
+                >
+                  {t.readonlyLoadFailed}
+                </div>
+              )}
+            </>
           ) : (
             <div style={{ padding: 16, color: "var(--fg-muted)" }}>
               Loading…

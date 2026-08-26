@@ -141,8 +141,10 @@ mod tests {
     fn shortcuts_roundtrip() {
         let dir = tempdir().unwrap();
         let mut s = Settings::default();
-        s.shortcuts.insert("md:bold".to_string(), "Ctrl+Shift+B".to_string());
-        s.shortcuts.insert("app:save".to_string(), "Ctrl+Alt+S".to_string());
+        s.shortcuts
+            .insert("md:bold".to_string(), "Ctrl+Shift+B".to_string());
+        s.shortcuts
+            .insert("app:save".to_string(), "Ctrl+Alt+S".to_string());
         save_config(dir.path(), &s).unwrap();
         let loaded = load_config(dir.path()).unwrap();
         assert_eq!(loaded.shortcuts.get("md:bold").unwrap(), "Ctrl+Shift+B");

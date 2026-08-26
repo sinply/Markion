@@ -1223,3 +1223,23 @@ label {
     width: 45%;
   }
 }
+
+/* Transient toast (bottom-right) for surfaced backend/mutation errors. */
+.markion-toast {
+  position: fixed;
+  right: 16px;
+  bottom: 40px;
+  max-width: 420px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel-bg, #2d2d2d);
+  color: var(--fg);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  font-size: 13px;
+  cursor: pointer;
+  z-index: 2000;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

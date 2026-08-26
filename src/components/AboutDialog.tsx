@@ -1,7 +1,7 @@
 import { useUiStore } from "../stores/uiStore";
 import { useI18n } from "../lib/i18n";
 
-const VERSION = "0.15.5";
+const VERSION = "0.16.0";
 
 export function AboutDialog() {
   const open = useUiStore((s) => s.aboutOpen);

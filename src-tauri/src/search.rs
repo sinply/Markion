@@ -65,8 +65,14 @@ fn walk(
     use_regex: bool,
     out: &mut Vec<SearchHit>,
 ) -> std::io::Result<()> {
-    for entry in std::fs::read_dir(dir)? {
-        let entry = entry?;
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        // An unreadable directory is skipped — one locked folder must not
+        // make the whole vault search return an error with zero results.
+        Err(_) => return Ok(()),
+    };
+    for entry in entries {
+        let Ok(entry) = entry else { continue };
         let path = entry.path();
         let file_name = entry.file_name();
         let name = file_name.to_string_lossy();
@@ -80,7 +86,10 @@ fn walk(
             .map(|e| e.to_string_lossy().to_lowercase() == "md")
             .unwrap_or(false)
         {
-            let text = std::fs::read_to_string(&path)?;
+            // Non-UTF8/unreadable files are skipped, not fatal.
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
             scan_text(root, &path, &text, query, case_sensitive, use_regex, out)?;
         }
     }
@@ -132,7 +141,10 @@ fn match_offsets(
             v.push(b);
             v
         };
-        let lowered: Vec<char> = hay.iter().map(|c| c.to_lowercase().next().unwrap_or(*c)).collect();
+        let lowered: Vec<char> = hay
+            .iter()
+            .map(|c| c.to_lowercase().next().unwrap_or(*c))
+            .collect();
         let needle: Vec<char> = query.to_lowercase().chars().collect();
         if needle.is_empty() {
             return Ok(Vec::new());
@@ -216,9 +228,24 @@ fn scan_text(
 
 /// Result of a vault-wide find-and-replace.
 #[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplaceError {
+    /// Vault-relative path of the file that could not be processed.
+    pub path: String,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct ReplaceResult {
     pub files_changed: usize,
     pub replacements: usize,
+    /// Per-file failures (unreadable, non-UTF8, write error). The batch keeps
+    /// going — one locked/odd file used to abort the whole operation halfway.
+    pub errors: Vec<ReplaceError>,
+    /// Vault-relative paths actually modified, so the frontend can suppress
+    /// watcher echoes and refresh open tabs for exactly these files.
+    pub changed_paths: Vec<String>,
 }
 
 /// Replace `query` with `replacement` in every `.md` file in the vault
@@ -239,6 +266,8 @@ pub fn replace_in_vault(
         return Ok(ReplaceResult {
             files_changed: 0,
             replacements: 0,
+            errors: Vec::new(),
+            changed_paths: Vec::new(),
         });
     }
     // Literal mode escapes the query so metacharacters match themselves.
@@ -262,6 +291,8 @@ pub fn replace_in_vault(
 
     let mut files_changed = 0usize;
     let mut replacements = 0usize;
+    let mut errors = Vec::new();
+    let mut changed_paths = Vec::new();
     replace_walk(
         vault_root,
         vault_root,
@@ -269,13 +300,18 @@ pub fn replace_in_vault(
         &out_replacement,
         &mut files_changed,
         &mut replacements,
-    )?;
+        &mut errors,
+        &mut changed_paths,
+    );
     Ok(ReplaceResult {
         files_changed,
         replacements,
+        errors,
+        changed_paths,
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn replace_walk(
     root: &Path,
     dir: &Path,
@@ -283,9 +319,28 @@ fn replace_walk(
     replacement: &str,
     files_changed: &mut usize,
     replacements: &mut usize,
-) -> std::io::Result<()> {
-    for entry in std::fs::read_dir(dir)? {
-        let entry = entry?;
+    errors: &mut Vec<ReplaceError>,
+    changed_paths: &mut Vec<String>,
+) {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(e) => {
+            let rel = dir.strip_prefix(root).unwrap_or(dir).to_string_lossy().into_owned();
+            errors.push(ReplaceError { path: rel, error: e.to_string() });
+            return;
+        }
+    };
+    for entry in entries {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(e) => {
+                errors.push(ReplaceError {
+                    path: dir.to_string_lossy().into_owned(),
+                    error: e.to_string(),
+                });
+                continue;
+            }
+        };
         let path = entry.path();
         let name = entry.file_name();
         let name = name.to_string_lossy();
@@ -293,23 +348,44 @@ fn replace_walk(
             continue;
         }
         if path.is_dir() {
-            replace_walk(root, &path, re, replacement, files_changed, replacements)?;
+            replace_walk(root, &path, re, replacement, files_changed, replacements, errors, changed_paths);
         } else if path
             .extension()
             .map(|e| e.to_string_lossy().to_lowercase() == "md")
             .unwrap_or(false)
         {
-            let text = std::fs::read_to_string(&path)?;
+            // Fault isolation: a single unreadable/non-UTF8/unwritable file is
+            // reported and skipped — the rest of the vault still gets fixed.
+            let text = match std::fs::read_to_string(&path) {
+                Ok(t) => t,
+                Err(e) => {
+                    let rel = path.strip_prefix(root).unwrap_or(&path).to_string_lossy().replace('\\', "/");
+                    errors.push(ReplaceError { path: rel, error: e.to_string() });
+                    continue;
+                }
+            };
             let count = re.find_iter(&text).count();
             if count > 0 {
                 let new_text = re.replace_all(&text, replacement).into_owned();
-                crate::file_io::write_file_atomic(&path, &new_text)?;
-                *files_changed += 1;
-                *replacements += count;
+                match crate::file_io::write_file_atomic(&path, &new_text) {
+                    Ok(()) => {
+                        *files_changed += 1;
+                        *replacements += count;
+                        let rel = path
+                            .strip_prefix(root)
+                            .unwrap_or(&path)
+                            .to_string_lossy()
+                            .replace('\\', "/");
+                        changed_paths.push(rel);
+                    }
+                    Err(e) => {
+                        let rel = path.strip_prefix(root).unwrap_or(&path).to_string_lossy().replace('\\', "/");
+                        errors.push(ReplaceError { path: rel, error: e.to_string() });
+                    }
+                }
             }
         }
     }
-    Ok(())
 }
 
 /// Trim a line and center it on the match offset, capping the length and
@@ -545,6 +621,24 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(dir.path().join("c.md")).unwrap(),
             "FOO stays"
+        );
+    }
+
+    #[test]
+    fn replace_isolates_per_file_failures_and_reports_changed_paths() {
+        let dir = tempdir().unwrap();
+        write_vault(dir.path(), &[("good.md", "foo here")]);
+        // A non-UTF8 .md file: unreadable as text, must not abort the batch.
+        std::fs::write(dir.path().join("bad.md"), [0xff, 0xfe, 0x62, 0x61, 0x64]).unwrap();
+        let res = replace_in_vault(dir.path(), "foo", "baz", true, false).unwrap();
+        assert_eq!(res.files_changed, 1);
+        assert_eq!(res.replacements, 1);
+        assert_eq!(res.changed_paths, vec!["good.md".to_string()]);
+        assert_eq!(res.errors.len(), 1);
+        assert_eq!(res.errors[0].path, "bad.md");
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("good.md")).unwrap(),
+            "baz here"
         );
     }
 

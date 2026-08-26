@@ -52,10 +52,12 @@ interface EditorViewProps {
   onStateChange?: (state: EditorState) => void;
   vaultRoot?: string;
   docRel?: string;
+  /** false = mount read-only (failed disk read). */
+  editable?: boolean;
 }
 
 export const MarkdownEditor = forwardRef<EditorHandle, EditorViewProps>(
-  function MarkdownEditor({ doc, onChange, onStateChange, vaultRoot, docRel }, ref) {
+  function MarkdownEditor({ doc, onChange, onStateChange, vaultRoot, docRel, editable }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
     const onChangeRef = useRef(onChange);
@@ -76,6 +78,7 @@ export const MarkdownEditor = forwardRef<EditorHandle, EditorViewProps>(
         onChangeRef.current?.(newDoc);
       }, {
         livePreview,
+        editable,
         onStateChange: (s) => onStateChangeRef.current?.(s),
         markdownContext:
           vaultRoot && docRel ? { vaultRoot, docRel } : undefined,

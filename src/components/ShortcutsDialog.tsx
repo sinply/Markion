@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useUiStore } from "../stores/uiStore";
 import { useSettingsStore } from "../stores/settingsStore";
-import { DEFAULT_SHORTCUTS, effectiveShortcuts } from "../lib/shortcuts";
+import { DEFAULT_SHORTCUTS, effectiveShortcuts, findConflict } from "../lib/shortcuts";
 
 const LABELS: Record<string, { en: string; zh: string }> = {
   "app:save": { en: "Save", zh: "保存" },
@@ -36,8 +36,8 @@ export function ShortcutsDialog() {
   const edit = (id: string) => {
     const input = window.prompt(
       isZh
-        ? `为「${LABELS[id].zh}」输入新快捷键（如 Ctrl+Shift+K；留空恢复默认）`
-        : `New shortcut for "${LABELS[id].en}" (e.g. Ctrl+Shift+K; empty = default)`,
+        ? `为「${LABELS[id].zh}」输入新快捷键（如 Ctrl+Shift+K；留空恢复默认；输入 - 解绑）`
+        : `New shortcut for "${LABELS[id].en}" (e.g. Ctrl+Shift+K; empty = default; "-" to unbind)`,
       effective[id],
     );
     if (input === null) return; // cancelled
@@ -47,11 +47,29 @@ export function ShortcutsDialog() {
       // Empty input = restore the built-in binding (storing the default is a
       // no-op override that reads identically through the effective merge).
       setShortcut(id, DEFAULT_SHORTCUTS[id]);
-    } else if (!/^([\w]+(\+[\w]+)+|\w+)$/i.test(trimmed)) {
-      setErr(isZh ? "无效的快捷键格式" : "Invalid shortcut format");
-    } else {
-      setShortcut(id, trimmed);
+      return;
     }
+    if (trimmed === "-") {
+      // Explicit unbind: an empty override never matches a keydown.
+      setShortcut(id, "");
+      return;
+    }
+    if (!/^([\w]+(\+[\w]+)+|\w+)$/i.test(trimmed)) {
+      setErr(isZh ? "无效的快捷键格式" : "Invalid shortcut format");
+      return;
+    }
+    // Duplicate-binding guard: two commands on one combo made BOTH fire
+    // unpredictably (first table hit won silently). Refuse and name it.
+    const clash = findConflict(shortcuts, id, trimmed);
+    if (clash) {
+      setErr(
+        isZh
+          ? `与「${LABELS[clash]?.zh ?? clash}」冲突，请先改开它或换一个组合键`
+          : `Conflicts with "${LABELS[clash]?.en ?? clash}" — rebind that first or pick another combo`,
+      );
+      return;
+    }
+    setShortcut(id, trimmed);
   };
 
   const rows = Object.keys(DEFAULT_SHORTCUTS).map((id) => ({

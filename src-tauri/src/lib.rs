@@ -9,6 +9,7 @@ pub mod search;
 pub mod tags;
 pub mod tree_index;
 pub mod watcher;
+pub mod wikilink;
 
 use std::sync::Mutex;
 
@@ -46,7 +47,6 @@ pub fn run() {
             commands::read_config,
             commands::save_config,
             commands::start_vault_watch,
-            commands::query_library,
             commands::query_folder_table,
             commands::query_dataview_rows,
         ])

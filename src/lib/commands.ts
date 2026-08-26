@@ -38,7 +38,7 @@ export async function createAndOpenNote(name: string): Promise<void> {
     const { docTitle } = await import("./docTitle");
     useDocStore.getState().openDoc(docTitle(newPath), newPath);
     useDocStore.getState().setActiveContent(content);
-    useUiStore.getState().addRecent(newPath);
+    useUiStore.getState().addRecent(root, newPath);
   } catch {
     // creation failed — keep the palette closed, editor unchanged
   }

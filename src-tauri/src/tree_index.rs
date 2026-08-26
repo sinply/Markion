@@ -68,18 +68,29 @@ fn build_folder(root: &Path, rel_dir: &str, index: &IndexFile) -> TreeNode {
         root.join(rel_dir)
     };
 
-    let fs_children: Vec<String> = match std::fs::read_dir(&abs_dir) {
+    // Collect visible children together with their file type. DirEntry's
+    // `file_type()` does NOT follow symlinks, so junction/symlink directory
+    // cycles (a common recursion bomb on Windows) are skipped entirely.
+    let fs_entries: Vec<(String, std::fs::FileType)> = match std::fs::read_dir(&abs_dir) {
         Ok(entries) => entries
             .filter_map(|e| e.ok())
-            .map(|e| e.file_name().to_string_lossy().to_string())
-            .filter(|name| !HIDDEN_DIRS.contains(&name.as_str()))
+            .filter_map(|e| {
+                let ft = e.file_type().ok()?;
+                let name = e.file_name().to_string_lossy().to_string();
+                Some((name, ft))
+            })
+            .filter(|(name, ft)| !HIDDEN_DIRS.contains(&name.as_str()) && !ft.is_symlink())
             .collect(),
         Err(_) => vec![],
     };
+    let fs_children: Vec<String> = fs_entries.iter().map(|(n, _)| n.clone()).collect();
 
     let meta = index.folders.get(rel_dir);
     let order: &[String] = meta.map(|m| m.order.as_slice()).unwrap_or(&[]);
     let display_order = merge_order(&fs_children, order);
+
+    let ft_of: HashMap<&str, std::fs::FileType> =
+        fs_entries.iter().map(|(n, ft)| (n.as_str(), *ft)).collect();
 
     let children: Vec<TreeNode> = display_order
         .iter()
@@ -89,17 +100,15 @@ fn build_folder(root: &Path, rel_dir: &str, index: &IndexFile) -> TreeNode {
             } else {
                 format!("{}/{}", rel_dir, name)
             };
-            let child_abs = abs_dir.join(name);
-            if child_abs.is_dir() {
-                build_folder(root, &child_rel, index)
-            } else {
-                TreeNode {
+            match ft_of.get(name.as_str()) {
+                Some(ft) if ft.is_dir() => build_folder(root, &child_rel, index),
+                _ => TreeNode {
                     name: name.clone(),
                     path: child_rel,
                     kind: NodeKind::File,
                     children: vec![],
                     collapsed: false,
-                }
+                },
             }
         })
         .collect();
@@ -128,9 +137,18 @@ pub fn load_index(vault_root: &Path) -> std::io::Result<IndexFile> {
             Ok(parsed) => Ok(parsed),
             Err(e) => {
                 eprintln!(
-                    "[tree_index] corrupt index at {:?}: {}; falling back to default",
+                    "[tree_index] corrupt index at {:?}: {}; quarantining and falling back to default",
                     path, e
                 );
+                // Quarantine the unreadable file (best-effort; ignore rename
+                // failure) so the next successful save cannot silently destroy
+                // whatever data it still held.
+                let stamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis())
+                    .unwrap_or(0);
+                let quarantine = vault_root.join(format!("{INDEX_PATH}.corrupt-{stamp}"));
+                let _ = std::fs::rename(&path, quarantine);
                 Ok(IndexFile::default())
             }
         },
@@ -315,6 +333,64 @@ mod tests {
         fs::write(&idx_path, "not valid json {{{").unwrap();
         let loaded = load_index(dir.path()).unwrap();
         assert_eq!(loaded, IndexFile::default());
+    }
+
+    #[test]
+    fn load_index_corrupt_file_is_quarantined() {
+        let dir = tempdir().unwrap();
+        let idx_path = dir.path().join(".markion/index.json");
+        fs::create_dir_all(idx_path.parent().unwrap()).unwrap();
+        fs::write(&idx_path, "not valid json {{{").unwrap();
+        load_index(dir.path()).unwrap();
+        // The corrupt file is renamed away, not deleted or overwritten.
+        assert!(!idx_path.exists(), "corrupt index.json still in place");
+        let quarantined: Vec<String> = fs::read_dir(idx_path.parent().unwrap())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .filter(|n| n.starts_with("index.json.corrupt-"))
+            .collect();
+        assert_eq!(quarantined.len(), 1, "quarantine files: {:?}", quarantined);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn build_tree_skips_symlinked_dirs() {
+        let dir = tempdir().unwrap();
+        let real = dir.path().join("real");
+        fs::create_dir_all(&real).unwrap();
+        fs::write(real.join("note.md"), "").unwrap();
+        // Creating symlinks on Windows requires admin/dev-mode privileges;
+        // skip gracefully when unavailable.
+        if std::os::windows::fs::symlink_dir(&real, dir.path().join("link")).is_err() {
+            eprintln!("skipped: symlink_dir needs elevated privilege or dev mode");
+            return;
+        }
+        let tree = build_tree(dir.path(), &IndexFile::default());
+        let names: Vec<&str> = tree.children.iter().map(|n| n.name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["real"],
+            "symlinked dir must be skipped entirely"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn build_tree_skips_symlinked_dirs() {
+        use std::os::unix::fs::symlink;
+        let dir = tempdir().unwrap();
+        let real = dir.path().join("real");
+        fs::create_dir_all(&real).unwrap();
+        fs::write(real.join("note.md"), "").unwrap();
+        symlink(&real, dir.path().join("link")).unwrap();
+        let tree = build_tree(dir.path(), &IndexFile::default());
+        let names: Vec<&str> = tree.children.iter().map(|n| n.name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["real"],
+            "symlinked dir must be skipped entirely"
+        );
     }
 
     #[test]

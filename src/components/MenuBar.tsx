@@ -178,20 +178,26 @@ export function MenuBar() {
         { label: t.setDefaultVault, action: () => { vaultStore.setAsDefault(); close(); }, separatorAfter: true },
         { label: t.preferences, action: () => { ui.setSettingsOpen(true); close(); }, separatorAfter: true },
         // Recent files live one level down so the top-level menu stays short.
-        ...(ui.recentFiles.length > 0
+        // Only entries from the CURRENT vault are offered — a stale path from
+        // another vault used to resolve against this root and open the wrong
+        // (or a nonexistent) file.
+        ...(ui.recentFiles.filter((e) => e.vaultRoot === vaultStore.vaultRoot).length > 0
           ? [{
               label: t.recent,
               submenu: {
                 label: t.recent,
                 items: [
-                  ...ui.recentFiles.slice(0, 8).map((p) => ({
-                    label: docTitle(p),
-                    action: () => {
-                      const root = vaultStore.vaultRoot;
-                      if (root) void openNote(root, p);
-                      close();
-                    },
-                  })),
+                  ...ui.recentFiles
+                    .filter((e) => e.vaultRoot === vaultStore.vaultRoot)
+                    .slice(0, 8)
+                    .map((e) => ({
+                      label: docTitle(e.path),
+                      action: () => {
+                        const root = vaultStore.vaultRoot;
+                        if (root) void openNote(root, e.path);
+                        close();
+                      },
+                    })),
                   { label: t.clearRecent, action: () => { ui.clearRecent(); close(); } },
                 ],
               },

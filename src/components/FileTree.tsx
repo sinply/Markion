@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Tree, type TreeApi } from "react-arborist";
 import type { NodeRendererProps } from "react-arborist";
 import { useVaultStore } from "../stores/vaultStore";
@@ -170,6 +170,21 @@ export function FileTree() {
     { x: number; y: number; target: MenuTarget | null } | null
   >(null);
   const treeRef = useRef<TreeApi<RowData> | null>(null);
+  // react-arborist needs a PIXEL height; a one-shot window.innerHeight went
+  // stale on resize/split-drag (bottom rows became unreachable). Track the
+  // container's real box instead. jsdom has no ResizeObserver — guard it.
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const [treeHeight, setTreeHeight] = useState(() => Math.max(160, window.innerHeight - 68));
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      const h = entries[0]?.contentRect.height ?? 0;
+      if (h > 0) setTreeHeight(Math.max(120, Math.round(h) - 28)); // minus header strip
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const handleActivate = useCallback(
     async (node: any) => {
@@ -187,6 +202,12 @@ export function FileTree() {
         return;
       }
       if (d.kind !== "file") return;
+      // Already the active tab: re-reading disk would clobber unsaved edits
+      // with stale file content (see openNote's same guard).
+      const st = useDocStore.getState();
+      if (st.activeDocId && st.openDocs.find((x) => x.id === st.activeDocId)?.path === d.id) {
+        return;
+      }
       const content = await readFile(vaultRoot, d.id);
       openDoc(titleForPath(d.id), d.id);
       setActiveContent(content);
@@ -322,12 +343,16 @@ export function FileTree() {
       if (newPath === path) return;
       try {
         // Rename on disk AND rewrite every [[oldname]] reference in the vault
-        // to the new name (Obsidian-style). Returns the number of files whose
-        // links were updated.
-        await renameWithLinks(vaultRoot, path, newPath);
+        // to the new name (Obsidian-style). The backend reports which files
+        // it touched so their watcher echoes can be suppressed below.
+        const { rewrittenFiles } = await renameWithLinks(vaultRoot, path, newPath);
         // The watcher will emit a "deleted" event for the OLD path; ignore it
         // so the active tab isn't mistaken for an externally-deleted file.
         markAppChange(path);
+        // Rewritten referrers change on disk because WE just rewrote them —
+        // without marking them, an open dirty referrer would get a spurious
+        // "file changed on disk" conflict for Markion's own edit.
+        for (const f of rewrittenFiles) markAppChange(f);
         if (kind === "file") {
           renameDoc(path, newPath, docTitle(newName));
         } else {
@@ -341,8 +366,9 @@ export function FileTree() {
           }
         }
         await loadTree(vaultRoot);
-      } catch {
-        // rename failed - tree/tabs unchanged
+      } catch (e) {
+        // Surface the failure — a silently dead rename looked like a UI bug.
+        useUiStore.getState().showToast(String(e));
       }
     },
     [vaultRoot, renameDoc, loadTree, t],
@@ -356,6 +382,10 @@ export function FileTree() {
         kind === "folder" ? t.ctxDeleteFolderPrompt(name) : t.ctxDeleteFilePrompt(name);
       if (!window.confirm(msg)) return;
       try {
+        // Persist pending edits of docs under this node FIRST so the trash
+        // copy holds the newest content, not stale disk text.
+        const { flushDocsUnder } = await import("../lib/docSave");
+        await flushDocsUnder(path);
         // Delete into the vault-internal trash (`.markion/trash`) so the
         // entry can be restored from the Trash dialog.
         await trashPath(vaultRoot, path);
@@ -364,8 +394,9 @@ export function FileTree() {
         markAppChange(path);
         closeDocsUnder(path);
         await loadTree(vaultRoot);
-      } catch {
-        // delete failed - nothing removed
+      } catch (e) {
+        // delete failed — tell the user instead of silently doing nothing
+        useUiStore.getState().showToast(String(e));
       }
     },
     [vaultRoot, closeDocsUnder, loadTree, t],
@@ -433,6 +464,7 @@ export function FileTree() {
   return (
     <>
       <div
+        ref={wrapRef}
         style={{ height: "100%", overflow: "auto" }}
         onContextMenu={handleContextMenu}
       >
@@ -443,7 +475,7 @@ export function FileTree() {
           ref={treeRef}
           data={rowData}
           width="100%"
-          height={window.innerHeight - 40}
+          height={treeHeight}
           rowHeight={28}
           initialOpenState={initialOpenState}
           onMove={handleMove}

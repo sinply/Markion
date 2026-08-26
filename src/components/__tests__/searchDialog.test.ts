@@ -51,7 +51,11 @@ describe("openNote", () => {
     expect(doc.openDocs).toContainEqual({ id: "notes/a.md", path: "notes/a.md", title: "a" });
     expect(doc.activeDocId).toBe("notes/a.md");
     expect(doc.activeContent).toBe("# hello");
-    expect(useUiStore.getState().recentFiles).toContain("notes/a.md");
+    // Recents are vault-scoped: the entry records which vault it came from.
+    expect(useUiStore.getState().recentFiles).toContainEqual({
+      vaultRoot: "/vault",
+      path: "notes/a.md",
+    });
   });
 
   it("returns false when the file cannot be read", async () => {

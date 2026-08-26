@@ -3,22 +3,60 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 const spies = {
   searchVault: vi.fn().mockResolvedValue([]),
-  replaceInVault: vi.fn().mockResolvedValue({ filesChanged: 2, replacements: 3 }),
+  replaceInVault: vi.fn().mockResolvedValue({
+    filesChanged: 2,
+    replacements: 3,
+    errors: [],
+    changedPaths: [],
+  }),
 };
 
-vi.mock("../../stores/vaultStore", () => ({
-  useVaultStore: (s: any) => s({ vaultRoot: "/vault" }),
-}));
+vi.mock("../../stores/vaultStore", () => {
+  const makeState = () => ({ vaultRoot: "/vault" });
+  return {
+    // docSave.ts calls useVaultStore.getState(); keep the fake duck-complete.
+    useVaultStore: Object.assign((s: any) => s(makeState()), {
+      getState: () => makeState(),
+    }),
+  };
+});
 
-vi.mock("../../stores/uiStore", () => ({
-  useUiStore: (s: any) =>
-    s({ searchOpen: true, setSearchOpen: vi.fn(), setPendingJump: vi.fn() }),
-}));
+vi.mock("../../stores/uiStore", () => {
+  const makeState = () => ({
+    searchOpen: true,
+    setSearchOpen: vi.fn(),
+    setPendingJump: vi.fn(),
+    conflict: null,
+    deletedDoc: null,
+    showToast: vi.fn(),
+  });
+  return {
+    useUiStore: Object.assign((s: any) => s(makeState()), {
+      getState: () => makeState(),
+    }),
+  };
+});
 
-vi.mock("../../stores/docStore", () => ({
-  useDocStore: (s: any) =>
-    s({ openDocs: [], activeDocId: null, openDoc: vi.fn(), setActiveContent: vi.fn() }),
-}));
+vi.mock("../../stores/docStore", () => {
+  const makeState = () => ({
+    openDocs: [],
+    activeDocId: null,
+    dirtyMap: {},
+    drafts: {},
+    loadErrorMap: {},
+    savedContent: {},
+    openDoc: vi.fn(),
+    setActiveContent: vi.fn(),
+    markSaved: vi.fn(),
+    markClean: vi.fn(),
+    setDraft: vi.fn(),
+  });
+  return {
+    useDocStore: Object.assign((s: any) => s(makeState()), {
+      getState: () => makeState(),
+    }),
+  };
+});
 
 vi.mock("../../stores/settingsStore", () => ({
   useSettingsStore: (s: any) => s({ language: "en" }),
@@ -28,6 +66,7 @@ vi.mock("../../lib/ipc", () => ({
   searchVault: (...a: any[]) => spies.searchVault(...a),
   replaceInVault: (...a: any[]) => spies.replaceInVault(...a),
   readFile: vi.fn(),
+  writeFileAtomic: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../lib/openNote", () => ({ openNote: vi.fn().mockResolvedValue(true) }));

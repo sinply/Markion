@@ -48,6 +48,10 @@ const en = {
   exportMarkdown: "Export as Markdown…",
   exportPdf: "Export as PDF…",
   largeFileWarning: "This file is {sizeMB} MB — opening it may make the editor slow. Continue?",
+  readonlyLoadFailed:
+    "Could not read this file from disk — opened read-only. Switch to another tab and back to retry.",
+  saveFailed: "Save failed",
+  docStillLoading: "Document is still loading — please try again in a moment.",
   deletedTitle: "File deleted on disk",
   deletedBody: (path: string) =>
     `"${path}" was deleted or moved outside the app. You have unsaved changes in the editor — save them somewhere else, or discard them.`,
@@ -261,6 +265,7 @@ const en = {
         "Edit: Ctrl+Z undo · Ctrl+Y redo · Ctrl+X/C/V cut/copy/paste · Ctrl+A select all.",
         "Search: Ctrl+F find in the current note · Ctrl+Shift+F search the whole vault.",
         "Format: Ctrl+B bold · Ctrl+I italic · Ctrl+1/2/3 headings · (Format menu for the rest).",
+        "Customize: Help → Keyboard Shortcuts to rebind; enter - to unbind a command; combos that clash with another command are rejected with a hint.",
         "Other: F1 documentation.",
       ],
     },
@@ -280,6 +285,9 @@ const zh: typeof en = {
   exportMarkdown: "导出为 Markdown…",
   exportPdf: "导出为 PDF…",
   largeFileWarning: "此文件为 {sizeMB} MB,打开后编辑器可能变慢。仍然打开?",
+  readonlyLoadFailed: "无法从磁盘读取此文件——已以只读模式打开。切换到其他标签页再切回即可重试。",
+  saveFailed: "保存失败",
+  docStillLoading: "文档仍在加载中——请稍后再试。",
   deletedTitle: "文件已被外部删除",
   deletedBody: (path: string) =>
     `"${path}" 已被删除或移出应用。编辑器中有未保存的更改——请另存到其他位置,或丢弃这些更改。`,
@@ -491,6 +499,7 @@ const zh: typeof en = {
         "编辑：Ctrl+Z 撤销 · Ctrl+Y 重做 · Ctrl+X/C/V 剪切/复制/粘贴 · Ctrl+A 全选 · Ctrl+E 切换编辑/预览。",
         "搜索：Ctrl+F 当前笔记内查找 · Ctrl+Shift+F 全库搜索。",
         "格式：Ctrl+B 粗体 · Ctrl+I 斜体 · Ctrl+1/2/3 标题 ·（其余在格式菜单）。",
+        "自定义：帮助 → 键盘快捷键 可重新绑定；输入 - 解绑某个命令；与其他命令冲突的组合会被拒绝并提示。",
         "其他：F1 打开使用说明。",
       ],
     },

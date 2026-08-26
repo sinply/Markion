@@ -82,12 +82,20 @@ export function moveHeadingBlock(state: EditorState, from: number, to: number): 
   // Clamp to the post-delete length: a target block reaching the end of the
   // doc makes toRange.to == doc length, and after deleting blockLen the doc is
   // shorter — an insertAt past it would throw "Position out of range".
-  const postDeleteLen = state.doc.length - blockLen;
-  const insertAt = Math.min(to > from ? toRange.to - blockLen : toRange.to, postDeleteLen);
+  const post =
+    state.doc.sliceString(0, src.from) + state.doc.sliceString(src.to);
+  const postLen = post.length;
+  const insertAt = Math.min(to > from ? toRange.to - blockLen : toRange.to, postLen);
+  // Glue guards: the source block may start mid-line (previous line has no
+  // trailing newline) or lack a final newline itself — without padding the
+  // move welds two markdown lines together.
+  let ins = blockText;
+  if (insertAt > 0 && post[insertAt - 1] !== "\n") ins = `\n${ins}`;
+  if (!ins.endsWith("\n") && insertAt < postLen) ins += "\n";
   return {
     delete: { from: src.from, to: src.to },
     insertAt,
-    insert: blockText,
+    insert: ins,
   };
 }
 

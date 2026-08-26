@@ -1,6 +1,7 @@
 import { renderMarkdown } from "../editor/markdown";
 import { useDocStore } from "../stores/docStore";
 import { useVaultStore } from "../stores/vaultStore";
+import { useUiStore } from "../stores/uiStore";
 import { getEditorView } from "../editor/registry";
 import { exportFile, readFileBase64, writeFileBase64 } from "./ipc";
 import { save } from "@tauri-apps/plugin-dialog";
@@ -209,11 +210,15 @@ export function printHtml(html: string): void {
 
 /** Live editor text for the active doc (falls back to the store snapshot
  *  when the editor isn't mounted). Exports and manual saves must use the
- *  current buffer — the store's activeContent is only refreshed on open. */
-export function activeEditorText(): string {
+ *  current buffer — the store's activeContent is only refreshed on open.
+ *  Returns null when no live editor is mounted and the store snapshot still
+ *  belongs to a DIFFERENT doc (open/load in flight): exporting it would write
+ *  out the wrong note. */
+export function activeEditorText(): string | null {
   const store = useDocStore.getState();
   const view = getEditorView();
   if (view) return view.state.doc.toString();
+  if (store.activeContentDocId !== store.activeDocId) return null;
   return store.activeContent;
 }
 
@@ -225,6 +230,13 @@ export async function exportActiveNote(asHtml: boolean): Promise<void> {
   const active = docStore.openDocs.find((d) => d.id === docStore.activeDocId);
   if (!vaultRoot || !active) return;
   const content = activeEditorText();
+  if (content === null) {
+    // Document still loading — exporting the previous doc's text would be
+    // silent data corruption; bail out with feedback instead.
+    const { getDict } = await import("./i18n");
+    useUiStore.getState().showToast(getDict().docStillLoading);
+    return;
+  }
   const base = active.title.replace(/\.md$/i, "");
   const picked = await save({
     defaultPath: `${base}.${asHtml ? "html" : "md"}`,
@@ -246,7 +258,13 @@ export async function exportActivePdf(): Promise<void> {
   const vaultRoot = useVaultStore.getState().vaultRoot;
   const active = docStore.openDocs.find((d) => d.id === docStore.activeDocId);
   if (!vaultRoot || !active) return;
-  const html = await buildExportHtml(activeEditorText(), active.title, {
+  const content = activeEditorText();
+  if (content === null) {
+    const { getDict } = await import("./i18n");
+    useUiStore.getState().showToast(getDict().docStillLoading);
+    return;
+  }
+  const html = await buildExportHtml(content, active.title, {
     vaultRoot,
     docRel: active.path,
   });
@@ -256,11 +274,22 @@ export async function exportActivePdf(): Promise<void> {
 /** Render an HTML document to a canvas (offscreen, at the exported width). */
 export async function htmlToCanvas(html: string, width = 820): Promise<HTMLCanvasElement> {
   const holder = document.createElement("div");
+  // Style isolation: the holder lives inside the live document, where app CSS
+  // (theme variables, editor classes, body fonts) would otherwise cascade
+  // INTO the exported render. `all: initial` cuts inheritance; the explicit
+  // base style below restores what exports assume (white page, serif-free
+  // text at readable size).
+  holder.style.all = "initial";
   holder.style.position = "fixed";
   holder.style.left = "-10000px";
   holder.style.top = "0";
   holder.style.width = `${width}px`;
   holder.style.background = "#ffffff";
+  holder.style.color = "#1a1a1a";
+  holder.style.fontFamily =
+    'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+  holder.style.fontSize = "16px";
+  holder.style.lineHeight = "1.6";
   holder.style.zIndex = "-1";
   holder.innerHTML = html;
   document.body.appendChild(holder);
@@ -270,6 +299,7 @@ export async function htmlToCanvas(html: string, width = 820): Promise<HTMLCanva
       scale: 2,
       backgroundColor: "#ffffff",
       useCORS: true,
+      logging: false,
     });
     return canvas;
   } finally {
@@ -294,7 +324,13 @@ export async function exportActivePdfFile(): Promise<void> {
     filters: [{ name: "PDF", extensions: ["pdf"] }],
   });
   if (typeof picked !== "string") return;
-  const html = await buildExportHtml(activeEditorText(), active.title, {
+  const content = activeEditorText();
+  if (content === null) {
+    const { getDict } = await import("./i18n");
+    useUiStore.getState().showToast(getDict().docStillLoading);
+    return;
+  }
+  const html = await buildExportHtml(content, active.title, {
     vaultRoot,
     docRel: active.path,
   });
@@ -303,16 +339,32 @@ export async function exportActivePdfFile(): Promise<void> {
   const pdf = new jsPDF({ unit: "pt", format: "a4" });
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
-  const imgHeight = (canvas.height * pageWidth) / canvas.width;
-  let remaining = imgHeight;
-  let offset = 0;
-  pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, offset, pageWidth, imgHeight);
-  remaining -= pageHeight;
-  while (remaining > 0) {
-    offset -= pageHeight;
-    pdf.addPage();
-    pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, offset, pageWidth, imgHeight);
-    remaining -= pageHeight;
+  // Slice the tall canvas into per-PAGE strips and encode each strip once.
+  // The old approach re-encoded the ENTIRE canvas once per page with a
+  // negative y-offset — O(pages²) pixel work, huge memory spikes on long
+  // notes, and visible seam artifacts at every page boundary.
+  const pxPerPage = Math.max(1, Math.floor((canvas.width * pageHeight) / pageWidth));
+  const pages = Math.max(1, Math.ceil(canvas.height / pxPerPage));
+  for (let p = 0; p < pages; p++) {
+    const sliceY = p * pxPerPage;
+    const sliceH = Math.min(pxPerPage, canvas.height - sliceY);
+    const slice = document.createElement("canvas");
+    slice.width = canvas.width;
+    slice.height = sliceH;
+    const ctx = slice.getContext("2d");
+    if (!ctx) break;
+    ctx.fillStyle = "#ffffff"; // last partial page keeps a white background
+    ctx.fillRect(0, 0, slice.width, slice.height);
+    ctx.drawImage(canvas, 0, sliceY, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+    if (p > 0) pdf.addPage();
+    pdf.addImage(
+      slice.toDataURL("image/jpeg", 0.92),
+      "JPEG",
+      0,
+      0,
+      pageWidth,
+      (sliceH * pageWidth) / canvas.width,
+    );
   }
   const bytes = pdf.output("arraybuffer");
   await writeFileBase64(picked, base64FromArrayBuffer(bytes));
@@ -330,7 +382,13 @@ export async function exportActiveImage(): Promise<void> {
     filters: [{ name: "PNG", extensions: ["png"] }],
   });
   if (typeof picked !== "string") return;
-  const html = await buildExportHtml(activeEditorText(), active.title, {
+  const content = activeEditorText();
+  if (content === null) {
+    const { getDict } = await import("./i18n");
+    useUiStore.getState().showToast(getDict().docStillLoading);
+    return;
+  }
+  const html = await buildExportHtml(content, active.title, {
     vaultRoot,
     docRel: active.path,
   });

@@ -3,6 +3,7 @@ import { EditorView } from "@codemirror/view";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { saveImage } from "../lib/ipc";
 import { useSettingsStore } from "../stores/settingsStore";
+import { useUiStore } from "../stores/uiStore";
 
 export interface MarkdownContext {
   vaultRoot: string;
@@ -97,6 +98,19 @@ export function todayStamp(): string {
   return `${d.getFullYear()}${m}${day}`;
 }
 
+/** Percent-encode characters that break markdown link targets: `%` first,
+ *  then spaces and parentheses (a `)` inside `(...)` ends the target early).
+ *  Slashes and most unicode are left intact so paths stay readable. */
+export function encodeLinkTarget(path: string): string {
+  return path
+    .replace(/%/g, "%25")
+    .replace(/ /g, "%20")
+    .replace(/\(/g, "%28")
+    .replace(/\)/g, "%29")
+    .replace(/</g, "%3C")
+    .replace(/>/g, "%3E");
+}
+
 async function insertImages(
   view: EditorView,
   files: File[],
@@ -109,13 +123,18 @@ async function insertImages(
   const { assetsStrategy, pathStyle } = useSettingsStore.getState();
 
   let pos = Math.min(from, view.state.doc.length);
+  // The awaits below (file bytes, IPC save) let the user keep typing: if the
+  // document changed since the position was captured, re-anchor to the live
+  // selection instead of splicing into a stale offset.
+  let expectedLen = view.state.doc.length;
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     const ext = extFromType(file.type, file.name);
     let bytes: Uint8Array;
     try {
       bytes = new Uint8Array(await file.arrayBuffer());
-    } catch {
+    } catch (e) {
+      useUiStore.getState().showToast(`Image read failed: ${String(e)}`);
       continue;
     }
     let rel: string;
@@ -124,12 +143,18 @@ async function insertImages(
         ctx.vaultRoot, bytes, ext, ctx.docRel,
         assetsStrategy, pathStyle, todayStamp(),
       );
-    } catch {
+    } catch (e) {
+      // Surface it — a silent skip made pasted images vanish with no trace.
+      useUiStore.getState().showToast(`Image save failed: ${String(e)}`);
       continue;
     }
-    rel = rel.replace(/\\/g, "/");
+    rel = encodeLinkTarget(rel.replace(/\\/g, "/"));
     const text = `![${imageAltFromName(file.name)}](${rel})`;
-    const insertTo = i === 0 ? Math.min(to, view.state.doc.length) : pos;
+    const curLen = view.state.doc.length;
+    if (curLen !== expectedLen) {
+      pos = Math.min(view.state.selection.main.head, curLen);
+    }
+    const insertTo = i === 0 && curLen === expectedLen ? Math.min(to, curLen) : pos;
     try {
       view.dispatch({
         changes: { from: pos, to: insertTo, insert: text },
@@ -138,6 +163,7 @@ async function insertImages(
     } catch {
       return; // view destroyed mid-paste
     }
+    expectedLen = view.state.doc.length;
     pos += text.length;
   }
   try {
@@ -221,8 +247,8 @@ export const imagePasteDropExtension = EditorView.domEventHandlers({
     const insert = files
       .map((f) =>
         /\.md$/i.test(f.name)
-          ? `[[${f.name.replace(/\.md$/i, "")}]]`
-          : `[${f.name}](${f.name})`,
+          ? `[[${f.name.replace(/\.md$/i, "").replace(/[\[\]]/g, "")}]]`
+          : `[${f.name.replace(/[\[\]]/g, "")}](${encodeLinkTarget(f.name)})`,
       )
       .join(" ");
     view.dispatch({

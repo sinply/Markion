@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 
 pub fn read_file(path: &Path) -> std::io::Result<String> {
@@ -33,9 +34,24 @@ pub fn write_file_atomic(path: &Path, content: &str) -> std::io::Result<()> {
         format!(".{file_name}.{pid}.{now}.{n}.tmp")
     };
     let tmp = dir.join(unique);
-    fs::write(&tmp, content)?;
-    fs::rename(&tmp, path)?;
-    Ok(())
+    let commit = || -> std::io::Result<()> {
+        let mut file = fs::File::create(&tmp)?;
+        file.write_all(content.as_bytes())?;
+        // Flush to the OS and disk BEFORE the rename publishes the content, so
+        // a crash right after the rename can never expose an empty or partial
+        // file at the target path.
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&tmp, path)?;
+        Ok(())
+    };
+    let result = commit();
+    if result.is_err() {
+        // Best-effort cleanup: don't leak the temp file on a failed write or
+        // rename (a no-op if the rename already moved it into place).
+        let _ = fs::remove_file(&tmp);
+    }
+    result
 }
 
 #[cfg(test)]
@@ -74,5 +90,25 @@ mod tests {
     fn read_missing_file_errors() {
         let path = Path::new("/nonexistent/does/not/exist.md");
         assert!(read_file(path).is_err());
+    }
+
+    #[test]
+    fn failed_rename_cleans_up_temp_file() {
+        // Renaming onto an existing DIRECTORY fails on every platform, which
+        // exercises the post-create error path.
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("occupied-dir");
+        fs::create_dir_all(&target).unwrap();
+        assert!(write_file_atomic(&target, "data").is_err());
+        let leftovers: Vec<_> = fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().ends_with(".tmp"))
+            .collect();
+        assert!(
+            leftovers.is_empty(),
+            "temp leaked after failure: {:?}",
+            leftovers
+        );
     }
 }

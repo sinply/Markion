@@ -70,14 +70,31 @@ export async function restoreTrash(vaultRoot: string, relPath: string): Promise<
   await invoke<void>("restore_trash", { vaultRoot, relPath });
 }
 
+export interface RenameLinksResult {
+  /** Vault-relative files whose content was rewritten ([[old]] -> [[new]]). */
+  rewrittenFiles: string[];
+}
+
 /** Rename/move a file or folder and rewrite every `[[oldstem]]` reference in
- *  the vault. Returns the number of files whose content was rewritten. */
+ *  the vault to the new name (Obsidian-style). Returns the referrer files
+ *  whose content changed, so callers can suppress watcher echoes for them. */
 export async function renameWithLinks(
   vaultRoot: string,
   oldPath: string,
   newPath: string,
-): Promise<number> {
-  return invoke<number>("rename_with_links", { vaultRoot, oldPath, newPath });
+): Promise<RenameLinksResult> {
+  return invoke<RenameLinksResult>("rename_with_links", { vaultRoot, oldPath, newPath });
+}
+
+/** Base64 in chunks (avoid String.fromCharCode.apply stack overflow on
+ *  multi-MB images), matching the backend's `bytes_b64` parameter. */
+function bytesToBase64(bytes: Uint8Array): string {
+  let out = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    out += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(out);
 }
 
 export async function saveImage(
@@ -85,7 +102,7 @@ export async function saveImage(
   strategy: string, pathStyle: string, date: string,
 ): Promise<string> {
   return invoke<string>("save_image", {
-    vaultRoot, bytes: Array.from(bytes), ext, docRel, strategy, pathStyle, date,
+    vaultRoot, bytesB64: bytesToBase64(bytes), ext, docRel, strategy, pathStyle, date,
   });
 }
 
@@ -135,9 +152,19 @@ export async function searchVault(
   });
 }
 
+export interface ReplaceFileError {
+  /** Vault-relative path of the file that could not be processed. */
+  path: string;
+  error: string;
+}
+
 export interface ReplaceResult {
   filesChanged: number;
   replacements: number;
+  /** Per-file failures — the batch continues past them instead of aborting. */
+  errors: ReplaceFileError[];
+  /** Vault-relative paths actually modified (for echo suppression + refresh). */
+  changedPaths: string[];
 }
 
 /** Replace across all `.md` files in the vault; returns change counts. */

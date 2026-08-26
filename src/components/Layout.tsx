@@ -198,8 +198,27 @@ export function Layout() {
           top: 30,
           zIndex: 5,
         })}
+      <Toast />
       <CommandPalette />
       <FolderTableDialog />
+    </div>
+  );
+}
+
+/** Transient toast for mutation failures (save/rename/delete/replace errors
+ *  used to vanish into empty catch blocks with zero user feedback). */
+function Toast() {
+  const toast = useUiStore((s) => s.toast);
+  const dismissToast = useUiStore((s) => s.dismissToast);
+  if (!toast) return null;
+  return (
+    <div
+      role="status"
+      className="markion-toast"
+      onClick={dismissToast}
+      title={toast.message}
+    >
+      {toast.message}
     </div>
   );
 }

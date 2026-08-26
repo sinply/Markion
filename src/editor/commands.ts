@@ -191,7 +191,9 @@ export type MarkdownCommand =
   | "tableFormat";
 
 /** Insert a table of contents at the cursor: one `- [[doc#heading]]` line per
- *  heading, indented by level, so entries are clickable (anchor jump). */
+ *  heading, indented by level, so entries are clickable (anchor jump).
+ *  Includes ATX (`# …`) and Setext (underlined) headings; skips fenced code
+ *  and the TOC block's own `## Contents` marker. */
 function insertToc(view: EditorView) {
   const { from } = view.state.selection.main;
   const doc = view.state.doc.toString();
@@ -199,21 +201,49 @@ function insertToc(view: EditorView) {
   const docStem = (rel.split("/").pop() ?? "note").replace(/\.md$/i, "");
   const lines: string[] = [];
   let inFence = false;
-  for (const line of doc.split("\n")) {
+  const srcLines = doc.split("\n");
+  for (let i = 0; i < srcLines.length; i++) {
+    const line = srcLines[i];
     if (/^\s*(```|~~~)/.test(line)) {
       inFence = !inFence;
       continue;
     }
     if (inFence) continue;
+    // Setext underline (= H1, - H2): promotes the previous non-blank line.
+    const se = /^\s{0,3}(=+|-+)\s*$/.exec(line);
+    if (se && i > 0) {
+      const prev = srcLines[i - 1];
+      if (
+        prev.trim() !== "" &&
+        !/^\s{0,3}#{1,6}\s/.test(prev) && // already captured as ATX
+        !/^\s{0,3}(=+|-+)\s*$/.test(prev) && // underline directly on underline
+        !/^\s*([-*+]|\d+\.)\s/.test(prev) // list item + dashes = thematic break
+      ) {
+        tocPush(lines, docStem, se[1][0] === "=" ? 1 : 2, prev.trim());
+      }
+      continue;
+    }
     const m = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
     if (!m) continue;
-    const level = m[1].length;
-    const text = m[2].trim();
-    if (text) lines.push(`${"  ".repeat(level - 1)}- [[${docStem}#${text}]]`);
+    // The TOC block carries its own marker heading; including it would make
+    // every regeneration nest a self-reference.
+    if (m[1].length === 2 && m[2].trim() === "Contents") continue;
+    tocPush(lines, docStem, m[1].length, m[2].trim());
   }
   const body = lines.length > 0 ? lines.join("\n") : "- (no headings)";
   const inserted = `\n## Contents\n\n${body}\n`;
   view.dispatch({ changes: { from, insert: inserted } });
+}
+
+/** Format one TOC entry. `|` would be parsed as an alias separator inside
+ *  `[[…]]` and zero-width characters break anchor matching, so both are
+ *  normalized away before emitting the link. */
+function tocPush(out: string[], stem: string, level: number, text: string) {
+  const clean = text
+    .replace(/\|/g, "/")
+    .replace(/[\u200b\u200c\u200d\ufeff]/g, "")
+    .trim();
+  if (clean) out.push(`${"  ".repeat(level - 1)}- [[${stem}#${clean}]]`);
 }
 
 /** Normalize the table under the cursor (re-pipe + re-space all rows). */

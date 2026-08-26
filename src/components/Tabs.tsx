@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useDocStore } from "../stores/docStore";
 import { useUiStore } from "../stores/uiStore";
+import { flushDoc } from "../lib/docSave";
 
 export function Tabs() {
   const openDocs = useDocStore((s) => s.openDocs);
@@ -14,9 +15,12 @@ export function Tabs() {
 
   if (openDocs.length === 0) return null;
 
-  const closeTab = (id: string) => {
+  // Flush pending edits BEFORE removing the doc: after closeDoc the autosave
+  // timer finds no path and silently drops everything unsaved.
+  const closeTab = async (id: string) => {
     const doc = openDocs.find((d) => d.id === id);
     if (doc) addRecentlyClosed({ title: doc.title, path: doc.path });
+    await flushDoc(id);
     closeDoc(id);
   };
 
@@ -47,7 +51,7 @@ export function Tabs() {
           {dirtyMap[doc.id] && <span style={{ color: "#d73a49" }}>{"● "}</span>}
           {doc.title}
           <button
-            onClick={(e) => { e.stopPropagation(); closeTab(doc.id); }}
+            onClick={(e) => { e.stopPropagation(); void closeTab(doc.id); }}
             style={{ marginLeft: 6, border: "none", background: "none", cursor: "pointer", fontSize: 14, color: "var(--fg-muted)" }}
           >
             {"×"}

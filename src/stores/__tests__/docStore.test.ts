@@ -3,7 +3,16 @@ import { useDocStore } from "../docStore";
 
 describe("docStore", () => {
   beforeEach(() => {
-    useDocStore.setState({ openDocs: [], activeDocId: null, dirtyMap: {}, activeContent: "", activeContentDocId: null });
+    useDocStore.setState({
+      openDocs: [],
+      activeDocId: null,
+      dirtyMap: {},
+      activeContent: "",
+      activeContentDocId: null,
+      savedContent: {},
+      drafts: {},
+      loadErrorMap: {},
+    });
   });
 
   it("openDoc adds a document and sets it active", () => {
@@ -134,5 +143,80 @@ describe("docStore", () => {
       useDocStore.getState().renameDoc("missing.md", "other.md", "other.md");
       expect(useDocStore.getState().openDocs[0].path).toBe("a.md");
     });
+  });
+});
+
+describe("docStore drafts (per-doc unsaved content)", () => {
+  beforeEach(() => {
+    useDocStore.setState({
+      openDocs: [],
+      activeDocId: null,
+      dirtyMap: {},
+      activeContent: "",
+      activeContentDocId: null,
+      savedContent: {},
+      drafts: {},
+      loadErrorMap: {},
+    });
+  });
+
+  it("setDraft records per-doc content and mirrors the active doc into activeContent", () => {
+    useDocStore.getState().openDoc("a.md", "a.md");
+    useDocStore.getState().openDoc("b.md", "b.md");
+    useDocStore.getState().setDraft("a.md", "typed in a");
+    // b is active — a's draft must NOT leak into activeContent.
+    expect(useDocStore.getState().activeContent).toBe("");
+    useDocStore.getState().switchTo("a.md");
+    useDocStore.getState().setDraft("a.md", "typed more in a");
+    const s = useDocStore.getState();
+    expect(s.drafts["a.md"]).toBe("typed more in a");
+    expect(s.activeContent).toBe("typed more in a");
+    expect(s.activeContentDocId).toBe("a.md");
+  });
+
+  it("setActiveContent seeds the draft of the active doc (open/load path)", () => {
+    useDocStore.getState().openDoc("a.md", "a.md");
+    useDocStore.getState().setActiveContent("loaded from disk");
+    expect(useDocStore.getState().drafts["a.md"]).toBe("loaded from disk");
+  });
+
+  it("markSaved syncs the draft to the written bytes", () => {
+    useDocStore.getState().openDoc("a.md", "a.md");
+    useDocStore.getState().setDraft("a.md", "v1");
+    useDocStore.getState().setDraft("a.md", "v2 during write");
+    useDocStore.getState().markSaved("a.md", "older write");
+    // markSaved reflects the bytes actually written; a newer keystroke after
+    // it re-dirties via setDraft, so this ordering is observable here.
+    expect(useDocStore.getState().drafts["a.md"]).toBe("older write");
+  });
+
+  it("renameDoc moves the draft and loadError to the new key", () => {
+    useDocStore.getState().openDoc("old.md", "old.md");
+    useDocStore.getState().setDraft("old.md", "pending text");
+    useDocStore.getState().setLoadError("old.md", true);
+    useDocStore.getState().renameDoc("old.md", "new.md", "new.md");
+    const s = useDocStore.getState();
+    expect(s.drafts["new.md"]).toBe("pending text");
+    expect(s.drafts["old.md"]).toBeUndefined();
+    expect(s.loadErrorMap["new.md"]).toBe(true);
+  });
+
+  it("closeDoc / closeDocsUnder / reset drop their drafts and load errors", () => {
+    useDocStore.getState().openDoc("a.md", "a.md");
+    useDocStore.getState().openDoc("n.md", "notes/n.md");
+    useDocStore.getState().setDraft("a.md", "da");
+    useDocStore.getState().setDraft("notes/n.md", "dn");
+    useDocStore.getState().setLoadError("notes/n.md", true);
+    useDocStore.getState().closeDocsUnder("notes");
+    let s = useDocStore.getState();
+    expect(s.drafts).toEqual({ "a.md": "da" });
+    expect(s.loadErrorMap["notes/n.md"]).toBeUndefined();
+    useDocStore.getState().closeDoc("a.md");
+    s = useDocStore.getState();
+    expect(s.drafts).toEqual({});
+    useDocStore.getState().reset();
+    s = useDocStore.getState();
+    expect(s.drafts).toEqual({});
+    expect(s.loadErrorMap).toEqual({});
   });
 });

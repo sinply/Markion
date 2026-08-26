@@ -42,7 +42,31 @@ describe("wikilink autocomplete", () => {
 
   it("filters the list by the partial target", () => {
     const result = wikilinkCompletionSource(ctxFor("text [[desi"));
-    expect(result!.options.map((o) => o.label)).toEqual(["design"]);
+    // "desi" is not an existing stem, so a "new note" entry trails the match.
+    expect(result!.options.map((o) => o.label)).toEqual(["design", "New note: desi"]);
+  });
+
+  it("ranks substring matches after prefix and word-boundary matches", () => {
+    setWikiIndex([
+      { name: "mydesign-notes.md", path: "deep/mydesign-notes.md" }, // substring only
+      { name: "api-design.md", path: "notes/api-design.md" }, // boundary match
+      { name: "design.md", path: "design.md" }, // prefix match
+    ]);
+    const result = wikilinkCompletionSource(ctxFor("text [[desi"));
+    expect(result!.options.map((o) => o.label)).toEqual([
+      "design", // prefix
+      "api-design", // after "-"
+      "mydesign-notes", // plain substring
+      "New note: desi",
+    ]);
+  });
+
+  it("still offers a new note when the exact target is absent, even with fuzzy hits", () => {
+    setWikiIndex([{ name: "design-notes.md", path: "design-notes.md" }]);
+    const result = wikilinkCompletionSource(ctxFor("text [[desi"));
+    const labels = result!.options.map((o) => o.label);
+    expect(labels).toContain("design-notes"); // fuzzy hit
+    expect(labels).toContain("New note: desi"); // exact target missing
   });
 
   it("adds a 'new note' entry when nothing matches", () => {

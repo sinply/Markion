@@ -51,7 +51,9 @@ fn ensure_index<'a>(
     state: &'a LinkIndexState,
     vault_root: &str,
 ) -> Result<std::sync::MutexGuard<'a, Option<LinkIndex>>, String> {
-    let mut guard = state.lock().unwrap();
+    // A poisoned mutex (a command panicked mid-update) must not permanently
+    // break every later command — recover the inner data and keep going.
+    let mut guard = state.lock().unwrap_or_else(|p| p.into_inner());
     let needs_build = guard
         .as_ref()
         .map(|i| i.vault_root != Path::new(vault_root))
@@ -66,29 +68,32 @@ fn ensure_index<'a>(
 }
 
 #[tauri::command]
-pub fn read_file(vault_root: String, path: String) -> Result<String, String> {
+pub async fn read_file(vault_root: String, path: String) -> Result<String, String> {
     let root = Path::new(&vault_root);
     file_io::read_file(&safe_join(root, &path)?).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn write_file_atomic(vault_root: String, path: String, content: String) -> Result<(), String> {
+pub async fn write_file_atomic(
+    vault_root: String,
+    path: String,
+    content: String,
+) -> Result<(), String> {
     let root = Path::new(&vault_root);
-    file_io::write_file_atomic(&safe_join(root, &path)?, &content)
-        .map_err(|e| e.to_string())?;
+    file_io::write_file_atomic(&safe_join(root, &path)?, &content).map_err(|e| e.to_string())?;
     // Write-through projection refresh (md files only; best-effort).
     project_upsert(&vault_root, &path);
     Ok(())
 }
 
 #[tauri::command]
-pub fn build_tree(vault_root: String) -> Result<TreeNode, String> {
+pub async fn build_tree(vault_root: String) -> Result<TreeNode, String> {
     let index = tree_index::load_index(Path::new(&vault_root)).map_err(|e| e.to_string())?;
     Ok(tree_index::build_tree(Path::new(&vault_root), &index))
 }
 
 #[tauri::command]
-pub fn reorder_in_folder(
+pub async fn reorder_in_folder(
     vault_root: String,
     folder_rel: String,
     name: String,
@@ -100,7 +105,7 @@ pub fn reorder_in_folder(
 }
 
 #[tauri::command]
-pub fn set_collapsed(
+pub async fn set_collapsed(
     vault_root: String,
     folder_rel: String,
     collapsed: bool,
@@ -111,7 +116,7 @@ pub fn set_collapsed(
 }
 
 #[tauri::command]
-pub fn move_node(
+pub async fn move_node(
     vault_root: String,
     from_folder: String,
     from_name: String,
@@ -127,6 +132,10 @@ pub fn move_node(
         .to_string();
     let from_path = safe_join(root, &from_rel)?;
     let to_path = safe_join(root, &to_rel)?;
+    // Never clobber: fs::rename would silently replace an existing target.
+    if to_path.exists() {
+        return Err(format!("target already exists: {to_rel}"));
+    }
     if let Some(parent) = to_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -136,20 +145,63 @@ pub fn move_node(
     tree_index::save_index(root, &index).map_err(|e| e.to_string())
 }
 
+/// Image extensions accepted by `save_image` (compared lowercased).
+const IMAGE_EXT_WHITELIST: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"];
+
+/// `^[0-9]{4}-[0-9]{2}-[0-9]{2}$` without a regex dependency here: byte-wise
+/// ASCII checks, so multi-byte UTF-8 input can never slip through.
+fn is_iso_date(s: &str) -> bool {
+    let b = s.as_bytes();
+    b.len() == 10
+        && b.iter().enumerate().all(|(i, c)| match i {
+            4 | 7 => *c == b'-',
+            _ => c.is_ascii_digit(),
+        })
+}
+
 #[tauri::command]
 pub fn save_image(
     vault_root: String,
-    bytes: Vec<u8>,
+    bytes_b64: String,
     ext: String,
     doc_rel: String,
     strategy: String,
     path_style: String,
     date: String,
 ) -> Result<String, String> {
+    // Images arrive base64-encoded: a JSON number array for a 5 MB photo
+    // serialized to ~15-20 MB of IPC payload; base64 keeps it ~6.7 MB.
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(bytes_b64.as_bytes())
+        .map_err(|e| format!("invalid image payload (base64): {e}"))?;
+    let ext = ext.to_lowercase();
+    if !IMAGE_EXT_WHITELIST.contains(&ext.as_str()) {
+        return Err(format!("unsupported image extension: {ext}"));
+    }
+    if !date.is_empty() && !is_iso_date(&date) {
+        return Err(format!(
+            "invalid date (expected YYYY-MM-DD or empty): {date}"
+        ));
+    }
     let strategy = match strategy.as_str() {
         "vault-assets" => AssetsStrategy::VaultAssets,
         "doc-assets" => AssetsStrategy::DocAssets,
-        s if s.starts_with("custom:") => AssetsStrategy::Custom(PathBuf::from(&s[7..])),
+        s if s.starts_with("custom:") => {
+            // Custom dirs are user-configured and may be absolute, but a `..`
+            // segment would let a crafted value escape the intended location.
+            let raw = &s[7..];
+            let dir = PathBuf::from(raw);
+            if dir
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+            {
+                return Err(format!(
+                    "custom assets dir must not contain '..' segments: {raw}"
+                ));
+            }
+            AssetsStrategy::Custom(dir)
+        }
         _ => AssetsStrategy::VaultAssets,
     };
     let style = if path_style == "absolute" {
@@ -176,11 +228,17 @@ mod tests {
     use super::*;
     use tempfile::tempdir;
 
+    /// Many commands are `async fn` so Tauri runs them off the main thread;
+    /// drive them from sync tests via the global async runtime.
+    fn run<F: std::future::Future>(fut: F) -> F::Output {
+        tauri::async_runtime::block_on(fut)
+    }
+
     #[test]
     fn create_file_makes_dirs_and_empty_file() {
         let dir = tempdir().unwrap();
         let root = dir.path().to_string_lossy().to_string();
-        create_file(root.clone(), "notes/new.md".to_string()).unwrap();
+        run(create_file(root.clone(), "notes/new.md".to_string())).unwrap();
         let p = dir.path().join("notes/new.md");
         assert!(p.exists());
         assert_eq!(std::fs::read_to_string(&p).unwrap(), "");
@@ -191,7 +249,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let root = dir.path().to_string_lossy().to_string();
         std::fs::write(dir.path().join("existing.md"), "keep me").unwrap();
-        create_file(root.clone(), "existing.md".to_string()).unwrap();
+        run(create_file(root.clone(), "existing.md".to_string())).unwrap();
         assert_eq!(
             std::fs::read_to_string(dir.path().join("existing.md")).unwrap(),
             "keep me"
@@ -202,10 +260,10 @@ mod tests {
     fn create_folder_makes_nested_dirs_and_is_idempotent() {
         let dir = tempdir().unwrap();
         let root = dir.path().to_string_lossy().to_string();
-        create_folder(root.clone(), "books/chapter-1".to_string()).unwrap();
+        run(create_folder(root.clone(), "books/chapter-1".to_string())).unwrap();
         assert!(dir.path().join("books/chapter-1").is_dir());
         // Creating again succeeds (no "already exists" error).
-        create_folder(root, "books/chapter-1".to_string()).unwrap();
+        run(create_folder(root, "books/chapter-1".to_string())).unwrap();
         assert!(dir.path().join("books/chapter-1").is_dir());
     }
 
@@ -213,7 +271,7 @@ mod tests {
     fn delete_path_missing_path_is_error() {
         let dir = tempdir().unwrap();
         let root = dir.path().to_string_lossy().to_string();
-        let err = delete_path(root, "nope.md".to_string()).unwrap_err();
+        let err = run(delete_path(root, "nope.md".to_string())).unwrap_err();
         assert!(err.contains("does not exist"), "unexpected error: {err}");
     }
 
@@ -224,7 +282,7 @@ mod tests {
         std::fs::write(dir.path().join("gone.md"), "bye").unwrap();
         // Environments without a trash service (headless CI) cannot run this;
         // skip rather than fail - the Windows/macOS desktop paths are the target.
-        match delete_path(root, "gone.md".to_string()) {
+        match run(delete_path(root, "gone.md".to_string())) {
             Ok(()) => assert!(!dir.path().join("gone.md").exists()),
             Err(e) => eprintln!("skipped (no trash service): {e}"),
         }
@@ -236,7 +294,7 @@ mod tests {
         let root = dir.path().to_string_lossy().to_string();
         std::fs::create_dir_all(dir.path().join("folder")).unwrap();
         std::fs::write(dir.path().join("folder/inner.md"), "x").unwrap();
-        match delete_path(root, "folder".to_string()) {
+        match run(delete_path(root, "folder".to_string())) {
             Ok(()) => assert!(!dir.path().join("folder").exists()),
             Err(e) => eprintln!("skipped (no trash service): {e}"),
         }
@@ -247,7 +305,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let root = dir.path().to_string_lossy().to_string();
         std::fs::write(dir.path().join("gone.md"), "bye").unwrap();
-        trash_path(root.clone(), "gone.md".to_string()).unwrap();
+        run(trash_path(root.clone(), "gone.md".to_string())).unwrap();
         assert!(!dir.path().join("gone.md").exists());
         assert!(dir.path().join(".markion/trash/gone.md").exists());
     }
@@ -257,11 +315,11 @@ mod tests {
         let dir = tempdir().unwrap();
         let root = dir.path().to_string_lossy().to_string();
         std::fs::write(dir.path().join("a.md"), "1").unwrap();
-        trash_path(root.clone(), "a.md".to_string()).unwrap();
+        run(trash_path(root.clone(), "a.md".to_string())).unwrap();
         // Trash the same relative path again -> clash with the first copy.
         std::fs::write(dir.path().join("a.md"), "2").unwrap();
-        trash_path(root.clone(), "a.md".to_string()).unwrap();
-        let trashed: Vec<_> = list_trash(root.clone())
+        run(trash_path(root.clone(), "a.md".to_string())).unwrap();
+        let trashed: Vec<_> = run(list_trash(root.clone()))
             .unwrap()
             .into_iter()
             .map(|e| e.path)
@@ -274,7 +332,33 @@ mod tests {
     fn list_trash_returns_nothing_when_empty() {
         let dir = tempdir().unwrap();
         let root = dir.path().to_string_lossy().to_string();
-        assert!(list_trash(root).unwrap().is_empty());
+        assert!(run(list_trash(root)).unwrap().is_empty());
+    }
+
+    #[test]
+    fn list_trash_lists_top_level_folders_without_recursing() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        let trash = dir.path().join(".markion/trash");
+        seed_trash(trash.as_path());
+        let entries = run(list_trash(root)).unwrap();
+        let mut listed: Vec<(String, String)> =
+            entries.into_iter().map(|e| (e.path, e.kind)).collect();
+        listed.sort();
+        assert_eq!(
+            listed,
+            vec![
+                ("subfolder".to_string(), "folder".to_string()),
+                ("top.md".to_string(), "file".to_string()),
+            ],
+            "trash listing must not recurse into subfolders"
+        );
+    }
+
+    fn seed_trash(trash: &Path) {
+        std::fs::create_dir_all(trash.join("subfolder")).unwrap();
+        std::fs::write(trash.join("subfolder/inner.md"), "inner").unwrap();
+        std::fs::write(trash.join("top.md"), "top").unwrap();
     }
 
     #[test]
@@ -282,10 +366,13 @@ mod tests {
         let dir = tempdir().unwrap();
         let root = dir.path().to_string_lossy().to_string();
         std::fs::write(dir.path().join("gone.md"), "bye").unwrap();
-        trash_path(root.clone(), "gone.md".to_string()).unwrap();
-        restore_trash(root.clone(), "gone.md".to_string()).unwrap();
+        run(trash_path(root.clone(), "gone.md".to_string())).unwrap();
+        run(restore_trash(root.clone(), "gone.md".to_string())).unwrap();
         assert!(dir.path().join("gone.md").exists());
-        assert_eq!(std::fs::read_to_string(dir.path().join("gone.md")).unwrap(), "bye");
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("gone.md")).unwrap(),
+            "bye"
+        );
         assert!(!dir.path().join(".markion/trash/gone.md").exists());
     }
 
@@ -294,10 +381,158 @@ mod tests {
         let dir = tempdir().unwrap();
         let root = dir.path().to_string_lossy().to_string();
         std::fs::write(dir.path().join("gone.md"), "bye").unwrap();
-        trash_path(root.clone(), "gone.md".to_string()).unwrap();
+        run(trash_path(root.clone(), "gone.md".to_string())).unwrap();
         std::fs::write(dir.path().join("gone.md"), "new").unwrap();
-        let err = restore_trash(root.clone(), "gone.md".to_string()).unwrap_err();
+        let err = run(restore_trash(root.clone(), "gone.md".to_string())).unwrap_err();
         assert!(err.contains("already exists"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn move_node_onto_existing_target_errors_and_keeps_both_files() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        std::fs::write(dir.path().join("a.md"), "A").unwrap();
+        std::fs::write(dir.path().join("b.md"), "B").unwrap();
+        let err = run(move_node(
+            root,
+            "".to_string(),
+            "a.md".to_string(),
+            "".to_string(),
+            "b.md".to_string(),
+        ))
+        .unwrap_err();
+        assert!(err.contains("target already exists"), "unexpected: {err}");
+        // Both files untouched.
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("a.md")).unwrap(),
+            "A"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("b.md")).unwrap(),
+            "B"
+        );
+    }
+
+    #[test]
+    fn move_node_into_empty_folder_succeeds() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        std::fs::create_dir_all(dir.path().join("dst")).unwrap();
+        std::fs::write(dir.path().join("a.md"), "A").unwrap();
+        run(move_node(
+            root,
+            "".to_string(),
+            "a.md".to_string(),
+            "dst".to_string(),
+            "a.md".to_string(),
+        ))
+        .unwrap();
+        assert!(!dir.path().join("a.md").exists());
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("dst/a.md")).unwrap(),
+            "A"
+        );
+    }
+
+    #[test]
+    fn save_image_rejects_unknown_extension() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        let err = save_image(
+            root,
+            "eA==".to_string(),
+            "exe".to_string(),
+            "a.md".to_string(),
+            "vault-assets".to_string(),
+            "relative".to_string(),
+            String::new(),
+        )
+        .unwrap_err();
+        assert!(err.contains("unsupported image extension"), "{err}");
+    }
+
+    #[test]
+    fn save_image_extension_is_case_insensitive() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        save_image(
+            root.clone(),
+            "eA==".to_string(),
+            "PNG".to_string(),
+            "a.md".to_string(),
+            "vault-assets".to_string(),
+            "relative".to_string(),
+            String::new(),
+        )
+        .unwrap();
+        let assets = dir.path().join("assets");
+        let names: Vec<String> = std::fs::read_dir(&assets)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .collect();
+        assert_eq!(names.len(), 1);
+        assert!(
+            names[0].ends_with(".png"),
+            "expected lowercase ext: {names:?}"
+        );
+    }
+
+    #[test]
+    fn save_image_rejects_malformed_date_but_accepts_iso_or_empty() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        for bad in ["2026-7-31", "20260731", "not-a-date", "2026-07-3x"] {
+            let err = save_image(
+                root.clone(),
+                "eA==".to_string(),
+                "png".to_string(),
+                "a.md".to_string(),
+                "vault-assets".to_string(),
+                "relative".to_string(),
+                bad.to_string(),
+            )
+            .unwrap_err();
+            assert!(err.contains("invalid date"), "{bad}: {err}");
+        }
+        // Empty date and a well-formed date are accepted.
+        save_image(
+            root.clone(),
+            "eA==".to_string(),
+            "png".to_string(),
+            "a.md".to_string(),
+            "vault-assets".to_string(),
+            "relative".to_string(),
+            String::new(),
+        )
+        .unwrap();
+        save_image(
+            root,
+            "eQ==".to_string(),
+            "png".to_string(),
+            "a.md".to_string(),
+            "vault-assets".to_string(),
+            "relative".to_string(),
+            "2026-07-31".to_string(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn save_image_rejects_custom_dir_with_parent_segments() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        let err = save_image(
+            root,
+            "eA==".to_string(),
+            "png".to_string(),
+            "a.md".to_string(),
+            "custom:pics/../evil".to_string(),
+            "relative".to_string(),
+            String::new(),
+        )
+        .unwrap_err();
+        assert!(err.contains("'..'"), "{err}");
     }
 
     #[test]
@@ -320,7 +555,7 @@ mod tests {
 }
 
 #[tauri::command]
-pub fn find_backlinks(
+pub async fn find_backlinks(
     vault_root: String,
     target: String,
     index: tauri::State<'_, LinkIndexState>,
@@ -336,7 +571,7 @@ pub fn find_backlinks(
 }
 
 #[tauri::command]
-pub fn scan_graph(
+pub async fn scan_graph(
     vault_root: String,
     index: tauri::State<'_, LinkIndexState>,
 ) -> Result<(Vec<GraphNode>, Vec<GraphEdge>), String> {
@@ -353,7 +588,7 @@ pub fn scan_graph(
 /// `use_regex`, and `max_hits` are optional; an invalid regex pattern returns
 /// an error surfaced to the frontend.
 #[tauri::command]
-pub fn search_vault(
+pub async fn search_vault(
     vault_root: String,
     query: String,
     case_sensitive: Option<bool>,
@@ -373,7 +608,7 @@ pub fn search_vault(
 /// Replace `query` with `replacement` across all `.md` files in the vault.
 /// Returns how many files changed and how many replacements were made.
 #[tauri::command]
-pub fn replace_in_vault(
+pub async fn replace_in_vault(
     vault_root: String,
     query: String,
     replacement: String,
@@ -393,14 +628,14 @@ pub fn replace_in_vault(
 /// Scan the vault for `#tag` occurrences (skipping fenced code, inline code,
 /// and wiki links). Returns one entry per (tag, file) pair.
 #[tauri::command]
-pub fn scan_tags(vault_root: String) -> Result<Vec<crate::tags::TagEntry>, String> {
+pub async fn scan_tags(vault_root: String) -> Result<Vec<crate::tags::TagEntry>, String> {
     crate::tags::scan_tags(Path::new(&vault_root)).map_err(|e| e.to_string())
 }
 
 /// Create an empty markdown file at `path` (relative to vault root). Parent
 /// directories are created as needed. Never overwrites an existing file.
 #[tauri::command]
-pub fn create_file(vault_root: String, path: String) -> Result<(), String> {
+pub async fn create_file(vault_root: String, path: String) -> Result<(), String> {
     let root = Path::new(&vault_root);
     let full = safe_join(root, &path)?;
     if full.exists() {
@@ -422,7 +657,7 @@ pub fn create_file(vault_root: String, path: String) -> Result<(), String> {
 /// Create a folder at `path` (relative to vault root). Idempotent: creating
 /// an existing folder succeeds, mirroring `create_file` semantics.
 #[tauri::command]
-pub fn create_folder(vault_root: String, path: String) -> Result<(), String> {
+pub async fn create_folder(vault_root: String, path: String) -> Result<(), String> {
     let full = safe_join(Path::new(&vault_root), &path)?;
     std::fs::create_dir_all(full).map_err(|e| e.to_string())
 }
@@ -430,7 +665,7 @@ pub fn create_folder(vault_root: String, path: String) -> Result<(), String> {
 /// Move a file or folder (relative to vault root) to the OS trash/recycle
 /// bin. Never hard-deletes: on failure the on-disk data is untouched.
 #[tauri::command]
-pub fn delete_path(vault_root: String, path: String) -> Result<(), String> {
+pub async fn delete_path(vault_root: String, path: String) -> Result<(), String> {
     let root = Path::new(&vault_root);
     let full = safe_join(root, &path)?;
     if !full.exists() {
@@ -450,7 +685,7 @@ fn trash_dir(root: &Path) -> PathBuf {
 /// preserving its relative path so it can be restored. On a name clash inside
 /// the trash a numeric suffix is appended.
 #[tauri::command]
-pub fn trash_path(vault_root: String, path: String) -> Result<(), String> {
+pub async fn trash_path(vault_root: String, path: String) -> Result<(), String> {
     let root = Path::new(&vault_root);
     let full = safe_join(root, &path)?;
     if !full.exists() {
@@ -495,24 +730,23 @@ pub struct TrashEntry {
     pub modified: u64,
 }
 
-/// List the vault-internal trash, newest first.
+/// List the vault-internal trash, newest first. Only TOP-LEVEL entries are
+/// listed (a trashed folder appears as one entry with kind "folder"); we do
+/// not recurse into subdirectories.
 #[tauri::command]
-pub fn list_trash(vault_root: String) -> Result<Vec<TrashEntry>, String> {
+pub async fn list_trash(vault_root: String) -> Result<Vec<TrashEntry>, String> {
     let root = Path::new(&vault_root);
     let dir = trash_dir(root);
     if !dir.exists() {
         return Ok(Vec::new());
     }
     let mut entries = Vec::new();
-    for entry in walkdir::WalkDir::new(&dir)
-        .min_depth(1)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
-        if !entry.file_type().is_file() {
-            continue;
-        }
+    for entry in std::fs::read_dir(&dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
         let abs = entry.path();
+        // file_type() does not follow symlinks; a symlinked trash entry is
+        // reported by its own kind without walking into it.
+        let ft = entry.file_type().map_err(|e| e.to_string())?;
         let rel = abs
             .strip_prefix(&dir)
             .map_err(|e| e.to_string())?
@@ -531,7 +765,11 @@ pub fn list_trash(vault_root: String) -> Result<Vec<TrashEntry>, String> {
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default(),
             path: rel,
-            kind: if abs.is_dir() { "folder".into() } else { "file".into() },
+            kind: if ft.is_dir() {
+                "folder".into()
+            } else {
+                "file".into()
+            },
             modified,
         });
     }
@@ -543,7 +781,7 @@ pub fn list_trash(vault_root: String) -> Result<Vec<TrashEntry>, String> {
 /// vault-relative location (the `path` returned by list_trash). Fails if the
 /// destination is already occupied.
 #[tauri::command]
-pub fn restore_trash(vault_root: String, rel_path: String) -> Result<(), String> {
+pub async fn restore_trash(vault_root: String, rel_path: String) -> Result<(), String> {
     let root = Path::new(&vault_root);
     // Guard the destination (and thus the trash path it reads from) against
     // `..` escapes — restore reads `.markion/trash/{rel_path}` and writes
@@ -564,14 +802,22 @@ pub fn restore_trash(vault_root: String, rel_path: String) -> Result<(), String>
 }
 
 /// Rename/move a file or folder and rewrite every `[[oldstem]]` reference in
-/// the vault to the new name. Returns the number of files rewritten.
+/// the vault to the new name. Returns the files whose content was rewritten
+/// so the frontend can suppress watcher echoes for them.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenameLinksResult {
+    /// Vault-relative paths whose content was rewritten (link referrers).
+    pub rewritten_files: Vec<String>,
+}
+
 #[tauri::command]
 pub fn rename_with_links(
     vault_root: String,
     old_path: String,
     new_path: String,
     index: tauri::State<'_, LinkIndexState>,
-) -> Result<usize, String> {
+) -> Result<RenameLinksResult, String> {
     let mut guard = ensure_index(index.inner(), &vault_root)?;
     let idx = guard.as_mut().unwrap();
     if idx.is_empty() {
@@ -582,7 +828,7 @@ pub fn rename_with_links(
     let root = Path::new(&vault_root);
     let _ = safe_join(root, &old_path)?;
     let _ = safe_join(root, &new_path)?;
-    let count = idx
+    let rewritten = idx
         .rename_with_links(root, &old_path, &new_path)
         .map_err(|e| e.to_string())?;
     // Projection sync: drop the old path (prefix-aware for folders), then
@@ -599,7 +845,9 @@ pub fn rename_with_links(
     } else {
         project_upsert(&vault_root, &new_path);
     }
-    Ok(count)
+    Ok(RenameLinksResult {
+        rewritten_files: rewritten,
+    })
 }
 
 /// Write `content` to an arbitrary absolute path (used by export). Parent
@@ -616,7 +864,7 @@ pub fn export_file(path: String, content: String) -> Result<(), String> {
 
 /// Size in bytes of a vault-relative file (for the large-file open warning).
 #[tauri::command]
-pub fn file_size(vault_root: String, path: String) -> Result<u64, String> {
+pub async fn file_size(vault_root: String, path: String) -> Result<u64, String> {
     let full = safe_join(Path::new(&vault_root), &path)?;
     std::fs::metadata(&full)
         .map(|m| m.len())
@@ -669,7 +917,8 @@ pub fn start_vault_watch(
     let (watcher, rx) = crate::watcher::start_watcher(&root, std::time::Duration::from_millis(200))
         .map_err(|e| e.to_string())?;
     // Replace any previous watcher (dropping the old one stops its watch).
-    *state.lock().unwrap() = Some(watcher);
+    // Poisoned-mutex tolerant: recover the inner value instead of panicking.
+    *state.lock().unwrap_or_else(|p| p.into_inner()) = Some(watcher);
     let app_handle = app.clone();
     std::thread::spawn(move || {
         // rx.recv blocks until the watcher is dropped (app exit) or events arrive.
@@ -681,7 +930,7 @@ pub fn start_vault_watch(
             // backlinks/graph queries never re-scan the whole vault.
             {
                 let index_state = app_handle.state::<LinkIndexState>();
-                let mut guard = index_state.lock().unwrap();
+                let mut guard = index_state.lock().unwrap_or_else(|p| p.into_inner());
                 match guard.as_mut() {
                     Some(idx) if idx.vault_root == root => idx.update(&root, &paths),
                     _ => {
@@ -711,35 +960,22 @@ pub fn start_vault_watch(
     Ok(())
 }
 
-/// Library home data: document cards (newest first), optionally scoped to a
-/// folder. Served from the SQLite projection, which self-heals when stale.
-/// A cold start (first open) rebuilds the projection; progress is streamed to
-/// the frontend as `index-progress` events for the loading bar.
-#[tauri::command]
-pub fn query_library(
-    app: tauri::AppHandle,
-    vault_root: String,
-    folder: Option<String>,
-) -> Result<Vec<docdb::LibraryEntry>, String> {
-    use tauri::Emitter;
-    let root = Path::new(&vault_root);
-    docdb::ensure_ready_with_progress(root, Some(&|done, total| {
-        let _ = app.emit("index-progress", serde_json::json!({ "done": done, "total": total }));
-    }))?;
-    let _ = app.emit("index-progress", serde_json::json!({ "done": -1, "total": -1 }));
-    docdb::query_library_ready(root, folder.as_deref())
-}
-
 /// Folder table view: direct `.md` children as rows, frontmatter keys as
 /// auto-inferred columns (read from disk so brand-new notes appear at once).
 #[tauri::command]
-pub fn query_folder_table(vault_root: String, folder: String) -> Result<docdb::FolderTable, String> {
+pub async fn query_folder_table(
+    vault_root: String,
+    folder: String,
+) -> Result<docdb::FolderTable, String> {
     docdb::query_folder_table(Path::new(&vault_root), &folder)
 }
 
 /// Dataview ```table queries: recursive .md walk under a folder with
 /// mtime/size plus frontmatter pairs per row.
 #[tauri::command]
-pub fn query_dataview_rows(vault_root: String, folder: String) -> Result<Vec<docdb::DataviewRow>, String> {
+pub async fn query_dataview_rows(
+    vault_root: String,
+    folder: String,
+) -> Result<Vec<docdb::DataviewRow>, String> {
     docdb::query_dataview_rows(Path::new(&vault_root), &folder)
 }

@@ -163,6 +163,43 @@
 - frontmatter 文档标题/代码/表格消失、--- 误判、长文档 >100 行裸源码
   (scanBlocks 前 100 行 head 截断相关,v0.15.1 后续,另一会话)
 
+## 已实现功能(v0.16.0 全量审查修复批,2026-08-25)
+
+### 数据安全(P0)
+- **保存单写者改造**:每文档 draft 镜像;关页签/切库/删除前先 flush;脏文档
+  重激活不再被磁盘旧内容回读覆盖;加载失败以只读降载;窗口关闭拦截未保存改动
+- ConflictDialog「保留我的」立即写盘并标记已保存(此前只关弹窗,磁盘与内存
+  持续分叉);DeletedDialog 另存默认定位到当前库根目录
+- 属性面板/Base 表格单元格编辑走同一管线:活动文档经 EditorView,打开未挂载
+  文档更新其 draft,只有未打开文件才直接写盘
+
+### 功能缺陷(P1)
+- **重命名链接改写加固**:目录改名/移动/仅大小写改名不再触碰任何文件内容;
+  `[[目录/名]]` 前缀链接仅在指向被改名文件所在目录时才改写;自引用 `[[旧名]]`
+  一并改写;Unicode 大小写折叠与索引一致;目标存在检查放行仅大小写差异
+- 统一 `[[..]]` 词法器(wikilink.rs):`#锚点`/`#^块引用` 正确解析、围栏与
+  行内代码内幻影链接消除、非 UTF8 跳过不中断遍历、点目录不入索引、`.MD` 大小写
+- 搜索替换逐文件容错(errors+changedPaths 返回);替换前 flush 脏文档,替换后
+  刷新所有打开的受影响页签并抑制 watcher 回声;全库搜索跳过坏文件不整体失败
+- 表格工具栏先合并未提交单元格再变换;徽章点击按 DOM 实时定位;mermaid/
+  表格 DOM 跨事务复用(内容不变不再整块重建);灯箱 tabindex+Escape 可关
+
+### 改进(P2)
+- 全局错误 toast:保存失败/改名失败/删除失败/图片粘贴失败等不再静默吞掉
+- 快捷键自定义支持冲突检测(拒绝重复绑定)与解绑(输入 -)
+- 近期文件按库过滤(跨库不再串);切换库时清空 pendingJump/冲突/删除弹窗残留
+- 图片粘贴 IPC 改 base64(载荷 ~3 倍缩减)+链接目标百分号转义+插入位竞态重锚定
+- TOC 支持 Setext 标题、跳过自身 Contents 标记、清洗 `|` 与零宽字符;
+  findHeadingLine 同步支持 Setext 锚点跳转
+- wikilink 补全升级为前缀>词边界>子串三级排序,精确名不存在时始终提供新建项
+- frontmatter 引号值解码转义(`\"`/`''`),修复属性面板反复保存时反斜杠无限增殖
+- 导出:html2canvas 样式隔离(all:initial)防主题 CSS 渗入;PDF 按页切片编码
+  (原整画布逐页重复编码,O(pages²) 内存尖峰与接缝伪影)
+- GraphPanel 滚轮缩放原生非被动监听(preventDefault 真正生效);
+  CommandPalette 层级提升且有模态门控;FileTree 高度 ResizeObserver 自适应;
+  Base 表格数值列按数值排序;save_image IPC base64 化;docdb ensure_ready
+  稳态不再全盘走文件树;移除死命令 query_library(Tauri 层)
+
 ## 技术备忘(踩坑记录)(续)
 
 - **Tauri 返回值不会自动转 camelCase**:invoke 参数会(snake↔camel 自动),
@@ -200,3 +237,32 @@
   `[[...]]`,跳过 ``` 围栏;匹配大小写不敏感,保留路径前缀与 `|alias`。
 - **Rust config 字段**:前端 `Settings` 与 Rust `config.rs::Settings` 必须同步
   (曾漏掉 `show_tags` 导致读配置后被静默重置,已修)。
+
+### 2026-08-25 全量审查修复批(技术备忘续)
+
+- **单写者原则是数据安全的根**:任何"绕过打开中的编辑器直接写盘"的路径
+  (属性面板、base 单元格、冲突保留、搜索替换刷新)都必须路由到同一条管线:
+  活动文档走 EditorView.dispatch,非活动但打开的文档走 setDraft+markDirty,
+  只有未打开的文件才允许 writeFileAtomic。违反它=自动保存回写旧内容覆盖
+  外部修改(本次修掉的 P0 家族的根源)。
+- **content-only eq 的前提是事件期动态定位**:WidgetType.eq 去掉位置字段后,
+  CM6 会在块位移时复用旧 DOM,构造期闭包里的 from/to 全部作废。所有交互
+  (工具栏/徽章/blur 提交)必须用 `view.posAtDOM(元素)` + 语法树(或行扫描)
+  在点击瞬间求位;否则要么跳错位置,要么退回 position-sensitive eq 造成
+  mermaid/markdown-it 每键重渲染。TaskCheckbox 因 DOM 极廉刻意保留位置 eq。
+- **react-arborist 需要像素高度**:一次性 `window.innerHeight` 在窗口缩放后
+  失效(底部行不可达),用 ResizeObserver 跟踪容器实际高度;jsdom 无
+  ResizeObserver,组件内要 typeof 守卫。
+- **vi.mock 工厂鸭子类型要完整**:产品代码动态 import 的模块(docSave 等)
+  会静态引用 ipc 的 `writeFileAtomic` 与 store 的 `.getState()`;测试工厂缺
+  这几个成员时错误被 catch 吞掉,表现为"spy 从未被调用"的超时假象。给 fake
+  store 补 `getState`、给 ipc mock 补全用到的导出即可。
+- **PowerShell 管道跑 cargo/vitest 时 stderr 会污染退出码**:`2>&1 |` 把
+  NativeCommandError 记录进输出流导致 `$LASTEXITCODE` 为 1 但实际全绿;
+  用 `--quiet` + `Out-String -Stream | Select-String "test result"` 复核。
+- **图片 IPC 用 base64 而非 JSON 数字数组**:5MB 图片序列化成数字数组约
+  20MB;`bytes_b64: String` + 分块 String.fromCharCode + Rust base64 crate
+  解码,载荷降到 ~6.7MB。
+- **Tauri watcher 回声抑制靠 changedPaths 清单**:rename_with_links /
+  replace_in_vault 返回"本次被我改写的文件列表",前端逐个 markAppChange,
+  否则自己的批量改写会触发外部修改冲突弹窗。

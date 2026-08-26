@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useVaultStore } from "../stores/vaultStore";
 import { useSettingsStore } from "../stores/settingsStore";
+import { useUiStore } from "../stores/uiStore";
 import { openNote } from "../lib/openNote";
 import { docTitle } from "../lib/docTitle";
 import { buildCommands, createAndOpenNote, type Command } from "../lib/commands";
@@ -58,14 +59,31 @@ export function CommandPalette() {
   const [sel, setSel] = useState(0);
 
   useEffect(() => {
+    // Another modal (search/settings/conflict/…) being open must suppress
+    // both the Ctrl+P toggle and the global Escape close — otherwise keys
+    // typed into a dialog leaked into the hidden palette underneath.
+    const anyModal = () => {
+      const s = useUiStore.getState();
+      return (
+        s.searchOpen ||
+        s.settingsOpen ||
+        s.helpOpen ||
+        s.shortcutsOpen ||
+        s.aboutOpen ||
+        s.vaultsOpen ||
+        !!s.conflict ||
+        !!s.deletedDoc
+      );
+    };
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === "p") {
+        if (anyModal()) return;
         e.preventDefault();
         setOpen((o) => !o);
         setQuery("");
         setSel(0);
       }
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape" && !anyModal()) setOpen(false);
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -109,7 +127,9 @@ export function CommandPalette() {
       style={{
         position: "fixed", top: "15%", left: "30%", width: "40%", maxHeight: "60%",
         background: "var(--bg)", boxShadow: "0 4px 24px rgba(0,0,0,0.25)", borderRadius: 8,
-        zIndex: 1000, overflow: "hidden", display: "flex", flexDirection: "column",
+        // Above the search dialog (1100) and toasts (2000); system modals like
+        // the shortcuts dialog (3000) still stack over the palette.
+        zIndex: 2500, overflow: "hidden", display: "flex", flexDirection: "column",
       }}
     >
       <input

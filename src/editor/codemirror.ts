@@ -138,9 +138,13 @@ export function createEditorState(
     markdownContext?: MarkdownContext;
     /** Called on right-click inside the editor (custom context menu). */
     onEditorContextMenu?: (x: number, y: number, view: EditorView) => void;
+    /** false = mount read-only (used when a doc failed to load from disk, so
+     *  an empty buffer can never be autosaved over the real file). */
+    editable?: boolean;
   },
 ): EditorState {
   const livePreview = opts?.livePreview ?? true;
+  const editable = opts?.editable ?? true;
   const updateListener = EditorView.updateListener.of((update) => {
     if (update.docChanged) {
       onChange(update.state.doc.toString());
@@ -166,6 +170,9 @@ export function createEditorState(
       // because the browser can only paint one native selection at a time.
       EditorState.allowMultipleSelections.of(true),
       drawSelection(),
+      // Read-only mount (failed load): block edits at both the state and the
+      // view level so no transaction can modify the buffer.
+      ...(editable ? [] : [EditorState.readOnly.of(true), EditorView.editable.of(false)]),
       // Soft-wrap long lines instead of a horizontal scrollbar at the bottom.
       EditorView.lineWrapping,
       lineNumbers(),

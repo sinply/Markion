@@ -34,7 +34,12 @@ function runShortcut(id: string): void {
       if (!docId) break;
       const doc = store.openDocs.find((d) => d.id === docId);
       if (doc) useUiStore.getState().addRecentlyClosed({ title: doc.title, path: doc.path });
-      store.closeDoc(docId);
+      // Persist pending edits before the tab disappears (the autosave timer
+      // cannot save a doc that is no longer open).
+      void import("../lib/docSave").then(async (m) => {
+        await m.flushDoc(docId);
+        useDocStore.getState().closeDoc(docId);
+      });
       break;
     }
     case "app:find": {
@@ -244,22 +249,31 @@ async function saveActive(asNew: boolean) {
   // Read the editor's live text, not the (possibly stale) store snapshot:
   // activeContent is only refreshed on open/switch/load, so a manual save
   // right after typing would otherwise rewrite the file with the open-time
-  // content and silently discard the edits. Fall back to the store content
-  // only when the editor isn't mounted.
+  // content and silently discard the edits. Fall back to the doc's draft
+  // when the editor isn't mounted.
   const view = getEditorView();
-  const content = view ? view.state.doc.toString() : docStore.activeContent;
+  const content = view ? view.state.doc.toString() : (useDocStore.getState().drafts[id] ?? docStore.activeContent);
   try {
     await writeFileAtomic(root, targetRel, content);
-    docStore.markSaved(id, content);
-    docStore.markClean(id);
+    // Only report saved when nothing newer was typed during the write.
+    const after = useDocStore.getState();
+    if ((after.drafts[id] ?? content) === content) {
+      after.markSaved(id, content);
+      after.markClean(id);
+    }
     if (asNew) {
       docStore.openDoc(targetRel.split("/").pop() ?? targetRel, targetRel);
       docStore.setActiveContent(content);
-      useUiStore.getState().addRecent(targetRel);
+      const fresh = useDocStore.getState();
+      fresh.markSaved(targetRel, content);
+      fresh.markClean(targetRel);
+      useUiStore.getState().addRecent(root, targetRel);
     } else {
-      useUiStore.getState().addRecent(targetRel);
+      useUiStore.getState().addRecent(root, targetRel);
     }
-  } catch {
-    // save failed — stays dirty
+  } catch (e) {
+    // save failed — stays dirty, but surface it (no phantom "saved" state)
+    const { getDict } = await import("../lib/i18n");
+    useUiStore.getState().showToast(`${getDict().saveFailed}: ${String(e)}`);
   }
 }

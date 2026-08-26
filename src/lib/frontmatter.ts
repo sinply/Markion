@@ -89,17 +89,35 @@ function bodyLooksYaml(body: string): boolean {
   return false;
 }
 
+/** Decode the escape subset yamlScalar emits (and YAML requires us to accept):
+ *  `\"` -> `"`, `\\` -> `\`. Character-scan so trailing backslashes survive. */
+function unescapeDoubleQuoted(s: string): string {
+  let out = "";
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === "\\" && i + 1 < s.length && (s[i + 1] === '"' || s[i + 1] === "\\")) {
+      out += s[i + 1];
+      i++;
+    } else {
+      out += s[i];
+    }
+  }
+  return out;
+}
+
 /** Parse a YAML frontmatter body into [key, value] pairs (top-level only). */
 export function parseFrontmatter(body: string): [string, string][] {
   const props: [string, string][] = [];
   for (const line of body.split("\n")) {
     const idx = line.indexOf(":");
     if (idx <= 0) continue; // skip comment/blank/indented lines
-    let key = line.slice(0, idx).trim();
+    const key = line.slice(0, idx).trim();
     let val = line.slice(idx + 1).trim();
-    // strip surrounding quotes
-    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-      val = val.slice(1, -1);
+    // Strip surrounding quotes AND decode their escapes — without this,
+    // parse -> edit -> serialize grew `\"` into `\\"` on every save.
+    if (val.startsWith('"') && val.endsWith('"') && val.length >= 2) {
+      val = unescapeDoubleQuoted(val.slice(1, -1));
+    } else if (val.startsWith("'") && val.endsWith("'") && val.length >= 2) {
+      val = val.slice(1, -1).replace(/''/g, "'");
     }
     if (key) props.push([key, val]);
   }
@@ -197,11 +215,20 @@ function patchFrontmatterBody(body: string, props: [string, string][]): string {
     }
     const val = wanted.get(key)!;
     const currentVal = line.slice(idx + 1).trim();
-    if (currentVal === "" && hasContinuation(lines, i)) {
+    const isBlock = currentVal === "" && hasContinuation(lines, i);
+    if (isBlock && (val === "" || val === currentVal)) {
       // The key holds a multiline structure that parseFrontmatter flattens
-      // to "" — an untouched block. Preserve it verbatim so a no-op Properties
-      // save (or a Base-cell edit elsewhere) can't delete the list.
+      // to "" — and the caller didn't set a real value for it (no-op save,
+      // or a Base-cell edit elsewhere). Preserve the block verbatim.
       out.push(line);
+      continue;
+    }
+    if (isBlock && val !== "") {
+      // The caller DID set a real value on a block-style key: replace the
+      // `key:` line with a flat scalar AND drop the old indented list —
+      // otherwise both survive (`tags: x` + stale `- old` lines below).
+      skipIndented = countContinuation(lines, i);
+      out.push(`${key}: ${yamlScalar(val)}`);
       continue;
     }
     if (val === currentVal || (val === "" && currentVal !== "")) {

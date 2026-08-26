@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useVaultStore, getDefaultVault } from "./stores/vaultStore";
+import { useDocStore } from "./stores/docStore";
 import { useSettingsStore } from "./stores/settingsStore";
 import { startVaultWatch } from "./lib/ipc";
 import { Layout } from "./components/Layout";
@@ -48,6 +49,34 @@ export default function App() {
   const [booted, setBooted] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Quit interception: flush every dirty doc's pending autosave before the
+  // window actually closes. Without this, edits typed within the 1s debounce
+  // window (or after a failed save) are destroyed with the webview.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void (async () => {
+      try {
+        const { getCurrentWindow } = await import("@tauri-apps/api/window");
+        const win = getCurrentWindow();
+        unlisten = await win.onCloseRequested(async (event) => {
+          const dirty = Object.entries(useDocStore.getState().dirtyMap).filter(
+            ([, d]) => d,
+          ).length;
+          if (!dirty) return; // nothing pending — let the close proceed
+          event.preventDefault();
+          const { flushAllDirty } = await import("./lib/docSave");
+          await flushAllDirty();
+          void win.close(); // re-request: now clean, the handler lets it pass
+        });
+      } catch {
+        // window API unavailable (browser dev build / tests) — nothing to do
+      }
+    })();
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
   // On startup, auto-open the default vault if one was saved.
   useEffect(() => {
     let cancelled = false;
@@ -75,14 +104,23 @@ export default function App() {
     const folder = await open({ directory: true, multiple: false });
     if (typeof folder !== "string") return;
     setLoading(true);
-    await openVaultAndWatch(folder, openVault, loadSettings);
-    setLoading(false);
-    // Ask the user once (when no default is set) whether to make it the default.
-    if (!getDefaultVault()) {
-      const makeDefault = window.confirm(
-        `Set "${folder}" as the default vault to auto-open on startup?`,
-      );
-      if (makeDefault) setAsDefault();
+    // A failing open (unreadable folder, permission denied, cloud-placeholder
+    // errors) must return to the picker — without this guard the app used to
+    // sit on the Splash screen forever.
+    try {
+      await openVaultAndWatch(folder, openVault, loadSettings);
+      // Ask the user once (when no default is set) whether to make it the default.
+      if (!getDefaultVault()) {
+        const makeDefault = window.confirm(
+          `Set "${folder}" as the default vault to auto-open on startup?`,
+        );
+        if (makeDefault) setAsDefault();
+      }
+    } catch (e) {
+      const { useUiStore } = await import("./stores/uiStore");
+      useUiStore.getState().showToast(String(e));
+    } finally {
+      setLoading(false);
     }
   };
 

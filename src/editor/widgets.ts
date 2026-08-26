@@ -1,16 +1,144 @@
 import { WidgetType } from "@codemirror/view";
 import type { EditorView } from "@codemirror/view";
+import type { EditorState } from "@codemirror/state";
+import type { SyntaxNode } from "@lezer/common";
+import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import { renderMarkdown, renderMarkdownWithTableSource, highlightCode, isMermaidLang } from "./markdown";
 import { markdownContextFacet, imageToSrc, isRemoteSrc } from "./media";
 import { wikiLabel } from "./wikiIndex";
 import { extractFrontmatter, parseFrontmatter } from "../lib/frontmatter";
 import { parseDataviewQuery, fieldValue, compareByField } from "./dataview";
+import { getEditorView } from "./registry";
+
+// ---- Dynamic position resolution ----
+//
+// Every interactive widget uses CONTENT-ONLY eq(). When eq() matches across
+// transactions, CM6 keeps the existing widget DOM (and its event handlers,
+// which close over the ORIGINAL widget instance) instead of rebuilding it.
+// Handlers therefore MUST NOT read construction-time position fields — they
+// resolve every document position at EVENT time: map the widget's DOM node
+// back into the document with view.posAtDOM(), then recover the exact range
+// from the syntax tree around that hint. This kills both bug classes at once:
+// stale-position jumps (handler using an offset from before an edit shifted
+// the block) and per-keystroke DOM churn (position-sensitive eq forcing a
+// full rebuild — and a full mermaid.render/markdown-it pass — whenever any
+// keystroke elsewhere moved the block).
+
+/** Current document-position hints for an element inside a live widget.
+ *  CM6 maps a DOM node inside a widget to the boundary of the widget's
+ *  decoration range; probing with and without a child offset covers either
+ *  boundary. Returns [] when the element isn't attached to `view` (destroyed
+ *  widget, or a bare mock view in unit tests). */
+function domPositionHints(view: EditorView, el: HTMLElement): number[] {
+  const hints: number[] = [];
+  try {
+    for (const offset of [0, el.childNodes.length]) {
+      const pos = view.posAtDOM(el, offset);
+      if (Number.isFinite(pos) && pos >= 0 && !hints.includes(pos)) hints.push(pos);
+    }
+  } catch {
+    // Not part of this view's content — no live position available.
+  }
+  return hints;
+}
+
+/** Innermost node of one of `types` around `hint`, resolved against the fully
+ *  expanded syntax tree; returns that node's exact [from, to]. Both boundary
+ *  biases are probed because the hint may sit on either side of the widget. */
+function nodeRangeAround(
+  state: EditorState,
+  hint: number,
+  types: string[],
+): { from: number; to: number } | null {
+  const at = Math.max(0, Math.min(hint, state.doc.length));
+  try {
+    const tree = ensureSyntaxTree(state, state.doc.length, 500) ?? syntaxTree(state);
+    for (const side of [-1, 1] as const) {
+      let node: SyntaxNode | null = tree.resolveInner(at, side);
+      while (node) {
+        if (types.includes(node.type.name)) return { from: node.from, to: node.to };
+        node = node.parent;
+      }
+    }
+  } catch {
+    // No parser available (bare EditorState in unit tests) — fall through.
+  }
+  return null;
+}
+
+/** Fallback for fenced blocks when the tree can't confirm the node: scan up
+ *  from `hint` to the opening ``` fence carrying `lang`, then down to the
+ *  closing fence (or EOF for an unclosed fence). Fenced blocks only. */
+function fencedRangeByScan(
+  state: EditorState,
+  hint: number,
+  lang: string,
+): { from: number; to: number } | null {
+  if (!lang || hint < 0) return null;
+  const doc = state.doc;
+  let open = doc.lineAt(Math.min(hint, doc.length));
+  while (!open.text.trimStart().startsWith("```")) {
+    if (open.number === 1) return null;
+    open = doc.line(open.number - 1);
+  }
+  const info = open.text.trim().replace(/^`{3,}/, "").trim().toLowerCase();
+  if (info.split(/\s+/)[0] !== lang) return null;
+  let close = open;
+  while (close.number < doc.lines) {
+    const nextLine = doc.line(close.number + 1);
+    close = nextLine;
+    if (/^`{3,}\s*$/.test(nextLine.text.trim())) break;
+  }
+  return { from: open.from, to: close.to };
+}
+
+/** Fallback table locate when no Lezer Table node confirms the range: expand
+ *  from `hint`'s line across contiguous pipe-table lines (leading `|`, or an
+ *  alignment row of dashes/pipes). */
+function tableRangeByScan(state: EditorState, hint: number): { from: number; to: number } | null {
+  if (hint < 0) return null;
+  const doc = state.doc;
+  const isTableLine = (t: string) =>
+    /^\s*\|/.test(t) || /^\s*:?-{3,}(\s*\|)+/.test(t);
+  let first = doc.lineAt(Math.min(hint, doc.length));
+  // The hint must sit on a line that looks like a table row before expanding.
+  if (!isTableLine(first.text)) return null;
+  while (first.number > 1 && isTableLine(doc.line(first.number - 1).text)) {
+    first = doc.line(first.number - 1);
+  }
+  let last = first;
+  while (last.number < doc.lines && isTableLine(doc.line(last.number + 1).text)) {
+    last = doc.line(last.number + 1);
+  }
+  return { from: first.from, to: last.to };
+}
+
+/** Fallback TaskMarker locate: the nearest `` `[ ]` ``/`` `[x]` `` token on the
+ *  hint's line (used when no Lezer TaskMarker node is available). */
+function markerRangeByScan(
+  state: EditorState,
+  hint: number,
+): { from: number; to: number } | null {
+  if (hint < 0) return null;
+  const line = state.doc.lineAt(Math.min(hint, state.doc.length));
+  const re = /\[[xX ]\]/g;
+  let best: { from: number; to: number } | null = null;
+  let bestDist = Infinity;
+  for (let m = re.exec(line.text); m; m = re.exec(line.text)) {
+    const from = line.from + m.index;
+    const to = from + m[0].length;
+    const dist = hint >= from && hint <= to ? -1 : Math.min(Math.abs(hint - from), Math.abs(hint - to));
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = { from, to };
+    }
+  }
+  return best;
+}
 
 export class CodeBlockWidget extends WidgetType {
   readonly language: string;
   view: EditorView | null = null;
-  blockFrom = -1;
-  blockTo = -1;
 
   constructor(
     readonly code: string,
@@ -20,20 +148,27 @@ export class CodeBlockWidget extends WidgetType {
     this.language = lang.toLowerCase();
   }
 
+  // Content-ONLY equality. The commit-on-blur handler resolves the block's
+  // range dynamically (see currentBlockRange), so a reused DOM can never
+  // commit at a stale offset — and position-sensitive eq would defeat the
+  // reuse entirely, rebuilding (and re-highlighting / re-running mermaid for
+  // diagram fences) on every keystroke typed anywhere else in the document.
   eq(other: CodeBlockWidget): boolean {
-    // Content AND position must match. Position is part of correctness, not
-    // just layout: CM6 reuses the existing DOM (and its event handlers,
-    // which close over THIS instance's blockFrom/blockTo) whenever eq()
-    // returns true. livePreviewField rebuilds the decoration set on EVERY
-    // transaction, so a text insert above the block shifts the range while
-    // the content stays identical — comparing content alone would reuse the
-    // stale DOM and commit edits at the OLD offset, corrupting the document.
-    return (
-      other.code === this.code &&
-      other.language === this.language &&
-      other.blockFrom === this.blockFrom &&
-      other.blockTo === this.blockTo
-    );
+    return other.code === this.code && other.language === this.language;
+  }
+
+  /** Live [from, to] of this widget's block in the CURRENT document, derived
+   *  from where its DOM sits right now — never from stored offsets. */
+  private currentBlockRange(
+    view: EditorView,
+    root: HTMLElement,
+  ): { from: number; to: number } | null {
+    const hints = domPositionHints(view, root);
+    for (const hint of hints) {
+      const r = nodeRangeAround(view.state, hint, ["FencedCode", "CodeBlock"]);
+      if (r && r.to > r.from) return r;
+    }
+    return hints.length > 0 ? fencedRangeByScan(view.state, hints[0], this.language) : null;
   }
 
   toDOM(view: EditorView): HTMLElement {
@@ -92,19 +227,20 @@ export class CodeBlockWidget extends WidgetType {
 
     // Commit the edited code back to the document when the user leaves the block.
     code.addEventListener("blur", () => {
-      if (!this.view || this.blockFrom < 0 || this.blockTo < 0) return;
       const newCode = code.textContent ?? "";
-      const lang = this.language;
-      const newSource = "```" + lang + "\n" + newCode + "\n```";
       // Compare unfenced to unfenced: `newCode` is the code body, `this.code`
       // the constructor arg (unfenced). `newSource` is the fenced rebuild and
       // can never equal `this.code` — comparing them would make every blur
       // (even no-op ones) dispatch a transaction and append a phantom undo step.
-      if (newCode !== this.code) {
-        this.view.dispatch({
-          changes: { from: this.blockFrom, to: this.blockTo, insert: newSource },
-        });
-      }
+      if (newCode === this.code) return;
+      const liveView = this.view ?? getEditorView();
+      if (!liveView) return;
+      const range = this.currentBlockRange(liveView, pre);
+      if (!range) return;
+      const newSource = "```" + this.language + "\n" + newCode + "\n```";
+      liveView.dispatch({
+        changes: { from: range.from, to: range.to, insert: newSource },
+      });
     });
     return pre;
   }
@@ -156,6 +292,81 @@ function appendSourceBadge(container: HTMLElement, from: number, to: number): HT
   badge.title = "Edit source";
   container.appendChild(badge);
   return badge;
+}
+
+/** Locate the first `pattern` match within ±`windowLines` of the hint's line;
+ *  used by resolveBadgeRange for tokens without a Lezer node. */
+function patternNearLine(
+  doc: EditorState["doc"],
+  hint: number,
+  pattern: RegExp,
+  windowLines = 3,
+): { from: number; to: number } | null {
+  const anchor = doc.lineAt(Math.min(hint, doc.length));
+  let best: { from: number; to: number } | null = null;
+  let bestDist = Infinity;
+  for (let d = 0; d <= windowLines; d++) {
+    for (const dir of d === 0 ? [0] : [-d, d]) {
+      const n = anchor.number + dir;
+      if (n < 1 || n > doc.lines) continue;
+      const line = doc.line(n);
+      const m = pattern.exec(line.text);
+      if (m) {
+        const dist = Math.abs(dir);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = { from: line.from + m.index, to: line.from + m.index + m[0].length };
+        }
+      }
+    }
+  }
+  return best;
+}
+
+/** Live document range for a math/image widget's "source" badge click.
+ *  Content-only eq lets CM6 reuse the widget DOM after edits ABOVE it moved
+ *  the block — so the construction-time offsets baked into the badge's data
+ *  attributes are stale exactly when it matters (the click jumps to the wrong
+ *  place). This maps the widget's DOM back into the CURRENT document instead:
+ *  `$$…$$`, `$…$`, or `![…](…)` literal token near the live position wins;
+ *  the stored attributes remain as last-resort fallback. */
+export function resolveBadgeRange(
+  view: EditorView,
+  badge: HTMLElement,
+): { from: number; to: number } | null {
+  const root = badge.closest<HTMLElement>(".cm-math-block, .cm-math-inline, .cm-image-wrap");
+  const fallbackFrom = Number(badge.dataset.from);
+  const fallbackTo = Number(badge.dataset.to);
+  const fallback =
+    Number.isFinite(fallbackFrom) && Number.isFinite(fallbackTo)
+      ? { from: fallbackFrom, to: fallbackTo }
+      : null;
+  if (!root) return fallback;
+  const hints = domPositionHints(view, root);
+  if (hints.length === 0) return fallback;
+  const state = view.state;
+  const hint = Math.min(hints[0], state.doc.length);
+  let range: { from: number; to: number } | null = null;
+  if (root.classList.contains("cm-image-wrap")) {
+    range = patternNearLine(state.doc, hint, /!\[[^\]\n]*\]\([^)\n]*\)/);
+  } else if (root.classList.contains("cm-math-block")) {
+    range = patternNearLine(state.doc, hint, /^\s*\$\$/m, 8);
+    if (range) {
+      // Expand to the whole $$ … $$ block: opening line down to the line
+      // whose text ends with $$ (or EOF for an unterminated block).
+      const openLine = state.doc.lineAt(range.from);
+      let closeLine = openLine;
+      while (closeLine.number < state.doc.lines) {
+        const next = state.doc.line(closeLine.number + 1);
+        closeLine = next;
+        if (next.text.trim().endsWith("$$")) break;
+      }
+      range = { from: openLine.from, to: closeLine.to };
+    }
+  } else {
+    range = patternNearLine(state.doc, hint, /\$[^$\n]+\$/);
+  }
+  return range ?? fallback;
 }
 
 /** Render inline math ($...$) via KaTeX. Lazy-loads katex. */
@@ -434,27 +645,47 @@ export function transformTable(raw: string, op: "addRow" | "removeRow" | "addCol
 
 export class TableWidget extends WidgetType {
   view: EditorView | null = null;
-  blockFrom = -1;
-  blockTo = -1;
 
   constructor(readonly raw: string) {
     super();
   }
 
+  // Content-ONLY equality, same rationale as CodeBlockWidget.eq: the toolbar
+  // and blur handlers resolve the table's live range at event time, so a
+  // reused DOM is always safe — while position-sensitive eq would rebuild the
+  // whole markdown-it render on every keystroke typed anywhere else.
   eq(other: TableWidget): boolean {
-    // Position is part of equality: see CodeBlockWidget.eq — stale block
-    // positions in a reused DOM would commit table edits at the wrong range.
-    return (
-      other.raw === this.raw &&
-      other.blockFrom === this.blockFrom &&
-      other.blockTo === this.blockTo
-    );
+    return other.raw === this.raw;
+  }
+
+  /** Live [from, to] of this widget's table in the CURRENT document, derived
+   *  from its DOM position (Lezer `Table` node, with a pipe-line scan
+   *  fallback) — never from stored offsets. */
+  private currentBlockRange(view: EditorView, root: HTMLElement): { from: number; to: number } | null {
+    const hints = domPositionHints(view, root);
+    for (const hint of hints) {
+      const r = nodeRangeAround(view.state, hint, ["Table"]);
+      if (r && r.to > r.from) return r;
+    }
+    return hints.length > 0 ? tableRangeByScan(view.state, hints[0]) : null;
   }
 
   toDOM(view: EditorView): HTMLElement {
     this.view = view;
     const wrap = document.createElement("div");
     wrap.className = "cm-table-wrap";
+
+    const div = document.createElement("div");
+    div.className = "cm-table";
+
+    const commit = (nextSource: string) => {
+      if (!this.view) return;
+      const range = this.currentBlockRange(this.view, wrap);
+      if (!range) return;
+      this.view.dispatch({
+        changes: { from: range.from, to: range.to, insert: nextSource },
+      });
+    };
 
     const toolbar = document.createElement("div");
     toolbar.className = "cm-table-toolbar";
@@ -463,17 +694,19 @@ export class TableWidget extends WidgetType {
       b.type = "button";
       b.className = "cm-table-btn";
       b.textContent = label;
-      b.addEventListener("mousedown", (e) => e.preventDefault()); // keep CM6 focus
+      // preventDefault on mousedown keeps focus in the CM6 editor… which also
+      // means the cell's blur-commit never runs before this click. Merge the
+      // LIVE cell state into the source here, or uncommitted typing would be
+      // silently dropped by transforms serializing the stale `raw`.
+      b.addEventListener("mousedown", (e) => e.preventDefault());
       b.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (!this.view || this.blockFrom < 0 || this.blockTo < 0) return;
-        const next = transformTable(this.raw, op);
-        if (next && next !== this.raw) {
-          this.view.dispatch({
-            changes: { from: this.blockFrom, to: this.blockTo, insert: next },
-          });
-        }
+        if (!this.view) return;
+        const liveRaw = serializeTableCells(div);
+        const base = liveRaw && liveRaw !== this.raw ? liveRaw : this.raw;
+        const next = transformTable(base, op);
+        if (next && next !== base) commit(next);
       });
       return b;
     };
@@ -483,8 +716,6 @@ export class TableWidget extends WidgetType {
     toolbar.appendChild(btn("− col", "removeCol"));
     wrap.appendChild(toolbar);
 
-    const div = document.createElement("div");
-    div.className = "cm-table";
     div.innerHTML = renderMarkdownWithTableSource(this.raw);
     // Make each cell editable; edits are committed to the CM6 doc on blur.
     // Cells the user actually edits are marked data-edited so serialization
@@ -502,13 +733,9 @@ export class TableWidget extends WidgetType {
     div.addEventListener(
       "blur",
       () => {
-        if (!this.view || this.blockFrom < 0 || this.blockTo < 0) return;
+        if (!this.view) return;
         const newSource = serializeTableCells(div);
-        if (newSource && newSource !== this.raw) {
-          this.view.dispatch({
-            changes: { from: this.blockFrom, to: this.blockTo, insert: newSource },
-          });
-        }
+        if (newSource && newSource !== this.raw) commit(newSource);
       },
       true,
     );
@@ -715,22 +942,36 @@ export class ImageWidget extends WidgetType {
   }
 }
 
-/** Fullscreen lightbox overlay for clicking an image. Click anywhere to close. */
+/** Fullscreen lightbox overlay for clicking an image. Click anywhere or press
+ *  Escape to close. */
 export function openLightbox(src: string): void {
   const overlay = document.createElement("div");
   overlay.className = "cm-lightbox";
+  // Focusable overlay: without tabindex, focus() on it is a no-op and the
+  // Escape keydown listener below never fires (the <img> can't be focused).
+  overlay.tabIndex = -1;
   const img = document.createElement("img");
   img.className = "cm-lightbox-img";
   img.src = src;
   img.alt = "";
   overlay.appendChild(img);
-  const close = () => overlay.remove();
+  const close = () => {
+    overlay.remove();
+    document.removeEventListener("keydown", onKey, true);
+  };
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      close();
+    }
+  };
   overlay.addEventListener("click", close);
-  overlay.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") close();
-  });
+  // Capture-phase document listener catches Escape even when focus drifted
+  // back into the editor after the overlay opened.
+  document.addEventListener("keydown", onKey, true);
   document.body.appendChild(overlay);
-  img.focus();
+  overlay.focus();
 }
 
 /** Rendered `[[wikilink]]`: shows the alias (or basename) as a clickable link.

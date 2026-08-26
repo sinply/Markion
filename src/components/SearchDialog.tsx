@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useVaultStore } from "../stores/vaultStore";
 import { useUiStore } from "../stores/uiStore";
 import { useDocStore } from "../stores/docStore";
-import { searchVault, replaceInVault, type SearchHit } from "../lib/ipc";
+import { searchVault, replaceInVault, readFile, type SearchHit } from "../lib/ipc";
 import { openNote } from "../lib/openNote";
+import { getEditorView } from "../editor/registry";
 import { useI18n } from "../lib/i18n";
 
 const DEBOUNCE_MS = 250;
@@ -111,8 +112,47 @@ export function SearchDialog() {
     if (!window.confirm(t.replaceAllConfirm)) return;
     setReplaceResult(null);
     try {
+      // Persist pending edits FIRST: a dirty buffer would otherwise clobber
+      // the replacement when its own autosave fires later.
+      const { flushAllDirty } = await import("../lib/docSave");
+      await flushAllDirty();
+
       const res = await replaceInVault(vaultRoot, q, replacement, { caseSensitive, useRegex });
-      setReplaceResult(t.replaceAllDone(res.filesChanged, res.replacements));
+
+      // Our own writes are about to echo through the watcher; mark every
+      // changed path so open dirty tabs don't get spurious conflict dialogs,
+      // then pull the new content into any OPEN doc (draft + saved snapshot +
+      // live buffer) so no tab keeps showing — and later re-saving — old text.
+      const { markAppChange } = await import("../hooks/useExternalChanges");
+      for (const rel of res.changedPaths ?? []) {
+        markAppChange(rel);
+        const doc = useDocStore.getState().openDocs.find((d) => d.path === rel);
+        if (!doc) continue;
+        try {
+          const fresh = await readFile(vaultRoot, rel);
+          const cur = useDocStore.getState();
+          cur.markSaved(doc.id, fresh);
+          cur.markClean(doc.id);
+          cur.setDraft(doc.id, fresh);
+          if (cur.activeDocId === doc.id) {
+            const view = getEditorView();
+            if (view && cur.activeContentDocId === doc.id && view.state.doc.toString() !== fresh) {
+              view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: fresh } });
+            }
+            cur.setActiveContent(fresh);
+          }
+        } catch {
+          // refresh failed — the tab reloads from disk on next activation
+        }
+      }
+
+      let note = t.replaceAllDone(res.filesChanged, res.replacements);
+      if (res.errors && res.errors.length > 0) {
+        const first = res.errors[0];
+        note += ` — ${res.errors.length} failed (${first.path}: ${first.error})`;
+      }
+      setReplaceResult(note);
+
       // Refresh results to reflect the post-replace state.
       const result = await searchVault(vaultRoot, q, { caseSensitive, useRegex });
       setHits(result);

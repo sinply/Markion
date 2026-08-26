@@ -3,7 +3,7 @@ import { syntaxTree, ensureSyntaxTree } from "@codemirror/language";
 import { RangeSetBuilder, EditorState, StateField, Text } from "@codemirror/state";
 import type { SyntaxNode, Tree } from "@lezer/common";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget, MathInlineWidget, PreviewWidget, WikiLinkWidget, CalloutWidget, EmbedWidget, FrontmatterWidget, HrWidget, DataviewWidget } from "./widgets";
+import { CodeBlockWidget, TableWidget, TaskCheckboxWidget, ImageWidget, MathBlockWidget, MathInlineWidget, PreviewWidget, WikiLinkWidget, CalloutWidget, EmbedWidget, FrontmatterWidget, HrWidget, DataviewWidget, resolveBadgeRange } from "./widgets";
 import { markdownContextFacet, type MarkdownContext } from "./media";
 import { extractFrontmatter, parseFrontmatter } from "../lib/frontmatter";
 import { resolveWikiLink, wikiHeading } from "./wikiIndex";
@@ -779,8 +779,8 @@ function decideEntries(state: EditorState, blocks: Block[]): DecoEntry[] {
       case "code": {
         if (isOnActiveLine(state, b.from, b.to, activeLine)) break; // keep source editable
         const w = new CodeBlockWidget(b.code ?? "", b.lang ?? "");
-        w.blockFrom = b.from;
-        w.blockTo = b.to;
+        // No stored offsets: the widget resolves its block range dynamically
+        // at event time (content-only eq reuses DOM across moves).
         entries.push({ from: b.from, to: b.to, decoration: Decoration.replace({ widget: w, block: true }) });
         break;
       }
@@ -788,8 +788,8 @@ function decideEntries(state: EditorState, blocks: Block[]): DecoEntry[] {
       case "table": {
         if (isOnActiveLine(state, b.from, b.to, activeLine)) break; // keep source editable
         const w = new TableWidget(b.tableRaw ?? "");
-        w.blockFrom = b.from;
-        w.blockTo = b.to;
+        // No stored offsets: the widget resolves its table range dynamically
+        // at event time (content-only eq reuses DOM across moves).
         entries.push({ from: b.from, to: b.to, decoration: Decoration.replace({ widget: w, block: true }) });
         break;
       }
@@ -974,14 +974,15 @@ export const livePreviewExtension = ViewPlugin.fromClass(LivePlugin, {
       }
 
       // Source badge on image/math widgets: flip that block to source. The
-      // block's range is stored on the badge as data attributes (set by
-      // appendSourceBadge) because math blocks have no Lezer node to resolve.
+      // badge's stored data-from/to are a construction-time snapshot that goes
+      // STALE when edits above move the widget (content-only eq reuses the
+      // DOM) — resolve the live position from the widget's DOM first.
       const badge = target.closest<HTMLElement>(".cm-source-badge");
       if (badge) {
-        const from = Number(badge.dataset.from);
-        const to = Number(badge.dataset.to);
-        if (!Number.isFinite(from) || !Number.isFinite(to)) return false;
-        view.dispatch({ selection: { anchor: from }, scrollIntoView: true });
+        event.preventDefault();
+        const range = resolveBadgeRange(view, badge);
+        if (!range) return false;
+        view.dispatch({ selection: { anchor: range.from }, scrollIntoView: true });
         return true;
       }
 

@@ -41,38 +41,54 @@ const spies = {
   createFile: vi.fn().mockResolvedValue(undefined),
   createFolder: vi.fn().mockResolvedValue(undefined),
   trashPath: vi.fn().mockResolvedValue(undefined),
-  renameWithLinks: vi.fn().mockResolvedValue(0),
+  writeFileAtomic: vi.fn().mockResolvedValue(undefined),
+  renameWithLinks: vi.fn().mockResolvedValue({ rewrittenFiles: [] }),
 };
 
 vi.mock("../../stores/settingsStore", () => ({
   useSettingsStore: (selector: any) => selector({ showHiddenFiles: false }),
 }));
 
-vi.mock("../../stores/vaultStore", () => ({
-  useVaultStore: (selector: any) =>
-    selector({
-      tree,
-      vaultRoot: "/vault",
-      expanded: {},
-      loadTree: spies.loadTree,
-      applyReorder: vi.fn(),
-      applyMove: spies.applyMove,
-      setCollapsed: vi.fn(),
+vi.mock("../../stores/vaultStore", () => {
+  // Built lazily: vi.mock factories are hoisted above top-level consts.
+  const makeState = () => ({
+    tree,
+    vaultRoot: "/vault",
+    expanded: {},
+    loadTree: spies.loadTree,
+    applyReorder: vi.fn(),
+    applyMove: spies.applyMove,
+    setCollapsed: vi.fn(),
+  });
+  return {
+    // docSave.ts calls useVaultStore.getState(); keep the fake duck-complete.
+    useVaultStore: Object.assign((selector: any) => selector(makeState()), {
+      getState: () => makeState(),
     }),
-}));
+  };
+});
 
-vi.mock("../../stores/docStore", () => ({
-  useDocStore: (selector: any) =>
-    selector({
-      openDocs: [],
-      activeDocId: null,
-      dirtyMap: {},
-      openDoc: spies.openDoc,
-      setActiveContent: spies.setActiveContent,
-      closeDocsUnder: spies.closeDocsUnder,
-      renameDoc: spies.renameDoc,
+vi.mock("../../stores/docStore", () => {
+  const makeState = () => ({
+    openDocs: [],
+    activeDocId: null,
+    dirtyMap: {},
+    drafts: {},
+    loadErrorMap: {},
+    savedContent: {},
+    openDoc: spies.openDoc,
+    setActiveContent: spies.setActiveContent,
+    closeDocsUnder: spies.closeDocsUnder,
+    renameDoc: spies.renameDoc,
+    markSaved: vi.fn(),
+    markClean: vi.fn(),
+  });
+  return {
+    useDocStore: Object.assign((selector: any) => selector(makeState()), {
+      getState: () => makeState(),
     }),
-}));
+  };
+});
 
 vi.mock("../../lib/ipc", () => ({
   readFile: (...a: any[]) => spies.readFile(...a),
@@ -80,6 +96,7 @@ vi.mock("../../lib/ipc", () => ({
   createFolder: (...a: any[]) => spies.createFolder(...a),
   trashPath: (...a: any[]) => spies.trashPath(...a),
   renameWithLinks: (...a: any[]) => spies.renameWithLinks(...a),
+  writeFileAtomic: (...a: any[]) => spies.writeFileAtomic(...a),
 }));
 
 import { FileTree } from "../FileTree";

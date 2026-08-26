@@ -130,11 +130,25 @@ pub fn extract_frontmatter(text: &str) -> Option<Frontmatter> {
 /// First non-heading, non-fence, non-empty body line, stripped of common
 /// markdown markers, clamped to ~80 chars — the card summary.
 pub fn extract_summary(text: &str) -> String {
-    let body = match text.find("\n---\n") {
-        // Skip a closed frontmatter block.
-        Some(i) if text.starts_with("---") => &text[i + 5..],
-        _ => text,
-    };
+    // Skip a closed frontmatter block. The close is found LINE-based (first
+    // line after the opener whose trimmed content is "---") so CRLF files
+    // ("\r\n---\r\n") are recognized too — the old byte-pattern search for
+    // "\n---\n" missed them and let the frontmatter leak into the summary.
+    let mut body = text;
+    if text.starts_with("---") {
+        let mut lines = text.split_inclusive('\n');
+        let mut consumed = match lines.next() {
+            Some(first) => first.len(),
+            None => 0,
+        };
+        for line in lines {
+            consumed += line.len();
+            if line.trim_end() == "---" {
+                body = &text[consumed..];
+                break;
+            }
+        }
+    }
     let mut in_fence = false;
     for line in body.lines() {
         let t = line.trim();
@@ -208,7 +222,11 @@ fn strip_title_ext(name: &str) -> String {
 /// "number", all YYYY-MM-DD -> "date", multi-part comma values -> "tags",
 /// otherwise "text".
 pub fn infer_column_type(values: &[&str]) -> &'static str {
-    let non_empty: Vec<&str> = values.iter().copied().filter(|v| !v.trim().is_empty()).collect();
+    let non_empty: Vec<&str> = values
+        .iter()
+        .copied()
+        .filter(|v| !v.trim().is_empty())
+        .collect();
     if non_empty.is_empty() {
         return "text";
     }
@@ -220,7 +238,10 @@ pub fn infer_column_type(values: &[&str]) -> &'static str {
     if non_empty.iter().all(|v| date_re.is_match(v.trim())) {
         return "date";
     }
-    if non_empty.iter().any(|v| v.contains(',') && v.split(',').count() > 1) {
+    if non_empty
+        .iter()
+        .any(|v| v.contains(',') && v.split(',').count() > 1)
+    {
         return "tags";
     }
     "text"
@@ -276,6 +297,9 @@ fn open_conn(vault_root: &Path) -> rusqlite::Result<Connection> {
     let conn = Connection::open(vault_root.join(CACHE_FILE))?;
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
+    // Concurrent writers (watcher tick + save hook + rebuild) used to fail
+    // instantly with SQLITE_BUSY; wait up to 2s for the lock instead.
+    conn.busy_timeout(std::time::Duration::from_millis(2000))?;
     Ok(conn)
 }
 
@@ -387,8 +411,7 @@ fn parse_document(rel_path: &str, text: &str, mtime_secs: i64) -> DocRecord {
         .flat_map(|(_, v)| v.split(','))
         .map(|t| t.trim().to_string())
         .filter(|t| {
-            !t.is_empty()
-                && !t.chars().all(|c| c.is_numeric()) // "tags: 2024, 8" is not tags
+            !t.is_empty() && !t.chars().all(|c| c.is_numeric()) // "tags: 2024, 8" is not tags
         })
         .collect();
     DocRecord {
@@ -413,10 +436,7 @@ fn mtime_of(abs: &Path) -> i64 {
 }
 
 /// Insert/refresh one record inside an open transaction.
-fn insert_doc(
-    tx: &rusqlite::Transaction,
-    rec: &DocRecord,
-) -> rusqlite::Result<()> {
+fn insert_doc(tx: &rusqlite::Transaction, rec: &DocRecord) -> rusqlite::Result<()> {
     tx.execute(
         "INSERT INTO documents (path, title, folder, mtime_secs, word_count, summary)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)
@@ -476,7 +496,10 @@ pub fn remove_path(vault_root: &Path, rel_path: &str) -> Result<(), String> {
     let prefix = format!("{}/%", rel_path.trim_end_matches('/'));
     // ESCAPE '\' so literal %/_ in a folder name are not SQL wildcards:
     // trashing `my_notes/` must not also delete rows under `my-notes/`.
-    let prefix_escaped = prefix.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+    let prefix_escaped = prefix
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_");
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     for table in ["properties", "tags"] {
         tx.execute(
@@ -548,7 +571,6 @@ pub fn ensure_ready_with_progress(
     vault_root: &Path,
     progress: Option<&dyn Fn(usize, usize)>,
 ) -> Result<(), String> {
-    let has_files = !walk_md(vault_root).is_empty();
     // Scope the probe connection so it is CLOSED before a possible rebuild —
     // on Windows an open handle blocks deleting the very same db file.
     let (usable, rows) = {
@@ -562,7 +584,13 @@ pub fn ensure_ready_with_progress(
             _ => (false, 0),
         }
     };
-    if !usable || (has_files && rows <= 0) {
+    // The expensive `walk_md` probe only matters when deciding to rebuild an
+    // EMPTY projection (vault has files but the db does not). A populated
+    // projection used to pay a full-filesystem walk on EVERY query anyway —
+    // with identical outcomes — so skip it in steady state.
+    let needs_rebuild = !usable
+        || (rows <= 0 && !walk_md(vault_root).is_empty());
+    if needs_rebuild {
         return rebuild_all_with_progress(vault_root, progress);
     }
     Ok(())
@@ -632,6 +660,17 @@ pub fn query_library_ready(
 /// union of their frontmatter keys. Reads from DISK (not the projection) so a
 /// just-created note appears immediately even before the watcher tick.
 pub fn query_folder_table(vault_root: &Path, folder: &str) -> Result<FolderTable, String> {
+    // `folder` must stay inside the vault — same guard as
+    // [`query_dataview_rows`]: ".." segments and absolute paths are rejected
+    // so a crafted request cannot enumerate folders outside the vault.
+    // Rooted-but-not-prefixed paths ("/etc", "\etc") also escape via join on
+    // Windows, so a leading separator is rejected explicitly.
+    if Path::new(folder).is_absolute()
+        || folder.starts_with(['/', '\\'])
+        || folder.split(['/', '\\']).any(|seg| seg == "..")
+    {
+        return Err(format!("invalid folder path: {folder}"));
+    }
     let root = vault_root.to_path_buf();
     let dir_abs = if folder.is_empty() {
         root.clone()
@@ -700,9 +739,7 @@ pub fn query_dataview_rows(vault_root: &Path, folder: &str) -> Result<Vec<Datavi
         return Err(format!("folder not found: {folder}"));
     }
     let mut out: Vec<DataviewRow> = Vec::new();
-    let mut it = walkdir::WalkDir::new(&dir_abs)
-        .min_depth(1)
-        .into_iter();
+    let mut it = walkdir::WalkDir::new(&dir_abs).min_depth(1).into_iter();
     while let Some(entry) = it.next() {
         // Unreadable/unlistable entries are skipped, not fatal.
         let Ok(e) = entry else { continue };
@@ -739,12 +776,12 @@ pub fn query_dataview_rows(vault_root: &Path, folder: &str) -> Result<Vec<Datavi
             .map(|fm| fm.props)
             .unwrap_or_default();
         out.push(DataviewRow {
-                path: rel,
-                name: strip_title_ext(&name),
-                mtime_secs: mtime_of(p),
-                size_bytes: meta.len(),
-                values,
-            });
+            path: rel,
+            name: strip_title_ext(&name),
+            mtime_secs: mtime_of(p),
+            size_bytes: meta.len(),
+            values,
+        });
     }
     Ok(out)
 }
@@ -766,7 +803,10 @@ mod tests {
 
     #[test]
     fn frontmatter_parses_key_value_pairs() {
-        let fm = extract_frontmatter("---\ntitle: Hello\ndate: 2026-08-18\nrating: \"4.5\"\n---\n\nbody").unwrap();
+        let fm = extract_frontmatter(
+            "---\ntitle: Hello\ndate: 2026-08-18\nrating: \"4.5\"\n---\n\nbody",
+        )
+        .unwrap();
         assert_eq!(fm.props[0], ("title".into(), "Hello".into()));
         assert_eq!(fm.props[1], ("date".into(), "2026-08-18".into()));
         assert_eq!(fm.props[2], ("rating".into(), "4.5".into()));
@@ -820,6 +860,22 @@ mod tests {
         }
     }
 
+    #[test]
+    fn folder_table_rejects_vault_escape() {
+        let dir = tempdir().unwrap();
+        // Mirrors query_dataview_rows' error behavior (Err string, not panic).
+        assert!(query_folder_table(dir.path(), "../x").is_err());
+        assert!(query_folder_table(dir.path(), "a/../..").is_err());
+        // Rooted paths escape via join on Windows even without a prefix.
+        assert!(query_folder_table(dir.path(), "/etc").is_err());
+        if cfg!(windows) {
+            assert!(query_folder_table(dir.path(), "C:\\Windows").is_err());
+            assert!(query_folder_table(dir.path(), "a\\..\\..\\b").is_err());
+        }
+        // Empty folder (= vault root) stays valid.
+        assert!(query_folder_table(dir.path(), "").is_ok());
+    }
+
     #[cfg(windows)]
     #[test]
     fn dataview_rows_terminate_on_junction_cycle() {
@@ -853,8 +909,23 @@ mod tests {
 
     #[test]
     fn summary_skips_frontmatter_headings_and_fences() {
-        let s = extract_summary("---\ntitle: t\n---\n\n# Heading\n```rust\ncode line\n```\n\nReal **first** line");
+        let s = extract_summary(
+            "---\ntitle: t\n---\n\n# Heading\n```rust\ncode line\n```\n\nReal **first** line",
+        );
         assert_eq!(s, "Real first line");
+    }
+
+    #[test]
+    fn summary_handles_crlf_frontmatter() {
+        // The closing fence in a CRLF file is "\r\n---\r\n"; the old
+        // byte-pattern search for "\n---\n" missed it entirely.
+        let s = extract_summary("---\r\ntitle: t\r\n---\r\n\r\n# Head\r\nReal line\r\n");
+        assert_eq!(s, "Real line");
+        // Mixed EOLs (LF opener, CRLF fence) also close correctly.
+        assert_eq!(
+            extract_summary("---\ntitle: x\r\n---\r\nBody here"),
+            "Body here"
+        );
     }
 
     #[test]
@@ -890,8 +961,22 @@ mod tests {
     #[test]
     fn build_folder_table_unions_keys_in_first_seen_order() {
         let table = build_folder_table(&[
-            ("a.md".into(), "a".into(), vec![("status".into(), "todo".into()), ("due".into(), "2026-01-01".into())]),
-            ("b.md".into(), "b".into(), vec![("status".into(), "done".into()), ("extra".into(), "x".into())]),
+            (
+                "a.md".into(),
+                "a".into(),
+                vec![
+                    ("status".into(), "todo".into()),
+                    ("due".into(), "2026-01-01".into()),
+                ],
+            ),
+            (
+                "b.md".into(),
+                "b".into(),
+                vec![
+                    ("status".into(), "done".into()),
+                    ("extra".into(), "x".into()),
+                ],
+            ),
         ]);
         let names: Vec<&str> = table.columns.iter().map(|c| c.name.as_str()).collect();
         assert_eq!(names, vec!["status", "due", "extra"]);
@@ -905,7 +990,11 @@ mod tests {
     fn rebuild_query_and_incremental_flow() {
         let dir = tempdir().unwrap();
         let root = dir.path();
-        write(root, "a.md", "---\ntitle: Custom\ntags: work, plan\n---\n\nFirst paragraph here");
+        write(
+            root,
+            "a.md",
+            "---\ntitle: Custom\ntags: work, plan\n---\n\nFirst paragraph here",
+        );
         write(root, "notes/b.md", "# Notes\nBody text with 内容");
 
         rebuild_all(root).unwrap();
@@ -951,7 +1040,11 @@ mod tests {
     fn folder_table_reads_from_disk_direct_children_only() {
         let dir = tempdir().unwrap();
         let root = dir.path();
-        write(root, "top.md", "---\nstatus: todo\nwhen: 2026-02-03\nscore: 7\n---\nb");
+        write(
+            root,
+            "top.md",
+            "---\nstatus: todo\nwhen: 2026-02-03\nscore: 7\n---\nb",
+        );
         write(root, "notes/nested.md", "---\nstatus: done\n---\nb");
 
         let table = query_folder_table(root, "").unwrap();

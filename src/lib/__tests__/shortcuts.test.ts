@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseCombo, effectiveShortcuts, DEFAULT_SHORTCUTS } from "../shortcuts";
+import { parseCombo, effectiveShortcuts, comboKey, findConflict, DEFAULT_SHORTCUTS } from "../shortcuts";
 
 describe("parseCombo", () => {
   it("parses modifier + key combos", () => {
@@ -34,5 +34,32 @@ describe("effectiveShortcuts", () => {
 
   it("keeps defaults when no overrides", () => {
     expect(effectiveShortcuts({})).toEqual(DEFAULT_SHORTCUTS);
+  });
+});
+
+describe("comboKey / findConflict", () => {
+  it("produces a canonical key independent of spelling and order", () => {
+    expect(comboKey("Ctrl+Shift+K")).toBe("ctrl+shift+k");
+    expect(comboKey("shift+ctrl+k")).toBe("ctrl+shift+k");
+    expect(comboKey("Cmd+O")).toBe("ctrl+o");
+    expect(comboKey("")).toBeNull(); // unbound
+  });
+
+  it("detects a duplicate binding against defaults", () => {
+    // Ctrl+S is app:save's default — rebinding anything else onto it clashes.
+    expect(findConflict({}, "md:bold", "Ctrl+S")).toBe("app:save");
+    expect(findConflict({}, "app:save", "Ctrl+S")).toBeNull(); // itself excluded
+  });
+
+  it("respects an override that freed the combo", () => {
+    const overrides = { "app:save": "Ctrl+Alt+S" };
+    // save moved away, so Ctrl+S is free for another command now.
+    expect(findConflict(overrides, "md:bold", "Ctrl+S")).toBeNull();
+    // …and its new combo is the one that now clashes.
+    expect(findConflict(overrides, "md:italic", "Ctrl+Alt+S")).toBe("app:save");
+  });
+
+  it("never reports a conflict for unbound targets", () => {
+    expect(findConflict({ "app:save": "" }, "md:bold", "Ctrl+S")).toBeNull();
   });
 });

@@ -129,6 +129,30 @@ export function GraphPanel() {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const dragRef = useRef<{ x: number; y: number } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  // React attaches onWheel as a PASSIVE listener, so preventDefault() inside
+  // it is ignored (the page kept scrolling while zooming). A native
+  // non-passive listener actually owns the wheel event.
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const factor = e.deltaY > 0 ? 0.9 : 1.1;
+      const rect = el.getBoundingClientRect();
+      const ox = rect ? e.clientX - rect.left : VIEW_W / 2;
+      const oy = rect ? e.clientY - rect.top : VIEW_H / 2;
+      const px = ox * (VIEW_W / (rect?.width ?? VIEW_W));
+      const py = oy * (VIEW_H / (rect?.height ?? VIEW_H));
+      const next = Math.min(4, Math.max(0.2, zoomRef.current * factor));
+      const k = next / zoomRef.current;
+      setPan((p) => ({ x: px - k * (px - p.x), y: py - k * (py - p.y) }));
+      setZoom(next);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -177,21 +201,6 @@ export function GraphPanel() {
             style={{
               background: "var(--panel-bg)", borderRadius: 6, border: "1px solid var(--border)",
               touchAction: "none", cursor: "grab",
-            }}
-            onWheel={(e) => {
-              e.preventDefault();
-              const factor = e.deltaY > 0 ? 0.9 : 1.1;
-              const rect = svgRef.current?.getBoundingClientRect();
-              const ox = rect ? e.clientX - rect.left : VIEW_W / 2;
-              const oy = rect ? e.clientY - rect.top : VIEW_H / 2;
-              const scaleX = VIEW_W / (rect?.width ?? VIEW_W);
-              const scaleY = VIEW_H / (rect?.height ?? VIEW_H);
-              const px = ox * scaleX;
-              const py = oy * scaleY;
-              const next = Math.min(4, Math.max(0.2, zoom * factor));
-              const k = next / zoom;
-              setPan((p) => ({ x: px - k * (px - p.x), y: py - k * (py - p.y) }));
-              setZoom(next);
             }}
             onMouseDown={(e) => {
               if (e.button !== 0) return;
