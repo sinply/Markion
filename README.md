@@ -24,7 +24,8 @@ A fast, local-first Markdown **knowledge base** for **Windows**, built the Yuque
 |---|---|
 | 🪄 **One seamless view** | Yuque-style: the document always renders — headings, tables, code cards — and you type directly into it. No Edit ⇄ Preview toggling; the cursor reveals source only where you're working. |
 | 🖱️ **Multi-cursor & Column select** | Alt+click to add cursors, Shift+Alt+drag for column selection. |
-| 🎯 **`[[note#heading]]` anchors** | Wikilinks with a `#heading` anchor resolve correctly and scroll to the target heading on open. |
+| 🎯 **`[[note#heading]]` anchors** | Wikilinks with a `#heading` anchor resolve correctly (ATX and Setext headings) and scroll to the target heading on open. |
+| 🔗 **Wikilink autocomplete** | Typing `[[` suggests notes ranked by prefix → word boundary → substring, with a create-new entry whenever the exact name doesn't exist yet. |
 | 🧘 **Focus mode** | The paragraph under the cursor stays lit with an accent bar, everything else in view fades, and the side panels collapse for distraction-free writing. |
 | 📑 **Heading folding** | Fold gutters + keyboard shortcuts to collapse/expand sections. |
 | 🎛️ **Editor context menu** | Cut / copy / paste / select-all on right-click. |
@@ -62,8 +63,8 @@ A fast, local-first Markdown **knowledge base** for **Windows**, built the Yuque
 | ✨ **Slash commands** | `/` opens 19 markdown insertions. |
 | 📝 **Templates & Daily notes** | Configurable template folder; "Open Today's Note" entry is opt-in (Settings). |
 | 🏷️ **Properties editor** | Visual editor for YAML frontmatter (title, tags, dates, custom keys). |
-| 📋 **Table of Contents** | Insert a clickable, indented TOC generated from your headings. |
-| 🔧 **Customizable shortcuts** | Rebind any shortcut in Preferences; stored per-vault, applies instantly. |
+| 📋 **Table of Contents** | Insert a clickable, indented TOC generated from your headings (ATX and Setext). |
+| 🔧 **Customizable shortcuts** | Rebind any shortcut (or unbind it with `-`) in Preferences; conflicting duplicates are rejected; stored per-vault, applies instantly. |
 | 🔍 **Find & replace** | In-editor Ctrl+F/H plus vault-wide regex search & replace. |
 | 🗑️ **In-app recycle bin** | Deleted files go to `.markion/trash`; restore from "Recently Deleted". |
 | 🖱️ **Table operations** | Add/remove rows & columns from the table toolbar; "Format Table" command. |
