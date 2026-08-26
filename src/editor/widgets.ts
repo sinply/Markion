@@ -811,7 +811,11 @@ export class DataviewWidget extends WidgetType {
       return;
     }
     const ctx = this.view?.state.facet(markdownContextFacet)[0];
-    if (!ctx) return;
+    if (!ctx) {
+      div.className = "cm-dataview cm-dataview-error";
+      div.textContent = "dataview: no vault open";
+      return;
+    }
     try {
       const { queryDataviewRows } = await import("../lib/ipc");
       let rows = await queryDataviewRows(ctx.vaultRoot, query.from);

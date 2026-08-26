@@ -33,6 +33,7 @@ export interface DataviewQuery {
 export function parseDataviewQuery(code: string): DataviewQuery | null {
   let columns: DataviewColumn[] = [];
   let from = "";
+  let hasFrom = false;
   let sortField: string | null = null;
   let sortDir: "asc" | "desc" = "asc";
 
@@ -44,12 +45,14 @@ export function parseDataviewQuery(code: string): DataviewQuery | null {
       columns = parseColumns(tableM[1]);
       continue;
     }
-    const fromM = /^from\s+"?([^"\n]+?)"?\s*$/i.exec(line);
+    // `from ""` = whole vault (empty quoted path) is a valid Obsidian idiom.
+    const fromM = /^from\s+"?([^"\n]*?)"?\s*$/i.exec(line);
     if (fromM) {
       from = fromM[1].trim();
+      hasFrom = true;
       continue;
     }
-    const sortM = /^sort\s+([\w.]+)(?:\s+(asc|desc))?$/i.exec(line);
+    const sortM = /^sort\s+([\p{L}\p{N}_.]+)(?:\s+(asc|desc))?$/iu.exec(line);
     if (sortM) {
       sortField = sortM[1].toLowerCase();
       sortDir = (sortM[2]?.toLowerCase() as "asc" | "desc") ?? "asc";
@@ -57,7 +60,7 @@ export function parseDataviewQuery(code: string): DataviewQuery | null {
     }
   }
 
-  if (columns.length === 0 || !from) return null;
+  if (columns.length === 0 || !hasFrom) return null;
   return { columns, from, sortField, sortDir };
 }
 
@@ -80,7 +83,9 @@ function parseColumns(spec: string): DataviewColumn[] {
 
   const out: DataviewColumn[] = [];
   for (const part of parts) {
-    const m = /^\s*([\w.]+)\s*(?:AS\s+"([^"]*)")?\s*$/i.exec(part);
+    // Unicode-aware: frontmatter keys are often CJK for this app's audience
+    // (\w is ASCII-only and would silently drop those columns).
+    const m = /^\s*([\p{L}\p{N}_.]+)\s*(?:AS\s+"([^"]*)")?\s*$/iu.exec(part);
     if (!m) continue;
     const field = m[1].toLowerCase();
     out.push({ field, label: m[2] || field });

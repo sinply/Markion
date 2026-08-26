@@ -682,8 +682,15 @@ pub struct DataviewRow {
 }
 
 /// Recursive `.md` walk under `folder` for dataview queries. Hidden entries
-/// are pruned at every depth.
+/// are pruned at every depth. Uses walkdir WITHOUT link-following (same as
+/// [`walk_md`]): a hand-rolled stack walk follows NTFS junctions/symlinks and
+/// loops forever on cycles, freezing the (non-async) command thread. `folder`
+/// must stay inside the vault — `..` segments and absolute paths are rejected
+/// so a note-authored `from "../.."` cannot enumerate files outside it.
 pub fn query_dataview_rows(vault_root: &Path, folder: &str) -> Result<Vec<DataviewRow>, String> {
+    if Path::new(folder).is_absolute() || folder.split(['/', '\\']).any(|seg| seg == "..") {
+        return Err(format!("invalid folder path: {folder}"));
+    }
     let dir_abs = if folder.is_empty() {
         vault_root.to_path_buf()
     } else {
@@ -693,47 +700,51 @@ pub fn query_dataview_rows(vault_root: &Path, folder: &str) -> Result<Vec<Datavi
         return Err(format!("folder not found: {folder}"));
     }
     let mut out: Vec<DataviewRow> = Vec::new();
-    let mut stack = vec![dir_abs];
-    while let Some(dir) = stack.pop() {
-        let rd = match std::fs::read_dir(&dir) {
-            Ok(rd) => rd,
+    let mut it = walkdir::WalkDir::new(&dir_abs)
+        .min_depth(1)
+        .into_iter();
+    while let Some(entry) = it.next() {
+        // Unreadable/unlistable entries are skipped, not fatal.
+        let Ok(e) = entry else { continue };
+        let name = e.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') {
+            // Prune hidden subtrees entirely.
+            if e.file_type().is_dir() {
+                it.skip_current_dir();
+            }
+            continue;
+        }
+        // Symlink/junction entries are never followed and never treated as
+        // note files; walkdir reports their type as symlink here.
+        if e.file_type().is_symlink() {
+            continue;
+        }
+        if !e.file_type().is_file() || !name.to_lowercase().ends_with(".md") {
+            continue;
+        }
+        // A row outside the root is a bug, not data — skip rather than leak
+        // an absolute path into the table.
+        let Ok(rel_path) = e.path().strip_prefix(vault_root) else {
+            continue;
+        };
+        let rel = rel_path.to_string_lossy().replace('\\', "/");
+        let meta = match e.metadata() {
+            Ok(m) => m,
             Err(_) => continue,
         };
-        for e in rd.filter_map(|e| e.ok()) {
-            let name = e.file_name().to_string_lossy().to_string();
-            if name.starts_with('.') {
-                continue;
-            }
-            let p = e.path();
-            if p.is_dir() {
-                stack.push(p);
-                continue;
-            }
-            if !name.to_lowercase().ends_with(".md") {
-                continue;
-            }
-            let meta = match e.metadata() {
-                Ok(m) => m,
-                Err(_) => continue,
-            };
-            let rel = p
-                .strip_prefix(vault_root)
-                .unwrap_or(&p)
-                .to_string_lossy()
-                .replace('\\', "/");
-            let values = std::fs::read_to_string(&p)
-                .ok()
-                .and_then(|text| extract_frontmatter(&text))
-                .map(|fm| fm.props)
-                .unwrap_or_default();
-            out.push(DataviewRow {
+        let p = e.path();
+        let values = std::fs::read_to_string(p)
+            .ok()
+            .and_then(|text| extract_frontmatter(&text))
+            .map(|fm| fm.props)
+            .unwrap_or_default();
+        out.push(DataviewRow {
                 path: rel,
                 name: strip_title_ext(&name),
-                mtime_secs: mtime_of(&p),
+                mtime_secs: mtime_of(p),
                 size_bytes: meta.len(),
                 values,
             });
-        }
     }
     Ok(out)
 }
@@ -796,6 +807,48 @@ mod tests {
     fn dataview_rows_missing_folder_is_an_error() {
         let dir = tempdir().unwrap();
         assert!(query_dataview_rows(dir.path(), "nope").is_err());
+    }
+
+    #[test]
+    fn dataview_rows_reject_vault_escape() {
+        let dir = tempdir().unwrap();
+        assert!(query_dataview_rows(dir.path(), "../..").is_err());
+        // Windows-style separators must not sneak a ".." segment past the check.
+        assert!(query_dataview_rows(dir.path(), "a\\..\\..\\b").is_err());
+        if cfg!(windows) {
+            assert!(query_dataview_rows(dir.path(), "C:\\Windows").is_err());
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn dataview_rows_terminate_on_junction_cycle() {
+        use std::time::Duration;
+        let dir = tempdir().unwrap();
+        write(dir.path(), "notes/a.md", "---\ntags: x\n---\nbody");
+        // Junction pointing at the vault root itself: a link-following walk
+        // would loop forever here. std has no junction API; shell out to
+        // mklink /J. If the sandbox denies junction creation, skip the cycle
+        // part (the symlink-prune behavior is still covered by walkdir).
+        let loop_p = dir.path().join("notes/loop");
+        let mk = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(loop_p.as_os_str())
+            .arg(dir.path().as_os_str())
+            .output()
+            .map(|o| o.status.success());
+        if !matches!(mk, Ok(true)) {
+            eprintln!("[skip] junction creation unavailable");
+            return;
+        }
+        let started = std::time::Instant::now();
+        let rows = query_dataview_rows(dir.path(), "").unwrap();
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "walk did not terminate quickly"
+        );
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].path, "notes/a.md");
     }
 
     #[test]

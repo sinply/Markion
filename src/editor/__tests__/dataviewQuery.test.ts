@@ -33,6 +33,15 @@ describe("parseDataviewQuery", () => {
     expect(q!.sortDir).toBe("desc");
   });
 
+  it("supports CJK frontmatter keys as columns (not silently dropped)", () => {
+    const q = parseDataviewQuery('table file.name, 状态, 优先级 AS "优先"\nfrom ""');
+    expect(q!.columns.map((c) => c.field)).toEqual(["file.name", "状态", "优先级"]);
+    expect(q!.columns.map((c) => c.label)).toEqual(["file.name", "状态", "优先"]);
+    // CJK sort field also parses
+    const s = parseDataviewQuery('table 状态\nfrom ""\nsort 状态 desc');
+    expect(s!.sortField).toBe("状态");
+  });
+
   it("returns null for unsupported bodies", () => {
     expect(parseDataviewQuery("just some text")).toBeNull();
     expect(parseDataviewQuery("list from \"x\"")).toBeNull();
