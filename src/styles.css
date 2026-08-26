@@ -441,7 +441,6 @@ body {
   border-radius: 6px;
   padding: 12px 16px;
   margin: 8px 0;
-  overflow-x: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 13px;
   line-height: 1.5;
@@ -487,17 +486,29 @@ body {
   color: var(--fg);
   border-color: var(--accent);
 }
+/* Flex two-column layout: gutter glued to the code even on horizontal
+   scroll; min-width grows with the digit count so 100+ lines align. */
+.cm-codeblock-body {
+  display: flex;
+  align-items: flex-start;
+}
 .cm-codeblock-lines {
-  float: left;
-  margin-right: 12px;
+  flex: none;
+  min-width: 2ch;
+  margin-right: 14px;
   color: var(--fg-muted);
-  opacity: 0.6;
+  opacity: 0.85;
   text-align: right;
   user-select: none;
   -webkit-user-select: none;
   font-size: 12px;
   line-height: 19.5px; /* 13px * 1.5, matches code line-height */
   pointer-events: none;
+  white-space: pre;
+}
+.cm-codeblock-body code {
+  flex: 1;
+  overflow-x: auto;
 }
 
 /* Image lightbox */

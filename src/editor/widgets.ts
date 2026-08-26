@@ -74,15 +74,21 @@ export class CodeBlockWidget extends WidgetType {
     // presentation layer rebuilt on each widget refresh.
     code.innerHTML = highlightCode(this.code, this.language);
 
-    // Line numbers alongside the code.
+    // Line numbers alongside the code. Wrapped with the code in a flex row so
+    // the gutter stays glued to the code column even when long lines make the
+    // block scroll horizontally (the old float layout drifted/vanished).
     const lineCount = this.code.split("\n").length;
+    const body = document.createElement("div");
+    body.className = "cm-codeblock-body";
+
     const lines = document.createElement("div");
     lines.className = "cm-codeblock-lines";
     lines.setAttribute("aria-hidden", "true");
     lines.textContent = Array.from({ length: lineCount }, (_, i) => String(i + 1)).join("\n");
 
-    pre.appendChild(lines);
-    pre.appendChild(code);
+    body.appendChild(lines);
+    body.appendChild(code);
+    pre.appendChild(body);
 
     // Commit the edited code back to the document when the user leaves the block.
     code.addEventListener("blur", () => {
