@@ -16,11 +16,18 @@ export function Tabs() {
   if (openDocs.length === 0) return null;
 
   // Flush pending edits BEFORE removing the doc: after closeDoc the autosave
-  // timer finds no path and silently drops everything unsaved.
+  // timer finds no path and silently drops everything unsaved. A failed flush
+  // (locked/read-only file, or an open conflict dialog) must NOT close the tab
+  // — that would throw the draft away with no way back.
   const closeTab = async (id: string) => {
     const doc = openDocs.find((d) => d.id === id);
+    if (!(await flushDoc(id))) {
+      useUiStore
+        .getState()
+        .showToast(`Could not save "${doc?.title ?? id}" — the tab was kept open.`);
+      return;
+    }
     if (doc) addRecentlyClosed({ title: doc.title, path: doc.path });
-    await flushDoc(id);
     closeDoc(id);
   };
 

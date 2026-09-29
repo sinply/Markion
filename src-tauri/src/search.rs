@@ -110,11 +110,10 @@ fn match_offsets(
             .build()
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string()))?;
         Ok(re.find_iter(text).map(|m| (m.start(), m.end())).collect())
-    } else if case_sensitive || !query.is_ascii() {
-        // Lowercasing can change byte lengths for some Unicode code points
-        // (e.g. İ -> i + combining dot), which would desync offsets from the
-        // raw text; CJK and other scripts don't have case anyway, so exact
-        // matching is correct there.
+    } else if case_sensitive {
+        // Exact byte match. Case-insensitive mode handles non-ASCII needles
+        // too (below) — forcing exact matching for them made the hit list
+        // disagree with replace_in_vault, which is always case-insensitive.
         Ok(text
             .match_indices(query)
             .map(|(i, m)| (i, i + m.len()))
@@ -325,8 +324,15 @@ fn replace_walk(
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
         Err(e) => {
-            let rel = dir.strip_prefix(root).unwrap_or(dir).to_string_lossy().into_owned();
-            errors.push(ReplaceError { path: rel, error: e.to_string() });
+            let rel = dir
+                .strip_prefix(root)
+                .unwrap_or(dir)
+                .to_string_lossy()
+                .into_owned();
+            errors.push(ReplaceError {
+                path: rel,
+                error: e.to_string(),
+            });
             return;
         }
     };
@@ -348,7 +354,16 @@ fn replace_walk(
             continue;
         }
         if path.is_dir() {
-            replace_walk(root, &path, re, replacement, files_changed, replacements, errors, changed_paths);
+            replace_walk(
+                root,
+                &path,
+                re,
+                replacement,
+                files_changed,
+                replacements,
+                errors,
+                changed_paths,
+            );
         } else if path
             .extension()
             .map(|e| e.to_string_lossy().to_lowercase() == "md")
@@ -359,8 +374,15 @@ fn replace_walk(
             let text = match std::fs::read_to_string(&path) {
                 Ok(t) => t,
                 Err(e) => {
-                    let rel = path.strip_prefix(root).unwrap_or(&path).to_string_lossy().replace('\\', "/");
-                    errors.push(ReplaceError { path: rel, error: e.to_string() });
+                    let rel = path
+                        .strip_prefix(root)
+                        .unwrap_or(&path)
+                        .to_string_lossy()
+                        .replace('\\', "/");
+                    errors.push(ReplaceError {
+                        path: rel,
+                        error: e.to_string(),
+                    });
                     continue;
                 }
             };
@@ -379,8 +401,15 @@ fn replace_walk(
                         changed_paths.push(rel);
                     }
                     Err(e) => {
-                        let rel = path.strip_prefix(root).unwrap_or(&path).to_string_lossy().replace('\\', "/");
-                        errors.push(ReplaceError { path: rel, error: e.to_string() });
+                        let rel = path
+                            .strip_prefix(root)
+                            .unwrap_or(&path)
+                            .to_string_lossy()
+                            .replace('\\', "/");
+                        errors.push(ReplaceError {
+                            path: rel,
+                            error: e.to_string(),
+                        });
                     }
                 }
             }
@@ -585,6 +614,17 @@ mod tests {
         assert_eq!(hits[1].line, 2);
         assert_eq!(hits[1].column, 3); // 关于设计: 设计 starts at the 3rd char
         assert!(hits.iter().all(|h| h.snippet.contains("设计")));
+    }
+
+    #[test]
+    fn non_ascii_case_insensitive_search_finds_every_cased_variant() {
+        // The hit list used to force exact matching for any non-ASCII needle,
+        // so case-insensitive search found 1 of 3 occurrences while
+        // replace_in_vault (always case-insensitive) rewrote all 3.
+        let dir = tempdir().unwrap();
+        write_vault(dir.path(), &[("a.md", "Über über ÜBER")]);
+        let hits = search_vault(dir.path(), "über", false, false, 100).unwrap();
+        assert_eq!(hits.len(), 3, "hits: {hits:?}");
     }
 
     #[test]

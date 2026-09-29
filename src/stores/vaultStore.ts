@@ -145,10 +145,18 @@ export const useVaultStore = create<VaultState>((set, get) => ({
   switchVault: async (root) => {
     // Persist every dirty doc BEFORE dropping the tabs — reset() would
     // otherwise discard pending edits silently (the autosave timer cannot
-    // save a doc that is no longer open).
+    // save a doc that is no longer open). If a write fails, cancel the switch:
+    // proceeding would throw the draft away with no way back.
     try {
       const { flushAllDirty } = await import("../lib/docSave");
-      await flushAllDirty();
+      const failed = await flushAllDirty();
+      if (failed.length > 0) {
+        const { useUiStore } = await import("./uiStore");
+        useUiStore
+          .getState()
+          .showToast(`Could not save ${failed.length} file(s) — vault switch cancelled.`);
+        return;
+      }
     } catch {
       // best-effort: a failed flush must not block the vault switch
     }
@@ -182,7 +190,40 @@ export const useVaultStore = create<VaultState>((set, get) => ({
   applyMove: async (fromFolder, fromName, toFolder, toName) => {
     const root = get().vaultRoot;
     if (!root) return;
+    const oldRel = fromFolder ? `${fromFolder}/${fromName}` : fromName;
+    const newRel = toFolder ? `${toFolder}/${toName}` : toName;
+    const { useDocStore } = await import("./docStore");
+    const under = (p: string) =>
+      p === oldRel || p.startsWith(oldRel.endsWith("/") ? oldRel : oldRel + "/");
+    const moved = useDocStore.getState().openDocs.filter((d) => under(d.path));
+    // Flush pending edits to the OLD path first: the tabs still point there,
+    // and a debounced autosave firing mid-move would otherwise recreate the
+    // file at its old location (duplicate file, newest text in the wrong one).
+    const { flushDocsUnder } = await import("../lib/docSave");
+    await flushDocsUnder(oldRel);
     await moveNode(root, fromFolder, fromName, toFolder, toName);
+    // Remap the open tabs to their new paths — without this every later
+    // autosave wrote back to the old path and resurrected the file.
+    if (moved.length > 0) {
+      const [{ titleForPath }, { markAppChange }] = await Promise.all([
+        import("../lib/docTitle"),
+        import("../hooks/useExternalChanges"),
+      ]);
+      for (const d of moved) {
+        const rel = newRel + d.path.slice(oldRel.length);
+        useDocStore.getState().renameDoc(d.path, rel, titleForPath(rel));
+        markAppChange(d.path);
+        markAppChange(rel);
+      }
+      // A conflict / deleted-doc decision parked for one of the moved paths can
+      // no longer act: both dialogs look the doc up by its OLD path, so "keep
+      // mine" would silently do nothing (and "load disk" would even push the
+      // old text into whatever editor is mounted). Clear them instead.
+      const { useUiStore } = await import("./uiStore");
+      const ui = useUiStore.getState();
+      if (ui.conflict && under(ui.conflict.path)) ui.setConflict(null);
+      if (ui.deletedDoc && under(ui.deletedDoc.path)) ui.setDeletedDoc(null);
+    }
     await get().loadTree(root);
   },
 

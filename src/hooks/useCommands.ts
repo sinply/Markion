@@ -33,11 +33,19 @@ function runShortcut(id: string): void {
       const docId = store.activeDocId;
       if (!docId) break;
       const doc = store.openDocs.find((d) => d.id === docId);
-      if (doc) useUiStore.getState().addRecentlyClosed({ title: doc.title, path: doc.path });
       // Persist pending edits before the tab disappears (the autosave timer
-      // cannot save a doc that is no longer open).
+      // cannot save a doc that is no longer open). A failed flush must NOT
+      // close the tab: that would drop the draft with no way back — same guard
+      // as the tab strip's close button. The tab is only parked in
+      // "recently closed" once the save actually succeeded.
       void import("../lib/docSave").then(async (m) => {
-        await m.flushDoc(docId);
+        if (!(await m.flushDoc(docId))) {
+          useUiStore
+            .getState()
+            .showToast(`Could not save "${doc?.title ?? docId}" — the tab was kept open.`);
+          return;
+        }
+        if (doc) useUiStore.getState().addRecentlyClosed({ title: doc.title, path: doc.path });
         useDocStore.getState().closeDoc(docId);
       });
       break;

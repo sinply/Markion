@@ -290,9 +290,14 @@ describe("inline math", () => {
 });
 
 describe("parseCallout", () => {
-  it("detects a callout with its type and body (incl. title-line remainder)", () => {
+  it("separates the custom title from the body", () => {
     const c = parseCallout("> [!note] Title\n> body line\n> second");
-    expect(c).toEqual({ type: "note", body: "Title\nbody line\nsecond" });
+    expect(c).toEqual({ type: "note", title: "Title", body: "body line\nsecond" });
+  });
+
+  it("leaves the title empty when the first line has no title text", () => {
+    const c = parseCallout("> [!note]\n> body line");
+    expect(c).toEqual({ type: "note", title: "", body: "body line" });
   });
 
   it("returns null for a plain blockquote", () => {
@@ -306,7 +311,8 @@ describe("parseCallout", () => {
   it("matches case-insensitively", () => {
     const c = parseCallout("> [!WARNING] careful");
     expect(c?.type).toBe("warning");
-    expect(c?.body).toBe("careful");
+    expect(c?.title).toBe("careful");
+    expect(c?.body).toBe("");
   });
 });
 

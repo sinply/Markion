@@ -115,7 +115,16 @@ export function SearchDialog() {
       // Persist pending edits FIRST: a dirty buffer would otherwise clobber
       // the replacement when its own autosave fires later.
       const { flushAllDirty } = await import("../lib/docSave");
-      await flushAllDirty();
+      const failed = await flushAllDirty();
+      if (failed.length > 0) {
+        // Abort rather than replace from stale disk text: the refresh loop
+        // below overwrites every replaced doc's draft, which would destroy the
+        // very edits that just failed to save.
+        useUiStore
+          .getState()
+          .showToast(`Could not save ${failed.length} file(s) — replace was cancelled.`);
+        return;
+      }
 
       const res = await replaceInVault(vaultRoot, q, replacement, { caseSensitive, useRegex });
 

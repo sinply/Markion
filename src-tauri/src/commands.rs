@@ -100,7 +100,11 @@ pub async fn reorder_in_folder(
     new_index: usize,
 ) -> Result<(), String> {
     let mut index = tree_index::load_index(Path::new(&vault_root)).map_err(|e| e.to_string())?;
-    tree_index::reorder(&mut index, &folder_rel, &name, new_index);
+    // `new_index` is a slot in the DISPLAYED child order (react-arborist
+    // semantics); hand `reorder` the real directory names so it can normalise
+    // the (possibly partial) stored order before splicing.
+    let fs_children = tree_index::fs_child_names(Path::new(&vault_root), &folder_rel);
+    tree_index::reorder(&mut index, &folder_rel, &name, new_index, &fs_children);
     tree_index::save_index(Path::new(&vault_root), &index).map_err(|e| e.to_string())
 }
 
@@ -336,7 +340,7 @@ mod tests {
     }
 
     #[test]
-    fn list_trash_lists_top_level_folders_without_recursing() {
+    fn list_trash_lists_nested_files_by_relative_path() {
         let dir = tempdir().unwrap();
         let root = dir.path().to_string_lossy().to_string();
         let trash = dir.path().join(".markion/trash");
@@ -348,10 +352,35 @@ mod tests {
         assert_eq!(
             listed,
             vec![
-                ("subfolder".to_string(), "folder".to_string()),
+                ("subfolder/inner.md".to_string(), "file".to_string()),
                 ("top.md".to_string(), "file".to_string()),
             ],
-            "trash listing must not recurse into subfolders"
+            "a file trashed from a subfolder must be listed by its own path — \
+             reporting only the folder made it impossible to restore"
+        );
+    }
+
+    #[test]
+    fn restore_trash_recovers_a_file_deleted_from_a_subfolder() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        std::fs::create_dir_all(dir.path().join("notes")).unwrap();
+        std::fs::write(dir.path().join("notes/a.md"), "hello").unwrap();
+        run(trash_path(root.clone(), "notes/a.md".to_string())).unwrap();
+        assert!(!dir.path().join("notes/a.md").exists());
+        // The folder still exists (only the file was trashed), which is exactly
+        // why restoring the FOLDER entry used to fail with "destination already
+        // exists".
+        let listed: Vec<_> = run(list_trash(root.clone()))
+            .unwrap()
+            .into_iter()
+            .map(|e| e.path)
+            .collect();
+        assert_eq!(listed, vec!["notes/a.md".to_string()]);
+        run(restore_trash(root, "notes/a.md".to_string())).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("notes/a.md")).unwrap(),
+            "hello"
         );
     }
 
@@ -730,9 +759,13 @@ pub struct TrashEntry {
     pub modified: u64,
 }
 
-/// List the vault-internal trash, newest first. Only TOP-LEVEL entries are
-/// listed (a trashed folder appears as one entry with kind "folder"); we do
-/// not recurse into subdirectories.
+/// List the vault-internal trash, newest first. The WHOLE trash tree is walked:
+/// every trashed FILE appears by its trash-relative path (a file deleted from
+/// `notes/` is listed as `notes/a.md`, which is what `restore_trash` needs), and
+/// a directory is listed as a single "folder" entry only when it holds no files
+/// at any depth. A container whose files are listed individually is skipped —
+/// restoring it would fail with "destination already exists" while the real
+/// folder is still in the vault.
 #[tauri::command]
 pub async fn list_trash(vault_root: String) -> Result<Vec<TrashEntry>, String> {
     let root = Path::new(&vault_root);
@@ -741,12 +774,19 @@ pub async fn list_trash(vault_root: String) -> Result<Vec<TrashEntry>, String> {
         return Ok(Vec::new());
     }
     let mut entries = Vec::new();
-    for entry in std::fs::read_dir(&dir).map_err(|e| e.to_string())? {
+    // Walk the WHOLE trash tree. trash_path preserves the original relative
+    // path (a file deleted from `notes/` lands at `.markion/trash/notes/a.md`),
+    // so a top-level-only listing reported that as the folder "notes" — an
+    // entry that can never be restored because the real folder still exists.
+    // Every trashed FILE is listed by its trash-relative path; a directory is
+    // listed only when it contains no files at any depth (a whole or empty
+    // trashed folder).
+    let mut dirs_with_files: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+    let mut raw: Vec<(PathBuf, bool, String, u64)> = Vec::new();
+    for entry in walkdir::WalkDir::new(&dir).min_depth(1).follow_links(false) {
         let entry = entry.map_err(|e| e.to_string())?;
-        let abs = entry.path();
-        // file_type() does not follow symlinks; a symlinked trash entry is
-        // reported by its own kind without walking into it.
-        let ft = entry.file_type().map_err(|e| e.to_string())?;
+        let abs = entry.path().to_path_buf();
+        let is_dir = entry.file_type().is_dir();
         let rel = abs
             .strip_prefix(&dir)
             .map_err(|e| e.to_string())?
@@ -759,13 +799,27 @@ pub async fn list_trash(vault_root: String) -> Result<Vec<TrashEntry>, String> {
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|d| d.as_secs())
             .unwrap_or(0);
+        if !is_dir {
+            for anc in abs.ancestors().skip(1) {
+                if anc == dir {
+                    break;
+                }
+                dirs_with_files.insert(anc.to_path_buf());
+            }
+        }
+        raw.push((abs, is_dir, rel, modified));
+    }
+    for (abs, is_dir, rel, modified) in raw {
+        if is_dir && dirs_with_files.contains(&abs) {
+            continue; // just a container for the files listed above
+        }
         entries.push(TrashEntry {
             name: abs
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default(),
             path: rel,
-            kind: if ft.is_dir() {
+            kind: if is_dir {
                 "folder".into()
             } else {
                 "file".into()

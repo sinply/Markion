@@ -104,6 +104,23 @@ describe("docSave flush helpers", () => {
     expect(useDocStore.getState().dirtyMap["b.md"]).toBe(false);
   });
 
+  it("flushAllDirty reports the docs whose write failed (callers must not discard them)", async () => {
+    for (const p of ["ok.md", "locked.md"]) {
+      useDocStore.getState().openDoc(p, p);
+      useDocStore.getState().setDraft(p, `text ${p}`);
+      useDocStore.getState().markDirty(p);
+    }
+    writeFileAtomic.mockImplementation(async (_root: string, path: string) => {
+      if (path === "locked.md") throw new Error("EACCES");
+    });
+
+    const failed = await flushAllDirty();
+
+    expect(failed).toEqual(["locked.md"]);
+    expect(useDocStore.getState().dirtyMap["locked.md"]).toBe(true);
+    expect(useDocStore.getState().dirtyMap["ok.md"]).toBe(false);
+  });
+
   it("flushDocsUnder only flushes docs inside the folder", async () => {
     useDocStore.getState().openDoc("root.md", "root.md");
     useDocStore.getState().openDoc("in.md", "notes/in.md");

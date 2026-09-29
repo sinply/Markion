@@ -50,15 +50,27 @@ export async function openNote(
   path: string,
   opts?: { addRecent?: boolean; heading?: string },
 ): Promise<boolean> {
-  // Already the ACTIVE tab: re-reading disk would clobber the doc's unsaved
-  // edits with stale file content (the mounted editor ignores prop changes,
-  // so the store would hold old text while the view shows new — the pending
-  // autosave then writes the old text back). Only a heading jump still has
-  // work to do; everything else is a no-op.
+  // Already OPEN (as the active tab OR as a background tab): activate that tab
+  // and never re-read disk into it. Re-reading clobbers the doc's unsaved edits
+  // with stale file content (the mounted editor ignores prop changes, so the
+  // store would hold old text while the view shows new — the pending autosave
+  // then writes the old text back). This used to check only the ACTIVE tab, so
+  // opening an already-open *background* tab silently destroyed its draft.
+  // Only a heading jump still has work to do; everything else is a no-op.
   const ds = useDocStore.getState();
-  if (ds.activeDocId && ds.openDocs.find((d) => d.id === ds.activeDocId)?.path === path) {
+  const existing = ds.openDocs.find((d) => d.path === path);
+  if (existing) {
+    const wasActive = ds.activeDocId === existing.id;
+    if (!wasActive) {
+      useDocStore.getState().switchTo(existing.id);
+      // Re-opening a note counts as "used" — same as before, where only the
+      // already-active tab skipped the recent-files update.
+      if (opts?.addRecent !== false) {
+        useUiStore.getState().addRecent(vaultRoot, path);
+      }
+    }
     if (opts?.heading) {
-      const content = useDocStore.getState().drafts[ds.activeDocId] ?? "";
+      const content = useDocStore.getState().drafts[existing.id] ?? "";
       const line = findHeadingLine(content, opts.heading);
       if (line) useUiStore.getState().setPendingJump({ path, line, column: 1 });
     }

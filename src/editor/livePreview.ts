@@ -275,6 +275,7 @@ interface Block {
   embedTarget?: string;
   embedHeading?: string | null;
   calloutType?: string;
+  calloutTitle?: string;
   calloutBody?: string;
   hr?: boolean;
 }
@@ -296,10 +297,10 @@ const CALLOUT_TYPES = [
   "caution", "failure", "bug", "example", "quote",
 ];
 
-/** Detect `> [!type]` callout blockquotes. Returns the type and the body:
- *  the remainder of the first line after `[!type]` plus the following lines,
- *  with `> ` prefixes stripped. Exported for tests. */
-export function parseCallout(raw: string): { type: string; body: string } | null {
+/** Detect `> [!type]` callout blockquotes. Returns the type, the optional
+ *  custom title (the text after `[!type]` on the first line) and the body
+ *  (the following lines, with `> ` prefixes stripped). Exported for tests. */
+export function parseCallout(raw: string): { type: string; title: string; body: string } | null {
   const lines = raw.split("\n");
   if (lines.length === 0) return null;
   const first = lines[0].replace(/^>\s?/, "");
@@ -307,10 +308,12 @@ export function parseCallout(raw: string): { type: string; body: string } | null
   if (!m) return null;
   const type = m[1].toLowerCase();
   if (!CALLOUT_TYPES.includes(type)) return null;
-  const headRest = m[2] ?? "";
+  // `> [!note] My title` — the rest of the first line is the callout TITLE,
+  // not body text (Obsidian semantics; it used to be glued onto the body).
+  const title = (m[2] ?? "").trim();
   const rest = lines.slice(1).map((l) => l.replace(/^>\s?/, ""));
-  const body = [headRest, ...rest].join("\n").replace(/^\n+/, "").replace(/\n+$/, "");
-  return { type, body };
+  const body = rest.join("\n").replace(/^\n+/, "").replace(/\n+$/, "");
+  return { type, title, body };
 }
 
 /** Walk the Lezer tree + regex-scan the doc once, producing a flat block list
@@ -367,7 +370,10 @@ export function scanBlocks(state: EditorState, tree: Tree): Block[] {
           styleAttr: type === "StrongEmphasis" ? "font-weight:700" : "font-style:italic",
           markList: collectMarks(node.node, "EmphasisMark"),
         });
-        return false;
+        // Deliberately do NOT prune the subtree: `**bold _italic_**`,
+        // `*a \`code\` b*` and `**see [x](url)**` keep their inner markers and
+        // lose their inner styling otherwise (the child nodes are never
+        // visited). Same reasoning as the heading branch below.
       }
 
       // --- Inline: GFM strikethrough (~~text~~) — was never handled, so the
@@ -379,7 +385,7 @@ export function scanBlocks(state: EditorState, tree: Tree): Block[] {
           styleClass: "cm-strikethrough",
           markList: collectMarks(node.node, "StrikethroughMark"),
         });
-        return false;
+        // No prune: `~~deleted **bold**~~` must still render its inner bold.
       }
 
       // --- Inline: ^super^ / ~sub~ (needs the Superscript/Subscript lezer
@@ -391,7 +397,7 @@ export function scanBlocks(state: EditorState, tree: Tree): Block[] {
           styleClass: type === "Superscript" ? "cm-superscript" : "cm-subscript",
           markList: collectMarks(node.node, type === "Superscript" ? "SuperscriptMark" : "SubscriptMark"),
         });
-        return false;
+        // No prune: keep nested inline syntax (e.g. x^2^ with a link inside).
       }
 
       // --- Block: horizontal rule (--- / *** / ___) renders as a line ---
@@ -477,7 +483,8 @@ export function scanBlocks(state: EditorState, tree: Tree): Block[] {
         } else {
           blocks.push({ kind: "link", from: node.from, to: node.to, markList: markers });
         }
-        return false;
+        // No prune: inline markup INSIDE the link text (`[**bold** x](url)`,
+        // `` [`code`](url) ``) must still be processed.
       }
 
       // --- Headings (ATXHeading1..6, SetextHeading1/2): hide #, enlarge content ---
@@ -509,6 +516,7 @@ export function scanBlocks(state: EditorState, tree: Tree): Block[] {
             kind: "callout",
             from: node.from, to: node.to,
             calloutType: callout.type,
+            calloutTitle: callout.title,
             calloutBody: callout.body,
           });
           return false;
@@ -518,7 +526,22 @@ export function scanBlocks(state: EditorState, tree: Tree): Block[] {
           from: node.from, to: node.to,
           styleClass: "cm-blockquote",
           styleAttr: "border-left:3px solid #dfe2e5;padding-left:12px;color:#6a737d;",
-          markList: collectMarks(node.node, "QuoteMark"),
+        });
+        // No prune: the quote's own `>` marks are hidden by the generic
+        // QuoteMark branch below, and nested content (lists, headings, nested
+        // quotes, code fences) must still be rendered instead of showing its
+        // raw markers.
+      }
+
+      // --- Blockquote marker: hide every `>`, including the ones Lezer nests
+      //     under a list (`> - a\n> - b` puts the 2nd `>` inside BulletList)
+      //     or inside a nested quote. Callout bodies never reach this: the
+      //     callout branch above prunes its subtree. ---
+      if (type === "QuoteMark") {
+        blocks.push({
+          kind: "marks",
+          from: node.from, to: node.to,
+          markList: [{ from: node.from, to: node.to }],
         });
         return false;
       }
@@ -849,7 +872,7 @@ function decideEntries(state: EditorState, blocks: Block[]): DecoEntry[] {
 
       case "callout": {
         if (isOnActiveLine(state, b.from, b.to, activeLine)) break; // keep source editable
-        const w = new CalloutWidget(b.calloutType ?? "note", b.calloutBody ?? "");
+        const w = new CalloutWidget(b.calloutType ?? "note", b.calloutBody ?? "", b.calloutTitle ?? "");
         entries.push({ from: b.from, to: b.to, decoration: Decoration.replace({ widget: w, block: true }) });
         break;
       }

@@ -53,23 +53,36 @@ export function useExternalChanges() {
   useEffect(() => {
     if (!vaultRoot) return;
     let unlisten: (() => void) | undefined;
+    let dead = false;
 
     const setup = async () => {
-      unlisten = await listen<string[]>("vault-changed", async (event) => {
+      const un = await listen<string[]>("vault-changed", async (event) => {
+        // The vault may have been switched while this listener was still being
+        // registered. The `dead` flag only prevents a LATE registration — an
+        // already-registered handler can still receive an event for the old
+        // vault, and loadTree(oldRoot) would flip the whole app back to it.
+        if (useVaultStore.getState().vaultRoot !== vaultRoot) return;
         const paths = event.payload ?? [];
 
         // 1. refresh the tree for any structural change
         await loadTree(vaultRoot).catch(() => {});
 
-        // 2. handle a change to the active document
-        const docStore = useDocStore.getState();
-        const active = docStore.openDocs.find((d) => d.id === docStore.activeDocId);
+        // 2. handle a change to the active document. Re-read the store AFTER
+        // every await: the user may have typed or switched tabs while the tree
+        // reloaded, and acting on the pre-await snapshot used to discard those
+        // keystrokes — or insert doc A's disk text into doc B's buffer.
+        const activeNow = () => {
+          const s = useDocStore.getState();
+          return s.openDocs.find((d) => d.id === s.activeDocId);
+        };
+        const active = activeNow();
         if (!active || !paths.includes(active.path)) return;
 
         let disk: string;
         try {
           disk = await readFile(vaultRoot, active.path);
         } catch {
+          if (activeNow()?.id !== active.id) return; // switched away meanwhile
           // The active file was deleted (or is unreadable) on disk.
           // The app itself may have renamed/trashed this path a moment ago
           // (its watcher event beat the store remap) — that is not an external
@@ -79,9 +92,14 @@ export function useExternalChanges() {
             recentAppChanges.delete(active.path);
             return;
           }
-          const view = getEditorView();
-          const editor = view?.state.doc.toString();
-          const dirty = !!useDocStore.getState().dirtyMap[active.id];
+          // Only trust the mounted editor when it still belongs to this doc:
+          // after openDoc/switchTo the view can still hold ANOTHER document's
+          // text until EditorPane remounts, and that text would be offered as
+          // this doc's unsaved content in the Save As… dialog.
+          const s0 = useDocStore.getState();
+          const editor =
+            s0.activeDocId === active.id ? getEditorView()?.state.doc.toString() : undefined;
+          const dirty = !!s0.dirtyMap[active.id];
           const decision = decideDeleted(dirty, editor !== undefined);
           if (decision === "dialog" && editor !== undefined) {
             // Unsaved edits: offer Save As… / discard.
@@ -97,13 +115,19 @@ export function useExternalChanges() {
           return;
         }
 
-        const lastSaved = docStore.savedContent[active.id];
-        const editor = getEditorView()?.state.doc.toString();
+        // The read took time: only act if this doc is still the active one.
+        if (activeNow()?.id !== active.id) return;
+
+        const st = useDocStore.getState();
+        const lastSaved = st.savedContent[active.id];
+        // Only trust the mounted editor when it still belongs to this doc.
+        const editor =
+          st.activeDocId === active.id ? getEditorView()?.state.doc.toString() : undefined;
         const decision = decideExternalChange({
           lastSaved,
           editor,
           disk,
-          dirty: !!docStore.dirtyMap[active.id],
+          dirty: !!st.dirtyMap[active.id],
         });
 
         if (decision === "ignore-echo" || decision === "ignore-same") return;
@@ -116,19 +140,28 @@ export function useExternalChanges() {
           // dispatch fires onChange, which would mark the doc dirty and arm an
           // autosave of the very content we just loaded — clear that: the
           // editor now matches disk.
-          const view = getEditorView();
-          if (view) {
-            view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: disk } });
+          if (useDocStore.getState().activeDocId === active.id) {
+            const view = getEditorView();
+            if (view) {
+              view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: disk } });
+            }
           }
-          docStore.markClean(active.id);
-          docStore.markSaved(active.id, disk);
-          docStore.setActiveContent(disk);
+          const s = useDocStore.getState();
+          s.markClean(active.id);
+          s.markSaved(active.id, disk);
+          s.setActiveContent(disk);
         }
       });
+      // The vault may have been switched (or the app unmounted) while the
+      // listen() promise was in flight — never leak a listener onto the new
+      // vault's effect instance.
+      if (dead) un();
+      else unlisten = un;
     };
-    setup();
+    void setup();
 
     return () => {
+      dead = true;
       if (unlisten) unlisten();
     };
   }, [vaultRoot, loadTree]);

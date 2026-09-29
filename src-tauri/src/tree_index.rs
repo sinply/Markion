@@ -166,15 +166,59 @@ pub fn save_index(vault_root: &Path, index: &IndexFile) -> std::io::Result<()> {
     crate::file_io::write_file_atomic(&path, &json)
 }
 
-pub fn reorder(index: &mut IndexFile, folder_rel: &str, name: &str, new_index: usize) {
+pub fn reorder(
+    index: &mut IndexFile,
+    folder_rel: &str,
+    name: &str,
+    new_index: usize,
+    fs_children: &[String],
+) {
     let meta = index.folders.entry(folder_rel.to_string()).or_default();
-    if let Some(pos) = meta.order.iter().position(|n| n == name) {
-        let item = meta.order.remove(pos);
-        let insert_at = new_index.min(meta.order.len());
-        meta.order.insert(insert_at, item);
+    // `order` only ever lists the names the user has touched so far, while the
+    // tree DISPLAYS `merge_order(fs_children, order)` (touched names first, the
+    // remaining directory entries appended sorted). Inserting into that partial
+    // list drops the row wherever the subset happens to end — dragging to the
+    // last slot of a folder that was never reordered looked like a no-op — so
+    // normalise it to the full display order first. An unreadable directory
+    // yields an empty list and keeps the existing order untouched.
+    if !fs_children.is_empty() {
+        meta.order = merge_order(fs_children, &meta.order);
+    }
+    match meta.order.iter().position(|n| n == name) {
+        Some(pos) => {
+            let item = meta.order.remove(pos);
+            let insert_at = new_index.min(meta.order.len());
+            meta.order.insert(insert_at, item);
+        }
+        None => {
+            let insert_at = new_index.min(meta.order.len());
+            meta.order.insert(insert_at, name.to_string());
+        }
+    }
+}
+
+/// Visible child names of `folder_rel`, filtered exactly like `build_folder`
+/// (hidden dirs and symlinks skipped) so `reorder` can normalise its `order`
+/// list against the same set the tree shows. Unreadable directories yield an
+/// empty list rather than an error.
+pub fn fs_child_names(vault_root: &Path, folder_rel: &str) -> Vec<String> {
+    let abs_dir = if folder_rel.is_empty() {
+        vault_root.to_path_buf()
     } else {
-        let insert_at = new_index.min(meta.order.len());
-        meta.order.insert(insert_at, name.to_string());
+        vault_root.join(folder_rel)
+    };
+    match std::fs::read_dir(&abs_dir) {
+        Ok(entries) => entries
+            .filter_map(|e| e.ok())
+            .filter_map(|e| {
+                let ft = e.file_type().ok()?;
+                let name = e.file_name().to_string_lossy().to_string();
+                Some((name, ft))
+            })
+            .filter(|(name, ft)| !HIDDEN_DIRS.contains(&name.as_str()) && !ft.is_symlink())
+            .map(|(name, _)| name)
+            .collect(),
+        Err(_) => vec![],
     }
 }
 
@@ -405,11 +449,83 @@ mod tests {
                 collapsed: false,
             },
         );
-        reorder(&mut index, "", "c.md", 0);
+        reorder(&mut index, "", "c.md", 0, &fs_child_names(dir.path(), ""));
         assert_eq!(
             index.folders.get("").unwrap().order,
             vec!["c.md".to_string(), "a.md".to_string(), "b.md".to_string()]
         );
+    }
+
+    /// A downward drag: react-arborist reports the destination as a
+    /// PRE-removal slot, the caller shifts it left by the rows that started
+    /// before it (see adjustMoveIndex), and the backend removes then inserts.
+    /// Dragging `a` between `b` and `c` must therefore land at index 1.
+    #[test]
+    fn reorder_downward_inserts_after_removal() {
+        let dir = tempdir().unwrap();
+        write_vault(dir.path(), &[("a.md", ""), ("b.md", ""), ("c.md", "")]);
+        let mut index = IndexFile::default();
+        index.folders.insert(
+            "".to_string(),
+            FolderMeta {
+                order: vec!["a.md".into(), "b.md".into(), "c.md".into()],
+                collapsed: false,
+            },
+        );
+        reorder(&mut index, "", "a.md", 1, &fs_child_names(dir.path(), ""));
+        assert_eq!(
+            index.folders.get("").unwrap().order,
+            vec!["b.md".to_string(), "a.md".to_string(), "c.md".to_string()],
+            "dragging a below b must give [b, a, c], not [b, c, a]"
+        );
+    }
+
+    /// `order` may only list the names the user already touched, while the tree
+    /// displays the untouched directory entries appended sorted. Before the
+    /// normalisation pass, an insertion index computed against the DISPLAYED
+    /// list was applied to that shorter subset, so dragging a row to the end of
+    /// a never-reordered folder silently did nothing.
+    #[test]
+    fn reorder_normalises_a_partial_order_before_inserting() {
+        let dir = tempdir().unwrap();
+        write_vault(dir.path(), &[("a.md", ""), ("b.md", ""), ("c.md", "")]);
+        let mut index = IndexFile::default();
+        index.folders.insert(
+            "".to_string(),
+            FolderMeta {
+                order: vec!["c.md".into()],
+                collapsed: false,
+            },
+        );
+        // Displayed order is [c, a, b]; drag `a` past the end (post-removal 2).
+        reorder(&mut index, "", "a.md", 2, &fs_child_names(dir.path(), ""));
+        assert_eq!(
+            index.folders.get("").unwrap().order,
+            vec!["c.md".to_string(), "b.md".to_string(), "a.md".to_string()],
+            "the dragged row must reach the end of the DISPLAYED list"
+        );
+    }
+
+    #[test]
+    fn fs_child_names_lists_visible_entries_and_skips_markion() {
+        let dir = tempdir().unwrap();
+        write_vault(
+            dir.path(),
+            &[
+                ("a.md", ""),
+                ("notes/b.md", ""),
+                (".markion/index.json", "{}"),
+            ],
+        );
+        let mut names = fs_child_names(dir.path(), "");
+        names.sort();
+        assert_eq!(names, vec!["a.md".to_string(), "notes".to_string()]);
+        assert_eq!(
+            fs_child_names(dir.path(), "notes"),
+            vec!["b.md".to_string()]
+        );
+        // Unreadable / missing directory: empty, never an error.
+        assert!(fs_child_names(dir.path(), "nope").is_empty());
     }
 
     #[test]

@@ -23,6 +23,7 @@ import { Slideshow } from "./components/Slideshow";
 import { useTheme } from "./hooks/useTheme";
 import { useFont } from "./hooks/useFont";
 import { useCommands } from "./hooks/useCommands";
+import { useExternalChanges } from "./hooks/useExternalChanges";
 
 async function openVaultAndWatch(
   folder: string,
@@ -42,6 +43,10 @@ export default function App() {
   useTheme();
   useFont();
   useCommands();
+  // Backend `vault-changed` listener: tree refresh + conflict/deleted dialogs
+  // for edits made outside the app. Without this call the whole pipeline is
+  // dead code and an external edit is silently overwritten by autosave.
+  useExternalChanges();
   const openVault = useVaultStore((s) => s.openVault);
   const setAsDefault = useVaultStore((s) => s.setAsDefault);
   const loadSettings = useSettingsStore((s) => s.load);
@@ -65,8 +70,18 @@ export default function App() {
           if (!dirty) return; // nothing pending — let the close proceed
           event.preventDefault();
           const { flushAllDirty } = await import("./lib/docSave");
-          await flushAllDirty();
-          void win.close(); // re-request: now clean, the handler lets it pass
+          const failed = await flushAllDirty();
+          if (failed.length === 0) {
+            void win.close(); // re-request: now clean, the handler lets it pass
+            return;
+          }
+          // A write failed (locked / read-only / disk full / open conflict).
+          // Re-requesting close here re-fires this handler with the docs still
+          // dirty — the window could never be closed. Decide once, explicitly.
+          const discard = window.confirm(
+            `Could not save ${failed.length} file(s). Close anyway and discard those unsaved changes?`,
+          );
+          if (discard) void win.destroy(); // destroy bypasses this handler
         });
       } catch {
         // window API unavailable (browser dev build / tests) — nothing to do

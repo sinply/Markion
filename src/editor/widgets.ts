@@ -1115,12 +1115,12 @@ export class DataviewWidget extends WidgetType {
 }
 
 export class CalloutWidget extends WidgetType {
-  constructor(readonly type: string, readonly body: string) {
+  constructor(readonly type: string, readonly body: string, readonly title: string = "") {
     super();
   }
 
   eq(other: CalloutWidget): boolean {
-    return other.type === this.type && other.body === this.body;
+    return other.type === this.type && other.body === this.body && other.title === this.title;
   }
 
   toDOM(): HTMLElement {
@@ -1129,7 +1129,8 @@ export class CalloutWidget extends WidgetType {
     div.className = `cm-callout cm-callout-${cls}`;
     const title = document.createElement("div");
     title.className = "cm-callout-title";
-    title.textContent = this.type;
+    // `> [!note] My title` → the custom title; otherwise the type name.
+    title.textContent = this.title || this.type;
     div.appendChild(title);
     const content = document.createElement("div");
     content.className = "cm-callout-body";

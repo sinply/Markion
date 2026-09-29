@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Tree, type TreeApi } from "react-arborist";
+import { Tree, adjustMoveIndex, type TreeApi } from "react-arborist";
 import type { NodeRendererProps } from "react-arborist";
 import { useVaultStore } from "../stores/vaultStore";
 import { useDocStore } from "../stores/docStore";
@@ -21,6 +21,44 @@ interface RowData {
 /** A file is hidden (dotfile) if its basename starts with `.` (except `.markion`? no - all dotfiles hidden by default). */
 function isDot(name: string): boolean {
   return name.startsWith(".");
+}
+
+/** Map a react-arborist onMove payload to backend move/reorder arguments.
+ *  Arborist node ids are vault-relative PATHS (`convertTree` sets
+ *  `id: node.path`) while the backend wants a bare name plus the parent
+ *  folder; for top-level nodes `parent.id` is arborist's internal root id,
+ *  which must become "" (the vault root). Exported for tests. */
+export function resolveMoveTarget(payload: {
+  dragIds?: string[];
+  dragNodes?: any[];
+  parentId?: string | null;
+}): { name: string; srcParent: string; destParent: string } | null {
+  const id = String(payload.dragIds?.[0] ?? "");
+  if (!id) return null;
+  const parent = payload.dragNodes?.[0]?.parent;
+  return {
+    name: id.split("/").pop() ?? id,
+    srcParent: parent && !parent.isRoot ? parent.id : "",
+    destParent: payload.parentId ?? "",
+  };
+}
+
+/** Translate react-arborist's `onMove.index` into the insertion index the
+ *  backend must use. Arborist reports a PRE-removal slot (positions in the
+ *  destination's displayed child list with the dragged rows still in place),
+ *  while `tree_index::reorder` splices the row out first — so every dragged row
+ *  that started before the slot shifts the target one place left. Without this,
+ *  dragging a row DOWN landed one slot too far (issue #247 upstream). Exported
+ *  for tests. */
+export function adjustReorderIndex(
+  payload: { dragIds?: string[]; index?: number | null },
+  siblingIds: string[],
+): number {
+  return adjustMoveIndex({
+    index: payload.index ?? 0,
+    dragIds: payload.dragIds ?? [],
+    siblingIds,
+  });
 }
 
 function convertTree(
@@ -190,22 +228,30 @@ export function FileTree() {
     async (node: any) => {
       const d = node.data;
       if (!vaultRoot) return;
+      // Never re-read a file that already has a tab: setActiveContent would
+      // overwrite that doc's draft (and therefore the pending autosave) with
+      // stale disk text. The editor pane loads a tab's content itself — from
+      // the draft when dirty, from disk otherwise.
+      const isOpen = (path: string) =>
+        useDocStore.getState().openDocs.some((x) => x.path === path);
       // A folder with an index.md opens that file (folder-as-container body)
       // and expands the folder so its children are visible (container UX).
       if (d.kind === "folder") {
         const index = d.children?.find((c: any) => c.name === "index.md" && c.kind === "file");
         if (!index) return; // no index.md: keep default folder behavior
         treeRef.current?.open(d.id);
+        if (isOpen(index.id)) {
+          openDoc(titleForPath(index.id), index.id);
+          return;
+        }
         const content = await readFile(vaultRoot, index.id);
         openDoc(titleForPath(index.id), index.id);
         setActiveContent(content);
         return;
       }
       if (d.kind !== "file") return;
-      // Already the active tab: re-reading disk would clobber unsaved edits
-      // with stale file content (see openNote's same guard).
-      const st = useDocStore.getState();
-      if (st.activeDocId && st.openDocs.find((x) => x.id === st.activeDocId)?.path === d.id) {
+      if (isOpen(d.id)) {
+        openDoc(titleForPath(d.id), d.id);
         return;
       }
       const content = await readFile(vaultRoot, d.id);
@@ -216,14 +262,28 @@ export function FileTree() {
   );
 
   const handleMove = useCallback(
-    ({ dragIds, parentId, index, dragNodes }: any) => {
-      const name = String(dragIds[0]);
-      const srcParent = dragNodes?.[0]?.parent?.id ?? "";
-      const destParent = parentId ?? "";
-      if (srcParent !== destParent && destParent) {
-        applyMove(srcParent, name, destParent, name);
+    (payload: any) => {
+      // Node ids are paths and arborist's root id is not a folder — translate
+      // to (name, parent folder) here. Passing the raw values made every
+      // nested drag a silent no-op and left junk `order` entries behind.
+      const t = resolveMoveTarget(payload);
+      if (!t) return;
+      const fail = (e: unknown) => useUiStore.getState().showToast(String(e));
+      if (t.srcParent !== t.destParent) {
+        void applyMove(t.srcParent, t.name, t.destParent, t.name).catch(fail);
       } else {
-        applyReorder(destParent, name, index);
+        // Sibling ids come from arborist's own nodes, so they match exactly what
+        // is displayed (hidden-file filter, collapse state) — the index the
+        // backend receives must be relative to that same list.
+        const siblings = (
+          (payload.parentNode ? payload.parentNode.children : treeRef.current?.root.children) ??
+          []
+        ).map((c: any) => String(c.id));
+        void applyReorder(
+          t.destParent,
+          t.name,
+          adjustReorderIndex(payload, siblings),
+        ).catch(fail);
       }
     },
     [applyReorder, applyMove],
@@ -383,9 +443,22 @@ export function FileTree() {
       if (!window.confirm(msg)) return;
       try {
         // Persist pending edits of docs under this node FIRST so the trash
-        // copy holds the newest content, not stale disk text.
+        // copy holds the newest content, not stale disk text. If a write
+        // fails, abort: trashing would move the file away and take the
+        // unsaved draft with it.
         const { flushDocsUnder } = await import("../lib/docSave");
         await flushDocsUnder(path);
+        const { useDocStore: ds } = await import("../stores/docStore");
+        const stillDirty = Object.entries(ds.getState().dirtyMap).some(
+          ([id, dirty]) =>
+            dirty && (id === path || id.startsWith(path.endsWith("/") ? path : path + "/")),
+        );
+        if (stillDirty) {
+          useUiStore
+            .getState()
+            .showToast(`Could not save "${name}" — nothing was deleted.`);
+          return;
+        }
         // Delete into the vault-internal trash (`.markion/trash`) so the
         // entry can be restored from the Trash dialog.
         await trashPath(vaultRoot, path);
@@ -480,6 +553,10 @@ export function FileTree() {
           initialOpenState={initialOpenState}
           onMove={handleMove}
           onActivate={handleActivate}
+          // Arborist's Ctrl/Shift multi-select is enabled by default, but no
+          // action here accepts more than one row — dragging a selection moved
+          // only the first row and silently left the rest behind.
+          disableMultiSelection
         >
           {NodeView}
         </Tree>

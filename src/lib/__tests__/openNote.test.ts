@@ -15,11 +15,65 @@ const mockedSize = vi.mocked(fileSize);
 
 describe("openNote", () => {
   beforeEach(() => {
-    useDocStore.setState({ openDocs: [], activeDocId: null, activeContent: "" });
+    useDocStore.setState({
+      openDocs: [],
+      activeDocId: null,
+      activeContent: "",
+      dirtyMap: {},
+      drafts: {},
+      savedContent: {},
+      loadErrorMap: {},
+    });
     useUiStore.setState({ recentFiles: [] });
     mockedRead.mockReset();
     mockedSize.mockReset();
     vi.restoreAllMocks();
+  });
+
+  /**
+   * Opening a note that is open as a BACKGROUND tab used to re-read it from
+   * disk and push that stale text into the doc's draft — destroying unsaved
+   * edits and marking the tab clean, so the autosave wrote the old text back.
+   * Same defect family as the FileTree activation fix.
+   */
+  it("activates an already-open dirty background tab without re-reading disk", async () => {
+    mockedSize.mockResolvedValue(10);
+    mockedRead.mockResolvedValue("stale disk text");
+    useDocStore.setState({
+      openDocs: [
+        { id: "dirty.md", path: "dirty.md", title: "dirty" },
+        { id: "other.md", path: "other.md", title: "other" },
+      ],
+      activeDocId: "other.md",
+      dirtyMap: { "dirty.md": true },
+      drafts: { "dirty.md": "unsaved edits" },
+      savedContent: { "dirty.md": "old content" },
+    });
+
+    const ok = await openNote("/vault", "dirty.md");
+
+    expect(ok).toBe(true);
+    expect(mockedRead).not.toHaveBeenCalled();
+    const s = useDocStore.getState();
+    expect(s.activeDocId).toBe("dirty.md");
+    expect(s.drafts["dirty.md"]).toBe("unsaved edits");
+    expect(s.dirtyMap["dirty.md"]).toBe(true);
+  });
+
+  it("jumps to the heading inside an already-open background tab", async () => {
+    mockedSize.mockResolvedValue(10);
+    mockedRead.mockResolvedValue("never read");
+    useDocStore.setState({
+      openDocs: [{ id: "a.md", path: "a.md", title: "a" }],
+      activeDocId: null,
+      dirtyMap: { "a.md": true },
+      drafts: { "a.md": "# Title\n\n## Section Two\n\n" },
+    });
+
+    await openNote("/vault", "a.md", { heading: "Section Two" });
+
+    expect(mockedRead).not.toHaveBeenCalled();
+    expect(useUiStore.getState().pendingJump).toEqual({ path: "a.md", line: 3, column: 1 });
   });
 
   it("opens a normal-size file without prompting", async () => {

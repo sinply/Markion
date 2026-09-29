@@ -45,14 +45,18 @@ export async function flushDoc(id: string): Promise<boolean> {
   }
 }
 
-/** Flush every open dirty doc (sequential: deterministic disk ordering). */
-export async function flushAllDirty(): Promise<void> {
+/** Flush every open dirty doc (sequential: deterministic disk ordering).
+ *  Returns the ids that could NOT be saved, so callers can refuse to discard
+ *  their drafts (closing a tab / quitting the app used to drop them silently). */
+export async function flushAllDirty(): Promise<string[]> {
   const ids = Object.entries(useDocStore.getState().dirtyMap)
     .filter(([, dirty]) => dirty)
     .map(([id]) => id);
+  const failed: string[] = [];
   for (const id of ids) {
-    await flushDoc(id);
+    if (!(await flushDoc(id))) failed.push(id);
   }
+  return failed;
 }
 
 /** Flush every open dirty doc that lives under `path` (inclusive). Used

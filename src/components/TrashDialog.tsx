@@ -49,6 +49,15 @@ export function TrashDialog() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   };
 
+  /** The trash keeps each file's original relative path, so entries trashed
+   *  from different folders share a basename (`notes/a.md` vs `other/a.md`).
+   *  Prefix the folder, otherwise the list shows two identical rows. */
+  const labelFor = (entry: TrashEntry) => {
+    const base = entry.kind === "folder" ? entry.name : docTitle(entry.name);
+    const cut = entry.path.lastIndexOf("/");
+    return cut > 0 ? `${entry.path.slice(0, cut)}/${base}` : base;
+  };
+
   return (
     <div
       style={{
@@ -99,7 +108,7 @@ export function TrashDialog() {
             >
               <span style={{ opacity: 0.7 }}>{entry.kind === "folder" ? "📁" : "📄"}</span>
               <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={entry.path}>
-                {entry.kind === "folder" ? entry.name : docTitle(entry.name)}
+                {labelFor(entry)}
               </span>
               <span style={{ color: "var(--fg-muted)", fontSize: 12 }}>{fmt(entry.modified)}</span>
               <button

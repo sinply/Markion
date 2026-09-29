@@ -170,16 +170,24 @@ impl LinkIndex {
         }
         // A case-only rename (b.md -> B.md) reports the destination as
         // already existing on case-insensitive filesystems (NTFS/APFS), yet
-        // std::fs::rename performs it just fine — only refuse targets that
-        // differ beyond case.
+        // std::fs::rename performs it just fine. The bypass is only safe when
+        // old and new really ARE the same file: on a case-sensitive FS a
+        // distinct `A.md` may exist, and fs::rename would silently destroy it.
         let norm_old = old_rel.replace('\\', "/");
         let norm_new = new_rel.replace('\\', "/");
         let case_only = norm_old.to_lowercase() == norm_new.to_lowercase();
-        if new_full.exists() && !case_only {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::AlreadyExists,
-                format!("target already exists: {new_rel}"),
-            ));
+        if new_full.exists() {
+            let same_file = case_only
+                && match (old_full.canonicalize(), new_full.canonicalize()) {
+                    (Ok(a), Ok(b)) => a == b,
+                    _ => false,
+                };
+            if !same_file {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::AlreadyExists,
+                    format!("target already exists: {new_rel}"),
+                ));
+            }
         }
         if let Some(parent) = new_full.parent() {
             std::fs::create_dir_all(parent)?;
@@ -948,6 +956,38 @@ mod tests {
         // The stem map moved so backlinks keep resolving.
         let (_, edges) = idx.graph();
         assert!(edges.iter().all(|e| e.target != "case.md"));
+    }
+
+    /// True when the filesystem under `dir` distinguishes `Probe` from `probe`.
+    fn fs_is_case_sensitive(dir: &Path) -> bool {
+        let upper = dir.join("MarkionCaseProbe.tmp");
+        let lower = dir.join("markioncaseprobe.tmp");
+        if std::fs::write(&upper, b"x").is_err() {
+            return false;
+        }
+        let sensitive = !lower.exists();
+        let _ = std::fs::remove_file(&upper);
+        let _ = std::fs::remove_file(&lower);
+        sensitive
+    }
+
+    #[test]
+    fn rename_case_only_never_overwrites_a_distinct_file() {
+        let dir = tempdir().unwrap();
+        if !fs_is_case_sensitive(dir.path()) {
+            return; // NTFS/APFS default: `a.md` and `A.md` are the same file
+        }
+        // Two genuinely distinct files that differ only in case: the case-only
+        // bypass used to skip the AlreadyExists guard and fs::rename silently
+        // destroyed A.md.
+        write_vault(dir.path(), &[("a.md", "AAA"), ("A.md", "BBB")]);
+        let mut idx = LinkIndex::build(dir.path()).unwrap();
+        let err = idx
+            .rename_with_links(dir.path(), "a.md", "A.md")
+            .expect_err("a distinct target must never be overwritten");
+        assert_eq!(err.kind(), std::io::ErrorKind::AlreadyExists);
+        assert_eq!(fs::read_to_string(dir.path().join("A.md")).unwrap(), "BBB");
+        assert_eq!(fs::read_to_string(dir.path().join("a.md")).unwrap(), "AAA");
     }
 
     #[test]

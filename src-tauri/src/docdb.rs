@@ -493,13 +493,15 @@ pub fn remove_path(vault_root: &Path, rel_path: &str) -> Result<(), String> {
     if !is_our_db(&conn) {
         return Ok(()); // nothing to remove in a foreign/empty db
     }
-    let prefix = format!("{}/%", rel_path.trim_end_matches('/'));
-    // ESCAPE '\' so literal %/_ in a folder name are not SQL wildcards:
-    // trashing `my_notes/` must not also delete rows under `my-notes/`.
-    let prefix_escaped = prefix
+    // Escape the folder name FIRST, then append the wildcard: escaping the
+    // already-composed `{folder}/%` turned the wildcard into a literal, so
+    // folder-scoped deletes matched nothing at all.
+    let escaped_name = rel_path
+        .trim_end_matches('/')
         .replace('\\', "\\\\")
         .replace('%', "\\%")
         .replace('_', "\\_");
+    let prefix_escaped = format!("{escaped_name}/%");
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     for table in ["properties", "tags"] {
         tx.execute(
@@ -588,8 +590,7 @@ pub fn ensure_ready_with_progress(
     // EMPTY projection (vault has files but the db does not). A populated
     // projection used to pay a full-filesystem walk on EVERY query anyway —
     // with identical outcomes — so skip it in steady state.
-    let needs_rebuild = !usable
-        || (rows <= 0 && !walk_md(vault_root).is_empty());
+    let needs_rebuild = !usable || (rows <= 0 && !walk_md(vault_root).is_empty());
     if needs_rebuild {
         return rebuild_all_with_progress(vault_root, progress);
     }
@@ -727,7 +728,13 @@ pub struct DataviewRow {
 /// must stay inside the vault — `..` segments and absolute paths are rejected
 /// so a note-authored `from "../.."` cannot enumerate files outside it.
 pub fn query_dataview_rows(vault_root: &Path, folder: &str) -> Result<Vec<DataviewRow>, String> {
-    if Path::new(folder).is_absolute() || folder.split(['/', '\\']).any(|seg| seg == "..") {
+    // Rooted paths (`/tmp`, `\server\share`) are not `is_absolute()` on their
+    // own but `join` replaces the base entirely — same guard as
+    // query_folder_table.
+    if Path::new(folder).is_absolute()
+        || folder.starts_with(['/', '\\'])
+        || folder.split(['/', '\\']).any(|seg| seg == "..")
+    {
         return Err(format!("invalid folder path: {folder}"));
     }
     let dir_abs = if folder.is_empty() {
